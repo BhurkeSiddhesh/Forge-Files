@@ -458,7 +458,8 @@
         return String(pageNum);
     }
 
-    L.register('/api/pdf/add-page-numbers', async function (fd) {
+    L.register('/api/pdf/add-page-numbers', async function (fd, ctx) {
+        ctx = ctx || {};
         var position = L.str(fd, 'position', 'bottom-center');
         if (NUMBER_POSITIONS.indexOf(position) < 0) {
             throw new L.Error('position must be one of: ' + NUMBER_POSITIONS.slice().sort().join(', '));
@@ -476,34 +477,44 @@
         var file = only(fd);
         var PDFLib = await L.loadPdfLib();
         var doc = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
-        var font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
 
         var pages = doc.getPages();
+        // Positions are computed in unrotated page space; a rotated page would put
+        // the numbers on the wrong edge, so it is left to the server (after consent).
+        if (pages.some(function (p) { return (p.getRotation().angle || 0) % 360 !== 0; })) {
+            throw new L.Unsupported('numbering rotated pages is not supported on-device', 'unsupported_structure');
+        }
+        var font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+
         for (var i = 0; i < pages.length; i++) {
+            L.checkAbort(ctx.signal);
+            if (ctx.onProgress) ctx.onProgress(i + 1, pages.length);
             if (i < skipFirst) continue;
             var label = pageLabel(fmt, startNumber + (i - skipFirst));
-            var size = pages[i].getSize();
+            // The visible page is the CropBox (the server's page.rect).
+            var crop = pages[i].getCropBox();
             var margin = 20;
 
-            // add_page_numbers() works in PyMuPDF's top-left origin; pdf-lib
-            // uses PDF's native bottom-left, so each y is mirrored about the
-            // page height. The x formulas are origin-independent and are the
-            // server's own (deliberately rough) width estimates, kept as-is so
-            // the numbers land in the same place.
+            // add_page_numbers() works in PyMuPDF's top-left origin; pdf-lib uses
+            // PDF's native bottom-left, so each y is mirrored about the page height.
             var y = position.indexOf('bottom') === 0
-                ? margin                                   // was height - margin
-                : size.height - margin - fontSize;         // was margin + fontSize
+                ? crop.y + margin                                  // was height - margin
+                : crop.y + crop.height - margin - fontSize;        // was margin + fontSize
+            // The server measures the real text width (fitz.get_text_length with Helvetica).
+            var width = font.widthOfTextAtSize(label, fontSize);
             var x;
             if (position.indexOf('left') >= 0) x = margin;
-            else if (position.indexOf('right') >= 0) x = size.width - margin - fontSize * label.length * 0.5;
-            else x = size.width / 2 - fontSize * label.length * 0.25;
+            else if (position.indexOf('right') >= 0) x = crop.width - margin - width;
+            else x = crop.width / 2 - width / 2;
 
             pages[i].drawText(label, {
-                x: x, y: y, size: fontSize, font: font,
+                x: crop.x + x, y: y, size: fontSize, font: font,
                 color: PDFLib.rgb(0, 0, 0),
             });
+            if (i % 25 === 24) await L.tick();
         }
 
+        L.checkAbort(ctx.signal);
         return {
             blob: await save(doc),
             filename: L.brandedName(file.name, 'pdf'),
