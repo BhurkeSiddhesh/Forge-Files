@@ -20,11 +20,19 @@ import html
 import hmac
 import json
 import logging
+import mimetypes
 from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar, Token
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
+
+# ES modules (vendored pdf.js is .mjs) are refused by browsers unless served as
+# a JavaScript MIME type, and the platform mime tables don't reliably know .mjs
+# (Windows and minimal Linux images answer text/plain). Register before the
+# static mount below is created.
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
 
 # --- Logging Setup ---
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -518,7 +526,29 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+class _StaticFilesWithModuleTypes(StaticFiles):
+    """StaticFiles that always labels ES modules and wasm correctly.
+
+    `mimetypes.add_type` above is not enough on its own: anything that later
+    calls `mimetypes.init()` resets the table, and the response would revert to
+    text/plain, which browsers refuse for module scripts. Pinning the header
+    here removes that dependency.
+    """
+
+    _FIXED_TYPES = {
+        ".mjs": "text/javascript; charset=utf-8",
+        ".wasm": "application/wasm",
+    }
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        fixed = self._FIXED_TYPES.get(os.path.splitext(path)[1].lower())
+        if fixed and response.status_code == 200:
+            response.headers["content-type"] = fixed
+        return response
+
+
+app.mount("/static", _StaticFilesWithModuleTypes(directory=str(BASE_DIR / "static")), name="static")
 
 # --- Stale-file sweeper (privacy guarantee) ---
 from scripts.security_utils import secure_filename

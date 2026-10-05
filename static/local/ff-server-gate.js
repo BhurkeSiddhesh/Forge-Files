@@ -72,6 +72,7 @@
         encrypted: 'this PDF is password protected',
         resource_budget_exceeded: 'this file exceeds the safe limit for processing on this device',
         engine_unavailable: 'the on-device engine could not be loaded',
+        ocr_required: 'some pages are scans that need text recognition (OCR)',
         undecodable: 'this file format could not be decoded on this device',
         unsupported_structure: 'this file uses features that cannot be processed on this device',
         font_coverage_missing: 'this document uses a script the on-device fonts do not cover',

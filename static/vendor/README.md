@@ -9,6 +9,7 @@ content-security policy. Vendoring keeps the bundle self-contained.
 |---|---|---|---|
 | `pdf-lib.min.js` | [`pdf-lib`](https://www.npmjs.com/package/pdf-lib) | 1.17.1 | MIT (`pdf-lib.LICENSE.md`) |
 | `jszip.min.js` | [`jszip`](https://www.npmjs.com/package/jszip) | 3.10.2 | MIT OR GPL-3.0-or-later, used under MIT (`jszip.LICENSE.md`) |
+| `pdfjs/` | [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist) | 6.4.299 | Apache-2.0 (`pdfjs/LICENSE`; wasm decoders carry their own `LICENSE_*` files) |
 
 `jszip.min.js` is the untouched `dist/jszip.min.js`; it defines `window.JSZip` and is loaded on demand
 by `static/local/ff-local.js` (`loadJsZip`) the first time a tool builds a ZIP on-device. Its SHA-256 is
@@ -37,3 +38,21 @@ Expected checksum of the current file:
 ```
 0f9a5cad07941f0826586c94e089d89b918c46e5c17cf2d5a3c6f666e3bc694f  pdf-lib.min.js
 ```
+
+## pdf.js (`pdfjs/`)
+
+An ES-module build, so it is `import()`ed by `static/local/ff-local.js` (`loadPdfJs`), not script-tagged,
+and the server must send `.mjs` as `text/javascript` (`public/main.py` registers it; covered by
+`tests/test_static_module_mime.py`). Contents, all same-origin and never fetched from a CDN:
+
+| Path | Why |
+|---|---|
+| `pdf.min.mjs`, `pdf.worker.min.mjs` | the library and its worker (about 1.7 MB) |
+| `wasm/` | JPEG 2000 and JBIG2 image decoders |
+| `standard_fonts/` | metrics for the 14 standard PDF fonts when a file does not embed them |
+| `cmaps/` | CJK character maps for non-embedded CJK fonts |
+| `iccs/` | ICC profile for CalRGB colour handling |
+
+Update with `npm pack pdfjs-dist@<version>`, copy `build/pdf.min.mjs`, `build/pdf.worker.min.mjs`, `LICENSE`,
+`cmaps/`, `standard_fonts/`, `wasm/`, `iccs/` into `pdfjs/`, then bump `PDFJS_VERSION` in `ff-local.js`.
+Total size is about 5.3 MB, loaded only when PDF to JPG/PNG runs on-device.

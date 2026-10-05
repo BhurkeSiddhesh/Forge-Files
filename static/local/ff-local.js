@@ -330,13 +330,18 @@
     // website, `/local/` inside the Capacitor bundle (mobile/build-web.mjs
     // copies public/static to the app's web root). Sibling-relative is correct
     // in both, with the website layout as the fallback if `currentScript` is
-    // unavailable.
-    function vendorUrl(file) {
+    // unavailable. It must be read while this script is executing:
+    // `document.currentScript` is null by the time a tool asks for a library.
+    var VENDOR_BASE = (function () {
         try {
             var self = document.currentScript && document.currentScript.src;
-            if (self) return new URL('../vendor/' + file, self).href;
+            if (self) return new URL('../vendor/', self).href;
         } catch (e) { /* fall through */ }
-        return '/static/vendor/' + file;
+        return '/static/vendor/';
+    })();
+
+    function vendorUrl(file) {
+        return VENDOR_BASE + file;
     }
 
     /** Load a vendored UMD script once; resolves to its window global. */
@@ -366,6 +371,75 @@
 
     function loadPdfLib() { return loadVendor('pdf-lib.min.js', 'PDFLib', '1.17.1'); }
     function loadJsZip() { return loadVendor('jszip.min.js', 'JSZip', '3.10.2'); }
+
+    var PDFJS_VERSION = '6.4.299';
+    var pdfJsPromise = null;
+
+    /**
+     * pdf.js is an ES module, so it is imported rather than script-tagged. The
+     * worker, wasm decoders, standard fonts, CMaps and ICC profile are all
+     * same-origin files under vendor/pdfjs/ (never a CDN). Tests may pre-set
+     * `window.pdfjsLib`.
+     */
+    function loadPdfJs() {
+        if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+        if (pdfJsPromise) return pdfJsPromise;
+        pdfJsPromise = import(vendorUrl('pdfjs/pdf.min.mjs') + '?v=' + PDFJS_VERSION).then(function (mod) {
+            mod.GlobalWorkerOptions.workerSrc = vendorUrl('pdfjs/pdf.worker.min.mjs') + '?v=' + PDFJS_VERSION;
+            window.pdfjsLib = mod;
+            return mod;
+        }).catch(function () {
+            pdfJsPromise = null;
+            throw new FFLocalUnsupported('pdf.js could not be loaded', 'engine_unavailable');
+        });
+        return pdfJsPromise;
+    }
+
+    function isPasswordError(err) {
+        return !!(err && (err.name === 'PasswordException' || /password/i.test(String(err.message || ''))));
+    }
+
+    /**
+     * Open a File with pdf.js: no script execution, no XFA, and every font,
+     * CMap, decoder and ICC profile from our own origin. Resolves a document the
+     * caller must `destroy()`. Encrypted input becomes `Unsupported('encrypted')`;
+     * anything else that fails to open becomes `Unsupported('unsupported_structure')`.
+     */
+    async function openPdfJs(file) {
+        var pdfjs = await loadPdfJs();
+        var buf = file.arrayBuffer ? await file.arrayBuffer() : await new Promise(function (fulfil, fail) {
+            var reader = new FileReader();
+            reader.onload = function () { fulfil(reader.result); };
+            reader.onerror = function () { fail(reader.error); };
+            reader.readAsArrayBuffer(file);
+        });
+        var task = pdfjs.getDocument({
+            data: new Uint8Array(buf),
+            isEvalSupported: false,
+            enableXfa: false,
+            stopAtErrors: false,
+            standardFontDataUrl: vendorUrl('pdfjs/standard_fonts/'),
+            cMapUrl: vendorUrl('pdfjs/cmaps/'),
+            cMapPacked: true,
+            wasmUrl: vendorUrl('pdfjs/wasm/'),
+            iccUrl: vendorUrl('pdfjs/iccs/'),
+        });
+        try {
+            return await task.promise;
+        } catch (err) {
+            try { await task.destroy(); } catch (e) { /* already gone */ }
+            if (isPasswordError(err)) throw new FFLocalUnsupported('PDF is encrypted', 'encrypted');
+            throw new FFLocalUnsupported('pdf.js could not open this PDF', 'unsupported_structure');
+        }
+    }
+
+    /** The original name without extension or brand suffix (utils.py::original_stem). */
+    function stem(originalName) {
+        var base = String(originalName || 'file');
+        var dot = base.lastIndexOf('.');
+        var out = dot > 0 ? base.slice(0, dot) : base;
+        return out.replace(BRAND_SUFFIX, '');
+    }
 
     /**
      * True on phones and in the native shell, where memory is the limit.
@@ -474,6 +548,10 @@
         hexId: hexId,
         loadPdfLib: loadPdfLib,
         loadJsZip: loadJsZip,
+        loadPdfJs: loadPdfJs,
+        openPdfJs: openPdfJs,
+        vendorUrl: vendorUrl,
+        stem: stem,
         constrained: constrained,
         tick: tick,
         checkAbort: checkAbort,
