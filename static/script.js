@@ -3390,21 +3390,21 @@ document.getElementById('annotate-pdf-btn')?.addEventListener('click', () => {
 document.getElementById('process-annotate-pdf-btn')?.addEventListener('click', () => {
     if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
     const annotType = document.getElementById('annot-type').value;
-    const page = document.getElementById('annot-page').value;
-    const x0 = document.getElementById('annot-x0').value;
-    const y0 = document.getElementById('annot-y0').value;
-    const x1 = document.getElementById('annot-x1').value;
-    const y1 = document.getElementById('annot-y1').value;
+    const page = parseInt(document.getElementById('annot-page').value, 10) || 1;
+    const x0 = parseFloat(document.getElementById('annot-x0').value) || 50;
+    const y0 = parseFloat(document.getElementById('annot-y0').value) || 700;
+    const x1 = parseFloat(document.getElementById('annot-x1').value) || 300;
+    const y1 = parseFloat(document.getElementById('annot-y1').value) || 730;
     const content = document.getElementById('annot-content').value;
+    const annotObj = {
+        type: annotType,
+        page: page,
+        rect: [x0, y0, x1, y1]
+    };
+    if (content) annotObj.content = content;
     const fd = new FormData();
     fd.append('file', selectedFile);
-    fd.append('annot_type', annotType);
-    fd.append('page', page);
-    fd.append('x0', x0);
-    fd.append('y0', y0);
-    fd.append('x1', x1);
-    fd.append('y1', y1);
-    if (content) fd.append('content', content);
+    fd.append('annotations', JSON.stringify([annotObj]));
     processAction('/api/pdf/annotate', 'Adding annotation...', fd);
 });
 

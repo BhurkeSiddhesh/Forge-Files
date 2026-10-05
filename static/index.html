@@ -109,7 +109,7 @@
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    <link rel="stylesheet" href="/static/style.css?v=20260928e">
+    <link rel="stylesheet" href="/static/style.css?v=20260929c">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Cropper.js (CSS + JS) is lazy-loaded by script.js only when the crop tool is opened, to protect LCP/INP. -->
     {{CF_ANALYTICS}}
@@ -179,9 +179,6 @@
             } catch (e) {}
         })();
     </script>
-    <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">
-        <i class="fas fa-moon" id="theme-icon"></i>
-    </button>
     <div class="background-blobs">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
@@ -189,6 +186,9 @@
     </div>
 
     <main class="app-container">
+        <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">
+            <i class="fas fa-moon" id="theme-icon"></i>
+        </button>
         <!-- Main Page -->
         <section id="home-page" class="view active">
             <header class="hero">
