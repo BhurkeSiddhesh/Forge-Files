@@ -276,7 +276,26 @@ window.ffCancelInflight = ffCancelInflight;
 window.ffIsAbort = ffIsAbort;
 window.ffStartInflight = ffStartInflight;
 
-const _ffProcessFallback = (path, formData, init) => {
+// The one door to the server for uploads. Resolves a declined Response (and
+// sends nothing) unless the person agreed to this specific operation; see
+// static/local/ff-server-gate.js. With the consent module missing there is nobody to
+// ask, so the answer is no.
+async function ffServerFetch(path, init, code) {
+    let agreed = false;
+    try {
+        agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
+    } catch (e) {
+        agreed = false;
+    }
+    if (!agreed) {
+        return new Response(JSON.stringify({ detail: 'Cancelled. Your file was not uploaded.', declined: true }),
+            { status: 499, headers: { 'Content-Type': 'application/json' } });
+    }
+    return fetch(apiUrl(path), init);
+}
+window.ffServerFetch = ffServerFetch;
+
+const _ffProcessFallback = async (path, formData, init) => {
     if (!ffCheckUploadSize(ffFormDataFiles(formData))) {
         return Promise.resolve(new Response(JSON.stringify({
             detail: 'This file is too large (limit ' + ffUploadLimitMb + ' MB). Try a smaller file.',
@@ -293,7 +312,11 @@ const _ffProcessFallback = (path, formData, init) => {
     if (window.__ffSession && window.__ffSession.access_token && !requestInit.headers.Authorization) {
         requestInit.headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
     }
-    return fetch(apiUrl(path), requestInit).finally(function () { ffSetCancelVisible(false); });
+    try {
+        return await ffServerFetch(path, requestInit);
+    } finally {
+        ffSetCancelVisible(false);
+    }
 };
 const ffProcess = window.ffProcess
     || _ffProcessFallback;
@@ -967,7 +990,7 @@ document.getElementById('process-compress-btn').onclick = async () => {
 
     const abort = ffStartInflight();
     try {
-        const response = await fetch(apiUrl('/api/pdf/compress'), {
+        const response = await ffServerFetch('/api/pdf/compress', {
             method: 'POST',
             body: formData,
             signal: abort && abort.signal,
@@ -1122,7 +1145,7 @@ async function convertToWordWithProgress(formData, useAI) {
     };
 
     try {
-        const response = await fetch(apiUrl('/api/pdf/convert-to-word-stream'), {
+        const response = await ffServerFetch('/api/pdf/convert-to-word-stream', {
             method: 'POST',
             body: formData,
             signal: abort && abort.signal,
@@ -1751,7 +1774,7 @@ async function initCropper() {
             formData.append('file', selectedImageFile);
             formData.append('quality', 80); // Faster preview
 
-            const response = await fetch(apiUrl('/api/image/heic-to-jpeg'), {
+            const response = await ffServerFetch('/api/image/heic-to-jpeg', {
                 method: 'POST',
                 body: formData
             });
@@ -2614,7 +2637,7 @@ async function runWorkflow() {
     };
 
     try {
-        const response = await fetch(apiUrl('/api/workflow/execute'), {
+        const response = await ffServerFetch('/api/workflow/execute', {
             method: 'POST',
             body: formData,
             signal: abort && abort.signal,
@@ -3038,7 +3061,7 @@ async function processExcelAction(url, text, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffServerFetch(url, { method: 'POST', body: formData });
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
@@ -3184,7 +3207,7 @@ async function processPptAction(url, text, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffServerFetch(url, { method: 'POST', body: formData });
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
@@ -3506,7 +3529,7 @@ async function processWordAction(url, statusText, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffServerFetch(url, { method: 'POST', body: formData });
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');

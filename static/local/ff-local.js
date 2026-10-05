@@ -22,17 +22,19 @@
 //   * **Never regress.** `ffProcess()` returns a real `Response`, so callers
 //     keep their existing `response.ok` / `response.json()` / error handling
 //     untouched. If no local handler is registered for a path, or the handler
-//     throws anything that isn't a deliberate validation error, the request
-//     falls through to the server exactly as before. A bug in a handler costs
-//     an upload, not a broken tool.
+//     throws anything that isn't a deliberate validation error, the user is
+//     asked whether the server may take the file. A bug in a handler costs a
+//     prompt, not a broken tool and never a silent upload.
 //   * **Match the server byte-for-contract.** Handlers return the same
 //     `filename` (`<stem>_forgefiles.org.<ext>`) and the same `message` strings
 //     the Python endpoints return, so the UI needs no special-casing and a
 //     result is indistinguishable from a server-produced one.
 //   * **Refuse rather than guess.** Password-protected PDFs, formats the
 //     browser cannot decode, and anything else outside a handler's competence
-//     raise `FFLocalUnsupported` and defer to the server, which still has
-//     pikepdf/PyMuPDF/Pillow.
+//     raise `FFLocalUnsupported`. That never uploads on its own: the user is
+//     asked first (ff-server-gate.js), and declining stops the conversion. Only
+//     after an explicit yes does the server, which still has
+//     pikepdf/PyMuPDF/Pillow, get the file.
 //
 // Not ported (deliberately, they need the server): everything under
 // /api/word/*, /api/ppt/*, /api/excel/*, /api/pdf/convert-to-word*,
@@ -56,10 +58,13 @@
     }
     FFLocalError.prototype = Object.create(Error.prototype);
 
-    /** Outside this handler's competence. Silently defers to the server. */
-    function FFLocalUnsupported(message) {
+    /** Outside this handler's competence. Asks the user before using the server. */
+    function FFLocalUnsupported(message, code) {
         this.name = 'FFLocalUnsupported';
         this.message = message || 'not supported on-device';
+        // Bounded reason code (see ff-server-gate.js CODES) used for the consent
+        // dialog wording. The message itself is never shown to the user.
+        this.code = code || null;
     }
     FFLocalUnsupported.prototype = Object.create(Error.prototype);
 
@@ -168,6 +173,27 @@
     }
 
     /**
+     * The only way to the server. Resolves null when the user agreed to this
+     * upload, otherwise a ready-made "declined" Response and no request was made.
+     * Fails closed: with no consent module there is nobody to ask, so the answer
+     * is no.
+     */
+    async function consentOrDecline(path, code) {
+        var gate = window.ffConsent;
+        var agreed = false;
+        try {
+            agreed = !!(gate && await gate.request({ path: path, code: code }));
+        } catch (e) {
+            agreed = false;
+        }
+        if (agreed) return null;
+        return jsonResponse(499, {
+            detail: 'Cancelled. Your file was not uploaded.',
+            declined: true,
+        });
+    }
+
+    /**
      * Drop-in replacement for `fetch(apiUrl(path), {method:'POST', body: fd})`.
      *
      * Runs the operation on-device when a handler is registered and able;
@@ -177,6 +203,7 @@
      */
     async function ffProcess(path, formData) {
         var handler = enabled() ? HANDLERS[path] : null;
+        var code = null;
 
         if (handler) {
             try {
@@ -195,13 +222,17 @@
                     // The user's input is wrong and the server would say so too.
                     return jsonResponse(400, { detail: err.message });
                 }
-                // Anything else is our problem, not theirs: log it (so it is
-                // findable) and let the server do the job.
+                // Anything else is our problem, not theirs: log it so it is
+                // findable, then ask before the server gets the file.
                 if (!(err instanceof FFLocalUnsupported)) {
-                    console.warn('[ff-local] ' + path + ' fell back to the server:', err);
+                    console.warn('[ff-local] ' + path + ' could not run on-device:', err);
                 }
+                code = err instanceof FFLocalUnsupported ? err.code : 'engine_unavailable';
             }
         }
+
+        var declined = await consentOrDecline(path, code);
+        if (declined) return declined;
 
         var headers = {};
         if (window.__ffSession && window.__ffSession.access_token) {
@@ -386,6 +417,7 @@
     window.ffProcess = ffProcess;
     window.ffLocal = {
         register: register,
+        consentOrDecline: consentOrDecline,
         enabled: enabled,
         capable: CAPABLE,
         handlers: HANDLERS,

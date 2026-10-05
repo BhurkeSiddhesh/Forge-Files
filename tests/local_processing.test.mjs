@@ -65,11 +65,19 @@ function load(options = {}) {
     sandbox.window.apiUrl = (p) => `https://api.test${p}`;
 
     vm.createContext(sandbox);
-    for (const file of ['ff-local.js', 'ops-image.js', 'ops-pdf.js']) {
+    for (const file of ['ff-server-gate.js', 'ff-local.js', 'ops-image.js', 'ops-pdf.js']) {
         vm.runInContext(readFileSync(join(STATIC, file), 'utf8'), sandbox, { filename: file });
     }
 
-    return { sandbox, L: sandbox.window.ffLocal, fetchCalls, revoked };
+    // No DOM dialog in these tests: the consent hook answers instead, and records
+    // every question so tests can assert what the user would have been asked.
+    const consentAsked = [];
+    sandbox.window.ffConsent.handler = (info, req) => {
+        consentAsked.push({ info, req });
+        return options.consent === undefined ? true : options.consent;
+    };
+
+    return { sandbox, L: sandbox.window.ffLocal, fetchCalls, revoked, consentAsked };
 }
 
 // Arrays built inside the vm have that context's Array.prototype, which
@@ -458,33 +466,122 @@ test('a validation error is reported to the user, not retried on the server', as
     assert.equal(fetchCalls.length, 0);
 });
 
-test('an unsupported input falls back to the server', async () => {
-    const { sandbox, L, fetchCalls } = load();
-    L.register('/api/test/enc', async () => { throw new L.Unsupported('PDF is encrypted'); });
+test('an unsupported input asks first, then goes to the server once agreed', async () => {
+    const { sandbox, L, fetchCalls, consentAsked } = load();
+    L.register('/api/pdf/split', async () => { throw new L.Unsupported('PDF is encrypted', 'encrypted'); });
 
-    const res = await sandbox.window.ffProcess('/api/test/enc', new FormData());
+    const res = await sandbox.window.ffProcess('/api/pdf/split', new FormData());
     assert.equal(res.ok, true);
     assert.deepEqual(await res.json(), { server: true });
+    assert.equal(consentAsked.length, 1);
+    assert.equal(consentAsked[0].info.tool, 'Split PDF');
+    assert.equal(consentAsked[0].info.reason, 'this PDF is password protected');
     assert.equal(fetchCalls.length, 1);
-    assert.equal(fetchCalls[0].url, 'https://api.test/api/test/enc');
+    assert.equal(fetchCalls[0].url, 'https://api.test/api/pdf/split');
     assert.equal(fetchCalls[0].init.method, 'POST');
 });
 
-test('an unexpected bug falls back to the server instead of failing the tool', async () => {
-    const { sandbox, L, fetchCalls } = load();
-    L.register('/api/test/boom', async () => { throw new TypeError('undefined is not a function'); });
+test('declining the server stops the conversion with zero uploads', async () => {
+    const { sandbox, L, fetchCalls } = load({ consent: false });
+    L.register('/api/pdf/split', async () => { throw new L.Unsupported('PDF is encrypted', 'encrypted'); });
 
-    const res = await sandbox.window.ffProcess('/api/test/boom', new FormData());
-    assert.equal(res.ok, true, 'the user still gets a result');
-    assert.equal(fetchCalls.length, 1);
+    const res = await sandbox.window.ffProcess('/api/pdf/split', new FormData());
+    assert.equal(res.ok, false);
+    assert.equal(res.status, 499);
+    const body = await res.json();
+    assert.equal(body.declined, true);
+    assert.equal(fetchCalls.length, 0, 'nothing was uploaded');
 });
 
-test('an unregistered path goes straight to the server', async () => {
-    const { sandbox, fetchCalls } = load();
+test('an unexpected bug asks before using the server, and a decline uploads nothing', async () => {
+    const asked = load();
+    asked.L.register('/api/pdf/split', async () => { throw new TypeError('undefined is not a function'); });
+    const ok = await asked.sandbox.window.ffProcess('/api/pdf/split', new FormData());
+    assert.equal(ok.ok, true);
+    assert.equal(asked.fetchCalls.length, 1);
+    assert.equal(asked.consentAsked[0].info.reason, 'the on-device engine could not be loaded');
+
+    const declined = load({ consent: false });
+    declined.L.register('/api/pdf/split', async () => { throw new TypeError('boom'); });
+    const no = await declined.sandbox.window.ffProcess('/api/pdf/split', new FormData());
+    assert.equal(no.status, 499);
+    assert.equal(declined.fetchCalls.length, 0);
+});
+
+test('a raw error message never reaches the consent question', async () => {
+    const { sandbox, L, consentAsked } = load();
+    L.register('/api/pdf/split', async () => { throw new L.Unsupported('secret-filename.pdf: bad xref', 'not-a-known-code'); });
+    await sandbox.window.ffProcess('/api/pdf/split', new FormData());
+    assert.equal(JSON.stringify(consentAsked[0].info).includes('secret-filename'), false);
+    assert.equal(consentAsked[0].info.reason, 'this PDF could not be split on your device');
+});
+
+test('a server-only path asks before its first upload', async () => {
+    const { sandbox, fetchCalls, consentAsked } = load();
     const res = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
     assert.equal(res.ok, true);
+    assert.equal(consentAsked.length, 1);
+    assert.equal(consentAsked[0].info.tool, 'Word to PDF');
     assert.equal(fetchCalls.length, 1);
     assert.equal(fetchCalls[0].url, 'https://api.test/api/word/to-pdf');
+});
+
+test('a declined server-only path makes no request', async () => {
+    const { sandbox, fetchCalls } = load({ consent: false });
+    const res = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    assert.equal(res.status, 499);
+    assert.equal(fetchCalls.length, 0);
+});
+
+test('consent is per operation: each upload asks again', async () => {
+    const { sandbox, fetchCalls, consentAsked } = load();
+    await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    assert.equal(consentAsked.length, 2);
+    assert.equal(fetchCalls.length, 2);
+});
+
+test('only an explicit true counts as consent', async () => {
+    for (const answer of [null, 'yes', 1, 'true', false]) {
+        const { sandbox, fetchCalls } = load({ consent: answer });
+        const res = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+        assert.equal(res.status, 499, `answer ${String(answer)} must not count as consent`);
+        assert.equal(fetchCalls.length, 0);
+    }
+    const { sandbox, fetchCalls } = load();
+    sandbox.window.ffConsent.handler = () => { throw new Error('hook failed'); };
+    const res = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    assert.equal(res.status, 499);
+    assert.equal(fetchCalls.length, 0);
+});
+
+test('with no way to ask, nothing is uploaded', async () => {
+    const { sandbox, fetchCalls } = load();
+    sandbox.window.ffConsent.handler = null; // and the sandbox has no document.body
+    const res = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    assert.equal(res.status, 499);
+    assert.equal(fetchCalls.length, 0);
+});
+
+test('a second request while one is open is declined, not queued', async () => {
+    const { sandbox, fetchCalls } = load();
+    let release;
+    sandbox.window.ffConsent.handler = () => new Promise((r) => { release = r; });
+    const first = sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    const second = await sandbox.window.ffProcess('/api/word/to-pdf', new FormData());
+    assert.equal(second.status, 499);
+    release(true);
+    assert.equal((await first).ok, true);
+    assert.equal(fetchCalls.length, 1, 'a double click uploads exactly once');
+});
+
+test('supported local input never asks and never uploads', async () => {
+    const { sandbox, L, fetchCalls, consentAsked } = load();
+    L.register('/api/test/ok', async () => ({ blob: new Blob(['x']), filename: 'f.pdf', message: 'done' }));
+    const res = await sandbox.window.ffProcess('/api/test/ok', new FormData());
+    assert.equal(res.ok, true);
+    assert.equal(consentAsked.length, 0);
+    assert.equal(fetchCalls.length, 0);
 });
 
 test('the kill switches route everything back to the server', async () => {
