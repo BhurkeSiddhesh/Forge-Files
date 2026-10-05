@@ -1,0 +1,40 @@
+{
+  "note": "Pinned OCR engine files, same-origin. Loaded only when OCR PDF first runs on-device. See ../README.md.",
+  "files": {
+    "tesseract.min.js": {
+      "package": "tesseract.js",
+      "version": "7.0.0",
+      "license": "Apache-2.0",
+      "bytes": 62961,
+      "sha256": "000c27d9cd0def655f77b36c72a389c0ab13793aa31cb4d7aab56d09c0afbc7e"
+    },
+    "worker.min.js": {
+      "package": "tesseract.js",
+      "version": "7.0.0",
+      "license": "Apache-2.0",
+      "bytes": 111307,
+      "sha256": "576b7df7e3393e137e51849357c9adb53fe7ac1bb69bfa06cf3d61520f182c6d"
+    },
+    "core/tesseract-core-simd-lstm.wasm.js": {
+      "package": "tesseract.js-core",
+      "version": "7.0.0",
+      "license": "Apache-2.0",
+      "bytes": 3899472,
+      "sha256": "c58b46a4c796c0b8afccf77591d5b875b6896b45d402bbce8caa6f5362447b38"
+    },
+    "core/tesseract-core-lstm.wasm.js": {
+      "package": "tesseract.js-core",
+      "version": "7.0.0",
+      "license": "Apache-2.0",
+      "bytes": 3896484,
+      "sha256": "eef5f8b2f8e20e150680b20adaec4a60babafee3adbe8a94583c81fee46e8680"
+    },
+    "lang/eng.traineddata.gz": {
+      "package": "@tesseract.js-data/eng (4.0.0_best_int)",
+      "version": "1.0.0",
+      "license": "Apache-2.0 (tessdata_best)",
+      "bytes": 2952873,
+      "sha256": "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91"
+    }
+  }
+}

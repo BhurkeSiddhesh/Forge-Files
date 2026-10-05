@@ -20,22 +20,22 @@
     // error text here.
     var TOOLS = {
         '/api/pdf/remove-password': ['Unlock PDF', 'this tool removes PDF encryption using the server\'s PDF engine'],
-        '/api/pdf/convert-to-word': ['PDF to Word', 'rebuilding an editable Word layout needs the server\'s conversion engine'],
-        '/api/pdf/convert-to-word-stream': ['PDF to Word', 'rebuilding an editable Word layout needs the server\'s conversion engine'],
+        '/api/pdf/convert-to-word': ['PDF to Word', 'this PDF could not be turned into an editable Word file on your device'],
+        '/api/pdf/convert-to-word-stream': ['PDF to Word', 'this PDF could not be turned into an editable Word file on your device'],
         '/api/pdf/compress': ['Compress PDF', 'image recompression runs on the server\'s PDF engine'],
         '/api/pdf/extract-pages': ['Extract Pages', 'this PDF could not be processed on your device'],
         '/api/pdf/split': ['Split PDF', 'this PDF could not be split on your device'],
         '/api/pdf/extract-text': ['PDF to Text', 'this PDF could not be read on your device'],
-        '/api/pdf/ocr': ['OCR PDF', 'text recognition runs on the server\'s OCR models'],
+        '/api/pdf/ocr': ['OCR PDF', 'text recognition could not run on your device'],
         '/api/pdf/merge': ['Merge PDF', 'these PDFs could not be merged on your device'],
         '/api/pdf/rotate': ['Rotate PDF', 'this PDF could not be processed on your device'],
         '/api/pdf/protect': ['Protect PDF', 'this PDF could not be encrypted on your device'],
         '/api/pdf/watermark': ['Watermark PDF', 'this PDF could not be processed on your device'],
         '/api/pdf/to-images': ['PDF to JPG', 'this PDF could not be rendered on your device'],
         '/api/pdf/add-page-numbers': ['Add Page Numbers', 'this PDF could not be processed on your device'],
-        '/api/pdf/to-excel': ['PDF to Excel', 'table detection runs on the server\'s conversion engine'],
-        '/api/pdf/to-pptx': ['PDF to PowerPoint', 'slide building runs on the server\'s conversion engine'],
-        '/api/pdf/to-epub': ['PDF to EPUB', 'this conversion runs on the server\'s conversion engine'],
+        '/api/pdf/to-excel': ['PDF to Excel', 'its tables could not be read reliably on your device'],
+        '/api/pdf/to-pptx': ['PDF to PowerPoint', 'this PDF could not be turned into slides on your device'],
+        '/api/pdf/to-epub': ['PDF to EPUB', 'this PDF could not be turned into a readable ebook on your device'],
         '/api/pdf/sign': ['Sign PDF', 'this PDF could not be signed on your device'],
         '/api/pdf/organize': ['Organize PDF', 'this PDF could not be processed on your device'],
         '/api/pdf/repair': ['Repair PDF', 'repairing damaged files uses the server\'s PDF engine'],
@@ -78,6 +78,8 @@
         unsupported_structure: 'this file uses features that cannot be processed on this device',
         font_coverage_missing: 'this document uses a script the on-device fonts do not cover',
         on_device_office_unavailable: 'on-device Office conversion is not available on this device',
+        ai_layout: 'AI layout analysis (an option you chose) runs on the server',
+        ocr_language: 'text recognition for this language runs on the server, which has the models for it',
     };
 
     function lookup(path) {

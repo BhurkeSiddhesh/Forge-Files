@@ -1148,9 +1148,9 @@ async function convertToWordWithProgress(formData, useAI) {
     };
 
     try {
-        const response = await ffServerFetch('/api/pdf/convert-to-word-stream', {
-            method: 'POST',
-            body: formData,
+        // Through ffProcess so an on-device handler runs first and the server (with its consent
+        // question) is only used when the device cannot convert this file.
+        const response = await ffProcess('/api/pdf/convert-to-word-stream', formData, {
             signal: abort && abort.signal,
         });
 
