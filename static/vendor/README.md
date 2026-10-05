@@ -11,6 +11,8 @@ content-security policy. Vendoring keeps the bundle self-contained.
 | `jszip.min.js` | [`jszip`](https://www.npmjs.com/package/jszip) | 3.10.2 | MIT OR GPL-3.0-or-later, used under MIT (`jszip.LICENSE.md`) |
 | `exceljs.min.js` | [`exceljs`](https://www.npmjs.com/package/exceljs) | 4.4.0 | MIT (`exceljs.LICENSE.md`) |
 | `pdfjs/` | [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist) | 6.4.299 | Apache-2.0 (`pdfjs/LICENSE`; wasm decoders carry their own `LICENSE_*` files) |
+| `qpdf/` | [`@neslinesli93/qpdf-wasm`](https://www.npmjs.com/package/@neslinesli93/qpdf-wasm) | 0.3.0 | ISC (`qpdf/package.json`) |
+| `libheif/heic-to.js` | [`heic-to`](https://www.npmjs.com/package/heic-to) / libheif | 1.6.5 / 1.23.5 | LGPL-3.0 (`libheif/LICENSE`) |
 
 `exceljs.min.js` is the untouched `dist/exceljs.min.js`; it defines `window.ExcelJS` and is loaded on demand
 by `static/local/ff-local.js` (`loadExcelJs`) the first time an Excel/spreadsheet tool runs on-device.
@@ -61,3 +63,15 @@ and the server must send `.mjs` as `text/javascript` (`public/main.py` registers
 Update with `npm pack pdfjs-dist@<version>`, copy `build/pdf.min.mjs`, `build/pdf.worker.min.mjs`, `LICENSE`,
 `cmaps/`, `standard_fonts/`, `wasm/`, `iccs/` into `pdfjs/`, then bump `PDFJS_VERSION` in `ff-local.js`.
 Total size is about 5.3 MB, loaded only when PDF to JPG/PNG runs on-device.
+
+## Phase 3 engines
+
+`qpdf/qpdf.js` and `qpdf/qpdf.wasm` are the untouched 0.3.0 distribution used
+only after a user starts structural PDF compression. SHA-256:
+`c0e8fe62e0c3385dd8cb5d6b613f74d87a4138a3a3343e2add45a067a14d0884`
+and `abd933f4ccace4f732999381b21aec8b7e3726f18a5b167fafd57f88dd440876`.
+
+`libheif/heic-to.js` is the untouched IIFE build of heic-to 1.6.5, containing
+libheif 1.23.5, and is loaded only for HEIC/HEIF conversion. Its SHA-256 is
+`c94d3bce5d9886be1989c270e53c98585ba67af1863fc156b4c72a27c4a18bc1`.
+The LGPL-covered file remains separate so it can be replaced independently.

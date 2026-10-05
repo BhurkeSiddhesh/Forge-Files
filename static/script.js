@@ -971,14 +971,19 @@ document.getElementById('ocr-pdf-btn').onclick = () => {
 document.querySelectorAll('input[name="compress-level"]').forEach(function (radio) {
     radio.addEventListener('change', ffUpdatePdfCompressPreview);
 });
+document.querySelectorAll('input[name="compress-mode"]').forEach(function (radio) {
+    radio.addEventListener('change', ffUpdatePdfCompressPreview);
+});
 
 document.getElementById('process-compress-btn').onclick = async () => {
     const level = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
+    const mode = document.querySelector('input[name="compress-mode"]:checked')?.value || 'structural';
     if (!ffCheckUploadSize(selectedFile)) return;
 
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('level', level);
+    formData.append('mode', mode);
 
     const statusDisplay = document.getElementById('status-display');
     const statusText = document.getElementById('status-text');
@@ -990,9 +995,7 @@ document.getElementById('process-compress-btn').onclick = async () => {
 
     const abort = ffStartInflight();
     try {
-        const response = await ffServerFetch('/api/pdf/compress', {
-            method: 'POST',
-            body: formData,
+        const response = await ffProcess('/api/pdf/compress', formData, {
             signal: abort && abort.signal,
         });
         if (response.ok) {
@@ -1402,9 +1405,14 @@ function ffUpdatePdfCompressPreview() {
     const el = document.getElementById('pdf-compress-preview');
     if (!el) return;
     const level = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
+    const mode = document.querySelector('input[name="compress-mode"]:checked')?.value || 'structural';
+    if (mode === 'structural') {
+        el.textContent = 'Structural mode preserves searchable text, links and vectors. Savings depend on how the PDF was originally encoded.';
+        return;
+    }
     const range = FF_PDF_COMPRESS_HINT[level] || FF_PDF_COMPRESS_HINT.medium;
     if (!selectedFile) {
-        el.textContent = 'Typical reduction: Low ~10–20%, Medium ~30–50%, High ~50–70%. Select a file for an estimate.';
+        el.textContent = 'Raster mode estimate: Low ~10–20%, Medium ~30–50%, High ~50–70%. Text and links become page images.';
         return;
     }
     el.textContent = 'This ' + formatBytes(selectedFile.size) + ' file would typically become about '
@@ -1482,6 +1490,8 @@ function showResult(filename, message, token) {
     if (existingStats) existingStats.remove();
     const existingBadge = resultDisplay.querySelector('.reduction-badge');
     if (existingBadge) existingBadge.remove();
+    const existingNote = resultDisplay.querySelector('.compression-note');
+    if (existingNote) existingNote.remove();
 
     resultDisplay.classList.remove('hidden');
     resultMessage.textContent = message + ': ' + filename;
@@ -1507,7 +1517,7 @@ function showCompressResult(data) {
     // Build size stats display
     const badge = document.createElement('div');
     badge.className = 'reduction-badge';
-    badge.textContent = `↓ ${data.reduction_pct}% smaller`;
+    badge.textContent = Number(data.reduction_pct) > 0 ? `↓ ${data.reduction_pct}% smaller` : 'No safe size reduction';
 
     const stats = document.createElement('div');
     stats.className = 'compress-stats';
@@ -1526,6 +1536,12 @@ function showCompressResult(data) {
     // Insert after the message, before the download button
     resultMessage.insertAdjacentElement('afterend', stats);
     stats.insertAdjacentElement('afterend', badge);
+    if (data.compression_note) {
+        const note = document.createElement('p');
+        note.className = 'helper-text compression-note';
+        note.textContent = data.compression_note;
+        badge.insertAdjacentElement('afterend', note);
+    }
     ffUpdateStepTracker('pdf', 3);
 }
 
@@ -1781,10 +1797,7 @@ async function initCropper() {
             formData.append('file', selectedImageFile);
             formData.append('quality', 80); // Faster preview
 
-            const response = await ffServerFetch('/api/image/heic-to-jpeg', {
-                method: 'POST',
-                body: formData
-            });
+            const response = await ffProcess('/api/image/heic-to-jpeg', formData);
 
             if (!response.ok) {
                 const err = await response.json();
@@ -1808,7 +1821,8 @@ async function initCropper() {
                     scalable: false,
                 });
             };
-            image.src = apiUrl(`/api/download/${encodeURIComponent(data.download_token)}`);
+            const localPreview = window.ffLocal && window.ffLocal.resolve(data.download_token);
+            image.src = localPreview ? localPreview.url : apiUrl(`/api/download/${encodeURIComponent(data.download_token)}`);
 
         } catch (e) {
             console.error(e);
