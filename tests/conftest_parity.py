@@ -28,8 +28,9 @@ def run_local(tmp_path: Path, api_path: str, files: list[dict], fields: dict | N
     return json.loads(proc.stdout.strip().splitlines()[-1]), out
 
 
-def make_pdf(path: Path, pages: int = 5, sizes: list | None = None, rotations: dict | None = None) -> Path:
+def make_pdf(path: Path, pages: int | None = None, sizes: list | None = None, rotations: dict | None = None) -> Path:
     """A PDF whose page i says 'Page i' and (optionally) has its own size and rotation."""
+    pages = pages if pages is not None else (len(sizes) if sizes else 5)
     doc = fitz.open()
     for i in range(pages):
         w, h = (sizes[i] if sizes else (595, 842))
