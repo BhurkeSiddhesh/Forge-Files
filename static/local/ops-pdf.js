@@ -513,7 +513,8 @@
 
     // ── /api/pdf/watermark ────────────────────────────────────────────────
 
-    L.register('/api/pdf/watermark', async function (fd) {
+    L.register('/api/pdf/watermark', async function (fd, ctx) {
+        ctx = ctx || {};
         var text = L.str(fd, 'text', '');
         if (!text || !text.trim()) throw new L.Error('Watermark text cannot be empty.');
 
@@ -529,42 +530,63 @@
         var file = only(fd);
         var PDFLib = await L.loadPdfLib();
         var doc = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
+
+        // Placement is worked out in unrotated page space. A rotated page would
+        // need every position mapped through the rotation, so it is left to the
+        // server (after the user agrees) rather than risk a sideways watermark.
+        var pages = doc.getPages();
+        if (pages.some(function (p) { return (p.getRotation().angle || 0) % 360 !== 0; })) {
+            throw new L.Unsupported('watermarking rotated pages is not supported on-device', 'unsupported_structure');
+        }
+
         var font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
         var grey = PDFLib.rgb(0.5, 0.5, 0.5);
 
-        doc.getPages().forEach(function (page) {
-            var size = page.getSize();
-            var fontSize = Math.max(24, Math.trunc(size.width / 12));
+        // Helvetica here is WinAnsi only; text in other scripts cannot be drawn.
+        try {
+            font.widthOfTextAtSize(text, 12);
+        } catch (err) {
+            throw new L.Unsupported('watermark text needs glyphs the built-in font lacks', 'font_coverage_missing');
+        }
+
+        for (var n = 0; n < pages.length; n++) {
+            L.checkAbort(ctx.signal);
+            var page = pages[n];
+            // The visible page is its CropBox; the server measures page.rect, which is the same thing.
+            var crop = page.getCropBox();
+            var fontSize = Math.max(24, Math.trunc(crop.width / 12));
 
             if (position === 'diagonal') {
-                // add_watermark() rotates about the page centre. pdf-lib rotates
-                // about the text origin instead, so step back half the string's
-                // width along the 45° axis to land the middle of the text on the
-                // middle of the page.
-                var width = font.widthOfTextAtSize(text, fontSize);
-                var half = width / 2;
-                var diag = Math.SQRT1_2; // cos(45°) == sin(45°)
+                // The text is centred on the page centre, running up and to the
+                // right at 45 degrees. (The server anchors the START of the text
+                // at the centre, so a long watermark could leave the page there;
+                // see the changelog.) pdf-lib rotates about the text origin, so
+                // step back half the string's width along the 45 degree axis.
+                var half = font.widthOfTextAtSize(text, fontSize) / 2;
+                var diag = Math.SQRT1_2; // cos(45) == sin(45)
                 page.drawText(text, {
-                    x: size.width / 2 - half * diag,
-                    y: size.height / 2 - half * diag,
+                    x: crop.x + crop.width / 2 - half * diag,
+                    y: crop.y + crop.height / 2 - half * diag,
                     size: fontSize, font: font, color: grey, opacity: opacity,
                     rotate: PDFLib.degrees(45),
                 });
-                return;
+            } else {
+                var fromTop = position === 'top' ? crop.height * 0.1
+                    : position === 'center' ? crop.height / 2
+                        : crop.height * 0.9;
+                // The server's own rough width estimate, kept so placement matches.
+                var estimated = fontSize * 0.5 * text.length;
+                page.drawText(text, {
+                    x: crop.x + Math.max(10, (crop.width - estimated) / 2),
+                    y: crop.y + crop.height - fromTop,
+                    size: fontSize, font: font, color: grey, opacity: opacity,
+                });
             }
+            if (ctx.onProgress) ctx.onProgress(n + 1, pages.length);
+            if (n % 10 === 9) await L.tick();
+        }
 
-            var fromTop = position === 'top' ? size.height * 0.1
-                : position === 'center' ? size.height / 2
-                    : size.height * 0.9;
-            // The server's own rough width estimate, kept so placement matches.
-            var estimated = fontSize * 0.5 * text.length;
-            page.drawText(text, {
-                x: Math.max(10, (size.width - estimated) / 2),
-                y: size.height - fromTop,
-                size: fontSize, font: font, color: grey, opacity: opacity,
-            });
-        });
-
+        L.checkAbort(ctx.signal);
         return {
             blob: await save(doc),
             filename: L.brandedName(file.name, 'pdf'),
