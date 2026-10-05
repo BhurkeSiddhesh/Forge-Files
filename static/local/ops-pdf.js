@@ -151,7 +151,8 @@
 
     // ── /api/pdf/merge ────────────────────────────────────────────────────
 
-    L.register('/api/pdf/merge', async function (fd) {
+    L.register('/api/pdf/merge', async function (fd, ctx) {
+        ctx = ctx || {};
         var inputs = L.files(fd, 'files');
         if (inputs.length < 2) throw new L.Error('Provide at least two PDF files to merge.');
 
@@ -161,15 +162,29 @@
             throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
         }
 
+        // The merged document holds every input's pages at once, so the budget
+        // is on the combined size, not on each file.
+        var total = inputs.reduce(function (sum, f) { return sum + f.size; }, 0);
+        if (total > (L.constrained() ? 50 : 150) * 1024 * 1024) {
+            throw new L.Unsupported('combined input exceeds the on-device merge budget', 'resource_budget_exceeded');
+        }
+
         var PDFLib = await L.loadPdfLib();
         var merged = await PDFLib.PDFDocument.create({ updateMetadata: false });
 
+        // One source document is alive at a time; its pages are copied into
+        // `merged` and the source is then released.
         for (var i = 0; i < inputs.length; i++) {
+            L.checkAbort(ctx.signal);
             var src = await loadDoc(PDFLib, inputs[i], null);
             var copied = await merged.copyPages(src, src.getPageIndices());
             copied.forEach(function (page) { merged.addPage(page); });
+            src = null;
+            if (ctx.onProgress) ctx.onProgress(i + 1, inputs.length);
+            await L.tick();
         }
 
+        L.checkAbort(ctx.signal);
         return {
             blob: await save(merged),
             filename: 'merged_' + L.hexId(8) + '.pdf',

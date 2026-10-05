@@ -249,3 +249,38 @@ test('a missing file is a validation error', async () => {
     assert.equal(res.status, 400);
     assert.equal((await res.json()).detail, 'No file provided.');
 });
+
+// ── Merge PDF (work package 08): progress and cancellation ────────────────
+
+function mergeForm(sandbox, blobs) {
+    const fd = new FormData();
+    blobs.forEach((b, i) => fd.append('files', b, `f${i}.pdf`));
+    return fd;
+}
+
+test('merge reports progress per input and returns the merged PDF', async () => {
+    const ctx = load();
+    const blobs = [await makePdf(ctx.sandbox, 2), await makePdf(ctx.sandbox, 3), await makePdf(ctx.sandbox, 1)];
+    const seen = [];
+    const res = await ctx.sandbox.ffProcess('/api/pdf/merge', mergeForm(ctx.sandbox, blobs), { onProgress: (d, t) => seen.push([d, t]) });
+    assert.equal(res.ok, true);
+    assert.deepEqual(seen, [[1, 3], [2, 3], [3, 3]]);
+    const body = await res.json();
+    const merged = await ctx.sandbox.PDFLib.PDFDocument.load(new (vm.runInContext('Uint8Array', ctx.sandbox))(await ctx.L.resolve(body.download_token).blob.arrayBuffer()));
+    assert.equal(merged.getPageCount(), 6);
+    assert.equal(ctx.fetchCalls.length, 0);
+});
+
+test('cancelling a merge stops it and never uploads', async () => {
+    const ctx = load({ consent: true });
+    const blobs = [];
+    for (let i = 0; i < 5; i++) blobs.push(await makePdf(ctx.sandbox, 1));
+    const abort = new AbortController();
+    const run = ctx.sandbox.ffProcess('/api/pdf/merge', mergeForm(ctx.sandbox, blobs), {
+        signal: abort.signal,
+        onProgress: (d) => { if (d === 2) abort.abort(); },
+    });
+    await assert.rejects(run, (e) => e.name === 'AbortError');
+    assert.equal(ctx.fetchCalls.length, 0);
+    assert.equal(ctx.asked.length, 0);
+});
