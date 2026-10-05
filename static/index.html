@@ -1101,6 +1101,10 @@
                     <div id="excel-to-pdf-area" class="password-area hidden">
                         <p class="helper-text">Best-effort layout: cell colors, merged cells, and charts are approximated.</p>
                         <button id="process-excel-to-pdf-btn" class="primary-btn">Convert to PDF</button>
+                        <div class="on-device-office" data-on-device-office="excel-to-pdf" data-kind="excel" hidden>
+                            <p class="helper-text">Prefer to keep this file on your device? Convert it here instead of on the server. The first time downloads about 247 MB.</p>
+                            <button type="button" class="secondary-btn">Convert on this device</button>
+                        </div>
                     </div>
 
                     <div id="csv-to-xlsx-area" class="password-area hidden">
@@ -1220,6 +1224,10 @@
                     <div id="ppt-to-pdf-area" class="password-area hidden">
                         <p class="helper-text">Best-effort layout: animations, gradients, and SmartArt are not preserved.</p>
                         <button id="process-ppt-to-pdf-btn" class="primary-btn">Convert to PDF</button>
+                        <div class="on-device-office" data-on-device-office="ppt-to-pdf" data-kind="ppt" hidden>
+                            <p class="helper-text">Prefer to keep this file on your device? Convert it here instead of on the server. The first time downloads about 247 MB.</p>
+                            <button type="button" class="secondary-btn">Convert on this device</button>
+                        </div>
                     </div>
 
                     <div id="ppt-to-images-area" class="password-area hidden">
@@ -1229,6 +1237,10 @@
                             <option value="jpg">JPG</option>
                         </select>
                         <button id="process-ppt-to-images-btn" class="primary-btn">Render Slides</button>
+                        <div class="on-device-office" data-on-device-office="ppt-to-images" data-kind="ppt" hidden>
+                            <p class="helper-text">Prefer to keep this file on your device? Convert it here instead of on the server. The first time downloads about 247 MB.</p>
+                            <button type="button" class="secondary-btn">Convert on this device</button>
+                        </div>
                     </div>
 
                     <div id="merge-ppt-area" class="password-area hidden">
@@ -1325,6 +1337,10 @@
                     <div id="word-to-pdf-area" class="password-area hidden">
                         <p class="helper-text">Convert your Word document to PDF:</p>
                         <button id="process-word-to-pdf-btn" class="primary-btn">Convert to PDF</button>
+                        <div class="on-device-office" data-on-device-office="word-to-pdf" data-kind="word" hidden>
+                            <p class="helper-text">Prefer to keep this file on your device? Convert it here instead of on the server. The first time downloads about 247 MB.</p>
+                            <button type="button" class="secondary-btn">Convert on this device</button>
+                        </div>
                     </div>
 
                     <div id="word-to-pptx-area" class="password-area hidden">
@@ -1670,6 +1686,7 @@
          Small (~30 KB total) — pdf-lib is fetched on demand, not from here. -->
     <script src="/static/local/ff-server-gate.js?v=20261005"></script>
     <script src="/static/local/ff-local.js?v=20261005"></script>
+    <script src="/static/local/office-entry.js?v=20261005"></script>
     <script src="/static/local/ops-image.js?v=20260929b"></script>
     <script src="/static/local/ops-pdf.js?v=20261005"></script>
     <script src="/static/local/ops-pdf-render.js?v=20261005"></script>

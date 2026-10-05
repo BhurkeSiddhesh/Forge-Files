@@ -3511,6 +3511,9 @@ document.getElementById('process-pdf-to-epub-btn')?.addEventListener('click', ()
 // === Word Tools Page ===
 
 let selectedWordFile = null;
+// Read by static/local/office-entry.js to hand the chosen file to the on-device
+// Office page. Returns null until a file has been accepted.
+window.ffOfficeSelectedFile = (kind) => ({ word: selectedWordFile, excel: selectedExcelFile, ppt: selectedPptFile })[kind] || null;
 
 const wordDropZone = document.getElementById('word-drop-zone');
 const wordFileInput = document.getElementById('word-file-input');

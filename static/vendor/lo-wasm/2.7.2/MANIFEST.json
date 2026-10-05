@@ -1,0 +1,46 @@
+{
+  "package": "@matbee/libreoffice-converter",
+  "version": "2.7.2",
+  "license": "MPL-2.0",
+  "npm_integrity": "sha512-62S8uLiFvwbXiCu3IfkO1cDjTyZWUy5nlMsTrmj3l+G5zf5fQcgpvzfRDR9wId+bduarrv11ZDb8Olz5zj4zJA==",
+  "tarball": "https://registry.npmjs.org/@matbee/libreoffice-converter/-/libreoffice-converter-2.7.2.tgz",
+  "note": "Unmodified npm files. soffice.wasm and soffice.data are not committed; public/scripts/fetch_office_engine.py downloads and verifies them.",
+  "files": {
+    "browser.js": {
+      "source": "dist/browser.js",
+      "bytes": 73956,
+      "sha256": "5650066a959e9f8c80722830405afbc0879a0ab98a2f2684aeed75ecb80fd6bc",
+      "committed": true
+    },
+    "browser.worker.global.js": {
+      "source": "dist/browser.worker.global.js",
+      "bytes": 110190,
+      "sha256": "9401aff2213772d7114fe417e3f34eb359905ae3a4e94a735644d926d593e276",
+      "committed": true
+    },
+    "soffice.js": {
+      "source": "wasm/soffice.js",
+      "bytes": 444153,
+      "sha256": "b67acadcb30171e6ec018754fcbe5b527443a3ef1c84f352e29aecff6d210e43",
+      "committed": true
+    },
+    "soffice.worker.js": {
+      "source": "wasm/soffice.worker.js",
+      "bytes": 3221,
+      "sha256": "458bc142e7f837baf44a2d186a0b65b0a11ece760e5dab79ebca2789c9feeef5",
+      "committed": true
+    },
+    "soffice.wasm": {
+      "source": "wasm/soffice.wasm",
+      "bytes": 147416331,
+      "sha256": "ea3d8f3b69bd1e586a8ea973e0dfa61c758612fcc529dc94ac2e30519f8b4f7b",
+      "committed": false
+    },
+    "soffice.data": {
+      "source": "wasm/soffice.data",
+      "bytes": 99735918,
+      "sha256": "8f4e98aa67e108e161cecc7906d7ac0dd3941ef9347f999c3b9dbc049f165020",
+      "committed": false
+    }
+  }
+}

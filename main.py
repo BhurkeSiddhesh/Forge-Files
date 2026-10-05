@@ -203,11 +203,34 @@ async def canonical_host_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# On-device Office engine (LibreOffice WASM) needs SharedArrayBuffer, so its page
+# must be cross-origin isolated: COOP same-origin (already sent everywhere) plus
+# COEP require-corp. Only this dedicated, ad-free route and the engine and viewer
+# files it loads get COEP; the rest of the site is untouched because COEP can
+# block third-party ads. Worker scripts must carry COEP themselves, which is why
+# the vendor directories are listed here and not just the page.
+_ISOLATED_PREFIXES = (
+    "/on-device-office",
+    "/static/on-device-office/",
+    "/static/vendor/lo-wasm/",
+    "/static/vendor/pdfjs/",
+    "/static/vendor/jszip.min.js",
+)
+_ENGINE_PREFIX = "/static/vendor/lo-wasm/"
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    path = request.url.path
+    if path.startswith(_ISOLATED_PREFIXES):
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        if path.startswith(_ENGINE_PREFIX) and response.status_code == 200 and not path.endswith("MANIFEST.json"):
+            # Version-pinned directory: safe to cache for a year.
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
     if proto == "https":
         response.headers.setdefault(
@@ -3774,6 +3797,17 @@ async def ads_txt():
 # adding a <link> to all eight templates) covers the home page, all tool pages
 # and all content pages at once. Must stay above the /{slug} catch-all below,
 # which would otherwise swallow these as unknown slugs and 404.
+@app.get("/on-device-office", include_in_schema=False)
+@app.get("/on-device-office/", include_in_schema=False)
+async def serve_on_device_office():
+    """Isolated, ad-free page that runs the on-device Office engine."""
+    return FileResponse(
+        BASE_DIR / "static" / "on-device-office" / "index.html",
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Robots-Tag": "noindex, nofollow"},
+    )
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico():
     return FileResponse(

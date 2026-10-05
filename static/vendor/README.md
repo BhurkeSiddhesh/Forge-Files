@@ -16,6 +16,7 @@ content-security policy. Vendoring keeps the bundle self-contained.
 | `docx.iife.js` | [`docx`](https://www.npmjs.com/package/docx) | 9.8.1 | MIT (`docx.LICENSE.md`) |
 | `pptxgen.min.js` | [`pptxgenjs`](https://www.npmjs.com/package/pptxgenjs) | 4.0.1 | MIT (`pptxgenjs.LICENSE.md`) |
 | `tesseract/` | [`tesseract.js`](https://www.npmjs.com/package/tesseract.js) + [`tesseract.js-core`](https://www.npmjs.com/package/tesseract.js-core) + English model | 7.0.0 / 7.0.0 / `4.0.0_best_int` | Apache-2.0 (`tesseract/LICENSE.*.md`) |
+| `lo-wasm/2.7.2/` | [`@matbee/libreoffice-converter`](https://www.npmjs.com/package/@matbee/libreoffice-converter) (LibreOffice compiled to WebAssembly) | 2.7.2 | MPL-2.0, unmodified |
 
 `exceljs.min.js` is the untouched `dist/exceljs.min.js`; it defines `window.ExcelJS` and is loaded on demand
 by `static/local/ff-local.js` (`loadExcelJs`) the first time an Excel/spreadsheet tool runs on-device.
@@ -41,6 +42,17 @@ separate `.wasm` builds are deliberately not shipped); and `lang/eng.traineddata
 `@tesseract.js-data/eng@1.0.0` (SHA-1 `285a3f1fb419e8e67bdee93ce288b02bb9097f0a`), about 2.8 MiB.
 `tesseract/MANIFEST.json` records every file's package, version, licence, size and SHA-256; the loader refuses to run if a hash in it does not match.
 Only English ships on-device: Hindi, Marathi, Tamil and Telugu stay on the server until their accuracy is proven.
+
+`lo-wasm/2.7.2/` is the on-device Office engine for Word, Excel and PowerPoint to PDF and PowerPoint to Images, loaded only by the isolated
+`/on-device-office/` page (never from a CDN, never by the main app or the mobile bundle). The four small files (`browser.js`,
+`browser.worker.global.js`, `soffice.js`, `soffice.worker.js`, about 630 KB) are committed unmodified from the npm tarball; the two large ones
+(`soffice.wasm` 147 MB and `soffice.data` 100 MB) are **not in git**. `MANIFEST.json` records the tarball's sha512 integrity and every file's size
+and SHA-256. `python public/scripts/fetch_office_engine.py` downloads the pinned tarball, checks it, and writes only files whose SHA-256 matches the
+manifest (`--check` verifies without downloading). The CI deploy jobs run it once per host and leave the files in place. The page itself re-checks
+the four small files against the manifest before running anything and fails closed on a mismatch; the two large files are verified at deploy time,
+because hashing 247 MB inside the page would double the memory a conversion needs. MPL-2.0 requires source for modified MPL files only; these are
+shipped unmodified. To update, change `version`, `npm_integrity` and the hashes in a new `lo-wasm/<version>/` directory and bump `ENGINE_VERSION` in
+`static/on-device-office/office.js`.
 
 `pdf-lib.min.js` is the untouched UMD build (`dist/pdf-lib.min.js` from the npm
 tarball); it defines `window.PDFLib`. It is **not** loaded by `index.html` — it
