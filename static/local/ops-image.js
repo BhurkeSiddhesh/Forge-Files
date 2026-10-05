@@ -61,7 +61,7 @@
     function formatOf(filename) {
         var dot = String(filename || '').lastIndexOf('.');
         var ext = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : '';
-        return FORMAT_EXT[ext] || 'jpg';
+        return Object.prototype.hasOwnProperty.call(FORMAT_EXT, ext) ? FORMAT_EXT[ext] : 'jpg';
     }
 
     function canvasOf(w, h) {
@@ -93,6 +93,57 @@
         if (w * h > MAX_RESIZE_PIXELS) {
             throw new L.Error('Resize output must be <= ' + String(MAX_RESIZE_PIXELS).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' pixels.');
         }
+    }
+
+    /** Python's repr() of a float, as FastAPI's `angle: float` prints it in a message. */
+    function pyFloat(n) {
+        return Number.isInteger(n) && Math.abs(n) < 1e16 ? n.toFixed(1) : String(n);
+    }
+
+    /**
+     * What Pillow calls the image's mode, as far as it matters here, read from the file
+     * header (a canvas cannot tell an opaque RGBA PNG from an RGB one):
+     * 'rgba' (has an alpha channel or transparency), 'palette' (mode P), or 'opaque'.
+     */
+    async function sniffMode(file) {
+        var b = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
+        var dv = new DataView(b.buffer);
+        var png = b.length > 33 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+        if (png) {
+            var ct = b[25], trns = false;
+            for (var o = 8; o + 8 <= b.length;) {
+                var len = dv.getUint32(o), type = String.fromCharCode(b[o + 4], b[o + 5], b[o + 6], b[o + 7]);
+                if (type === 'tRNS') trns = true;
+                if (type === 'IDAT' || type === 'IEND') break;
+                o += 12 + len;
+            }
+            if (ct === 3) return 'palette';
+            return (ct === 4 || ct === 6 || trns) ? 'rgba' : 'opaque';
+        }
+        var riff = b.length > 21 && String.fromCharCode(b[0], b[1], b[2], b[3]) === 'RIFF' &&
+            String.fromCharCode(b[8], b[9], b[10], b[11]) === 'WEBP';
+        if (riff) {
+            var chunk = String.fromCharCode(b[12], b[13], b[14], b[15]);
+            if (chunk === 'VP8L') return b[20] === 0x2f && (b[24] & 0x10) ? 'rgba' : 'opaque';
+            return chunk === 'VP8X' && (b[20] & 0x10) ? 'rgba' : 'opaque';
+        }
+        var gif = b.length > 6 && String.fromCharCode(b[0], b[1], b[2]) === 'GIF';
+        return gif ? 'palette' : 'opaque';
+    }
+
+    /** Python's round(x, 1): the exact decimal value of the double, ties to even (only x.25 and x.75 are exact ties). */
+    function pyRound1(x) {
+        var t = x * 4;
+        if (Number.isInteger(t) && t % 2 !== 0) {
+            var down = Math.floor(x * 10) / 10, up = Math.ceil(x * 10) / 10;
+            return Math.round(down * 10) % 2 === 0 ? down : up;
+        }
+        return Number(x.toFixed(1));
+    }
+
+    /** Pillow quantises PNG output to a palette below quality 90; a canvas cannot. */
+    function needsPalette(fmt, quality) {
+        return fmt === 'png' && quality < 90;
     }
 
     /**
@@ -314,45 +365,79 @@
 
     L.register('/api/image/rotate', async function (fd) {
         var angle = L.num(fd, 'angle', 90);
-        var quality = L.range('quality', L.int(fd, 'quality', 95), 1, 100);
+        var quality = inRange('quality', L.int(fd, 'quality', 95), 1, 95);
 
         var file = only(fd);
         var fmt = formatOf(file.name);
         var img = await decode(file);
         var w = img.naturalWidth, h = img.naturalHeight;
+        if (w * h > MAX_INPUT_PIXELS) {
+            throw new L.Unsupported('source image is ' + w + 'x' + h, 'resource_budget_exceeded');
+        }
+        if (needsPalette(fmt, quality)) {
+            throw new L.Unsupported('PNG below quality 90 is palette-reduced by the server', 'unsupported_structure');
+        }
 
-        // Pillow's Image.rotate() turns counter-clockwise and expand=True grows
-        // the canvas to the rotated bounding box; canvas rotate() is clockwise,
-        // hence the negated radians.
-        var rad = -angle * Math.PI / 180;
-        var cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
-        var bw = Math.round(w * cos + h * sin);
-        var bh = Math.round(w * sin + h * cos);
+        // Image.rotate(): turns counter-clockwise, expand=True grows the canvas to the rotated
+        // bounding box, and multiples of 90 are exact transposes.
+        var turn = ((angle % 360) + 360) % 360;
+        var mode = await sniffMode(file);
+        var rad = -turn * Math.PI / 180;
+        var bw, bh;
+        if (turn === 0) { bw = w; bh = h; }
+        else if (turn === 180) { bw = w; bh = h; }
+        else if (turn === 90 || turn === 270) { bw = h; bh = w; }
+        else {
+            // Pillow computes the box from the rotation matrix rounded to 15 places.
+            if (mode === 'palette') {
+                // Mode P is rotated with nearest-neighbour and index-0 fill; leave that to Pillow.
+                throw new L.Unsupported('palette image at a non-right angle', 'unsupported_structure');
+            }
+            var c = Math.round(Math.cos(rad) * 1e15) / 1e15, sn = Math.round(Math.sin(rad) * 1e15) / 1e15;
+            var cx = w / 2, cy = h / 2;
+            var tx = (-cx) * c + (-cy) * sn + cx, ty = (-cx) * (-sn) + (-cy) * c + cy;
+            var xs = [], ys = [];
+            [[0, 0], [w, 0], [w, h], [0, h]].forEach(function (p) {
+                xs.push(c * p[0] + sn * p[1] + tx);
+                ys.push(-sn * p[0] + c * p[1] + ty);
+            });
+            bw = Math.ceil(Math.max.apply(null, xs)) - Math.floor(Math.min.apply(null, xs));
+            bh = Math.ceil(Math.max.apply(null, ys)) - Math.floor(Math.min.apply(null, ys));
+        }
+        if (bw * bh > MAX_CANVAS_PIXELS) {
+            throw new L.Unsupported('output is ' + bw + 'x' + bh, 'resource_budget_exceeded');
+        }
 
-        var canvas = renderForFormat(img, bw, bh, fmt, function (ctx) {
+        // The fill Pillow leaves in the expanded corners: transparent for an alpha source,
+        // black for an opaque one (JPEG output flattens the former onto white).
+        var background = fmt === 'jpg' ? (mode === 'rgba' ? '#fff' : '#000') : (mode === 'rgba' ? null : '#000');
+        var canvas = render(img, bw, bh, function (ctx) {
             ctx.translate(bw / 2, bh / 2);
             ctx.rotate(rad);
             ctx.drawImage(img, -w / 2, -h / 2);
-        });
+        }, background);
 
         return {
             blob: await encode(canvas, fmt, quality),
             filename: L.brandedName(file.name, FORMAT_EXT[fmt]),
-            message: 'Rotated by ' + angle + '°',
+            message: 'Rotated by ' + pyFloat(angle) + '°',
         };
     });
 
     // ── /api/image/compress ───────────────────────────────────────────────
 
     L.register('/api/image/compress', async function (fd) {
-        var quality = L.int(fd, 'quality', 70);
-        if (!(quality >= 1 && quality <= 100)) {
-            throw new L.Error('quality must be between 1 and 100.');
-        }
+        var quality = inRange('quality', L.int(fd, 'quality', 70), 1, 95);
 
         var file = only(fd);
         var fmt = formatOf(file.name);
         var img = await decode(file);
+        if (img.naturalWidth * img.naturalHeight > MAX_INPUT_PIXELS) {
+            throw new L.Unsupported('source image is ' + img.naturalWidth + 'x' + img.naturalHeight, 'resource_budget_exceeded');
+        }
+        if (needsPalette(fmt, quality)) {
+            throw new L.Unsupported('PNG below quality 90 is palette-reduced by the server', 'unsupported_structure');
+        }
         var blob = await encode(renderForFormat(img, img.naturalWidth, img.naturalHeight, fmt), fmt, quality);
         if (blob.size >= file.size) {
             blob = file;
@@ -368,9 +453,7 @@
             extra: {
                 original_size: file.size,
                 compressed_size: blob.size,
-                reduction_pct: file.size
-                    ? Math.round(Math.max(0, (1 - blob.size / file.size) * 100) * 10) / 10
-                    : 0,
+                reduction_pct: file.size ? pyRound1(Math.max(0, (1 - blob.size / file.size) * 100)) : 0,
             },
         };
     });
@@ -378,15 +461,25 @@
     // ── /api/image/convert ────────────────────────────────────────────────
 
     L.register('/api/image/convert', async function (fd) {
+        // The route validates quality before it looks at the target format.
+        var quality = inRange('quality', L.int(fd, 'quality', 90), 1, 95);
         var target = String(L.str(fd, 'target_format', '') || '').toLowerCase();
-        if (!FORMAT_EXT[target]) {
+        if (!Object.prototype.hasOwnProperty.call(FORMAT_EXT, target)) {
             throw new L.Error('target_format must be one of: jpg, png, webp.');
         }
-        var quality = L.range('quality', L.int(fd, 'quality', 90), 1, 100);
 
         var file = only(fd);
         var img = await decode(file);
         var fmt = FORMAT_EXT[target];
+        if (img.naturalWidth * img.naturalHeight > MAX_INPUT_PIXELS) {
+            throw new L.Unsupported('source image is ' + img.naturalWidth + 'x' + img.naturalHeight, 'resource_budget_exceeded');
+        }
+        if (img.naturalWidth * img.naturalHeight > MAX_CANVAS_PIXELS) {
+            throw new L.Unsupported('image is ' + img.naturalWidth + 'x' + img.naturalHeight, 'resource_budget_exceeded');
+        }
+        if (needsPalette(fmt, quality)) {
+            throw new L.Unsupported('PNG below quality 90 is palette-reduced by the server', 'unsupported_structure');
+        }
         var canvas = renderForFormat(img, img.naturalWidth, img.naturalHeight, fmt);
 
         return {
@@ -407,16 +500,20 @@
     var POSITIONS = ['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right', 'diagonal'];
 
     L.register('/api/image/watermark', async function (fd) {
+        // Same order as the server: the route's 0..1 check, then watermark_image()'s own checks.
+        var opacity = L.num(fd, 'opacity', 0.4);
+        if (opacity < 0) throw new L.Error('opacity must be >= 0.0 (got ' + pyFloat(opacity) + ')');
+        if (opacity > 1) throw new L.Error('opacity must be <= 1.0 (got ' + pyFloat(opacity) + ')');
         var text = L.str(fd, 'text', '');
         if (!text || !text.trim()) throw new L.Error('Watermark text cannot be empty.');
-
+        if (opacity < 0.05) throw new L.Error('opacity must be between 0.05 and 1.0.');
         var position = L.str(fd, 'position', 'bottom-right');
         if (POSITIONS.indexOf(position) < 0) {
             throw new L.Error('position must be one of: ' + POSITIONS.join(', ') + '.');
         }
-        var opacity = L.num(fd, 'opacity', 0.4);
-        if (!(opacity >= 0.05 && opacity <= 1.0)) {
-            throw new L.Error('opacity must be between 0.05 and 1.0.');
+        // Pillow lays out several lines; fillText draws one.
+        if (/[\r\n]/.test(text)) {
+            throw new L.Unsupported('multi-line watermark text', 'unsupported_structure');
         }
         var color = COLORS[String(L.str(fd, 'color', 'white')).toLowerCase()] || COLORS.white;
 
@@ -424,13 +521,14 @@
         var fmt = formatOf(file.name);
         var img = await decode(file);
         var w = img.naturalWidth, h = img.naturalHeight;
+        if (w * h > MAX_INPUT_PIXELS || w * h > MAX_CANVAS_PIXELS) {
+            throw new L.Unsupported('source image is ' + w + 'x' + h, 'resource_budget_exceeded');
+        }
 
-        // watermark_image() sizes the type off the shorter edge. Note it asks
-        // Pillow for arial.ttf and falls back to load_default() — a ~11px
-        // bitmap face — on any machine without it, which is every Linux box the
-        // app has ever run on. Here the requested size is actually honoured, so
-        // on-device watermarks are legible where server ones are not; matching
-        // that bug is not worth doing.
+        // watermark_image() sizes the type off the shorter edge and loads the first of arial,
+        // DejaVu Sans and Helvetica (scripts/utils.py::try_font). Chromium draws with the system
+        // sans-serif at the same pixel size, so glyph shapes differ slightly while the size and
+        // anchor match; text the server font lacks (CJK, Indic) is drawn here with fallback fonts.
         var fontSize = Math.max(20, Math.trunc(Math.min(w, h) / 20));
         var margin = Math.max(10, Math.trunc(Math.min(w, h) * 0.02));
 
@@ -478,5 +576,5 @@
 
     // Exposed for the unit tests, which run this file under Node with a DOM
     // shim and need the pure helpers without going through a handler.
-    L.image = { formatOf: formatOf, FORMAT_EXT: FORMAT_EXT };
+    L.image = { formatOf: formatOf, FORMAT_EXT: FORMAT_EXT, pyRound1: pyRound1 };
 })();

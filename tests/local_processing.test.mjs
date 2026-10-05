@@ -375,9 +375,10 @@ test('local image resize and crop preserve original format for PNG and JPG', asy
     assert.equal(cropPngRes.status, 'success');
     assert.equal(cropPngRes.filename, 'logo_forgefiles.org.png');
 
-    // Compress PNG preserves PNG
+    // Compress PNG preserves PNG. Below quality 90 the server reduces PNG to a palette, which a
+    // canvas cannot do, so that case asks instead (see test_local_compress_image_parity.py).
     const fdCompressPng = new FormData();
-    fdCompressPng.append('quality', '70');
+    fdCompressPng.append('quality', '95');
     fdCompressPng.append('file', new Blob(['png-data-long-enough-to-compress'], { type: 'image/png' }), 'badge.png');
     const compressPngRes = await (await sandbox.window.ffProcess('/api/image/compress', fdCompressPng)).json();
     assert.equal(compressPngRes.status, 'success');

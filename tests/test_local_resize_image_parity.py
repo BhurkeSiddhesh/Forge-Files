@@ -73,7 +73,7 @@ _RUN = """async ([name, b64, type, fields, route]) => {
     out = btoa(s);
   }
   return { status: res.status, detail: body.detail, message: body.message, filename: body.filename,
-           out, fetches: window.__fetches.slice(), asked: window.__asked.slice() };
+           out, body, fetches: window.__fetches.slice(), asked: window.__asked.slice() };
 }"""
 
 

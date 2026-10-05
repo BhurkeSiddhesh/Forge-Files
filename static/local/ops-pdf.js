@@ -623,16 +623,59 @@
 
     // ── /api/image/to-pdf ─────────────────────────────────────────────────
 
+    // Per-image decode ceiling, and the canvas area iOS Safari can draw without going blank.
+    var IMAGE_MAX_PIXELS = 40000000;
+    var IMAGE_MAX_CANVAS = 16777216;
+    var IMAGE_MAX_BYTES_DESKTOP = 150 * 1024 * 1024;
+    var IMAGE_MAX_BYTES_MOBILE = 50 * 1024 * 1024;
+
+    /** main.py::validate_range wording, which includes "(got N)"; L.range omits it. */
+    function inRange(name, value, min, max) {
+        if (value === null || value === undefined) return value;
+        if (min !== null && min !== undefined && value < min) throw new L.Error(name + ' must be >= ' + min + ' (got ' + value + ')');
+        if (max !== null && max !== undefined && value > max) throw new L.Error(name + ' must be <= ' + max + ' (got ' + value + ')');
+        return value;
+    }
+
+    /** What the bytes are, whatever the file is called or the browser claims. */
+    function sniff(b) {
+        if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'png';
+        if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpeg';
+        return 'other';
+    }
+
     /**
-     * Get embeddable bytes plus the oriented pixel size for one image.
-     *
-     * PNGs go in untouched so transparency survives (they carry no EXIF
-     * orientation worth honouring). Everything else is redrawn through a canvas
-     * first: that bakes in EXIF orientation — which `_oriented_for_pdf()` does
-     * server-side, and which pdf-lib's raw JPEG embedding would otherwise
-     * ignore — and converts formats pdf-lib can't embed at all (WebP, BMP, GIF).
+     * EXIF Orientation and component count of a JPEG, from its header segments.
+     * pdf_utils.py::_oriented_for_pdf() leaves a JPEG alone unless Orientation is 2-8.
      */
-    function embeddable(file) {
+    function jpegInfo(b) {
+        var info = { orientation: 1, components: 3 };
+        var i = 2;
+        while (i + 4 <= b.length && b[i] === 0xff) {
+            var marker = b[i + 1];
+            if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) { i += 2; continue; }
+            var len = (b[i + 2] << 8) | b[i + 3];
+            if (marker === 0xe1 && b[i + 4] === 0x45 && b[i + 5] === 0x78 && b[i + 6] === 0x69 && b[i + 7] === 0x66) {
+                var t = i + 10, little = b[t] === 0x49;
+                var u16 = function (o) { return little ? b[o] | (b[o + 1] << 8) : (b[o] << 8) | b[o + 1]; };
+                var u32 = function (o) { return little ? (u16(o) | (u16(o + 2) << 16)) >>> 0 : ((u16(o) << 16) | u16(o + 2)) >>> 0; };
+                var ifd = t + u32(t + 4), n = u16(ifd);
+                for (var k = 0; k < n && ifd + 2 + 12 * (k + 1) <= b.length; k++) {
+                    var e = ifd + 2 + 12 * k;
+                    if (u16(e) === 0x0112) info.orientation = u16(e + 8);
+                }
+            }
+            if ((marker >= 0xc0 && marker <= 0xcf) && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+                info.components = b[i + 9];
+                break;
+            }
+            if (marker === 0xda) break;
+            i += 2 + len;
+        }
+        return info;
+    }
+
+    function decodeImage(file) {
         return new Promise(function (fulfil, fail) {
             var url = URL.createObjectURL(file);
             var img = new Image();
@@ -643,50 +686,105 @@
                     fail(new L.Error('Image ' + file.name + ' has zero-dimension (width=' + w + ', height=' + h + ').'));
                     return;
                 }
-                if (file.type === 'image/png') {
-                    file.arrayBuffer().then(function (buf) {
-                        fulfil({ kind: 'png', bytes: buf, width: w, height: h });
-                    }, fail);
-                    return;
-                }
-                var canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-                canvas.getContext('2d').drawImage(img, 0, 0);
-                canvas.toBlob(function (blob) {
-                    if (!blob) {
-                        fail(new L.Unsupported('canvas could not re-encode ' + file.name));
-                        return;
-                    }
-                    blob.arrayBuffer().then(function (buf) {
-                        fulfil({ kind: 'jpg', bytes: buf, width: w, height: h });
-                    }, fail);
-                }, 'image/jpeg', 0.95);
+                fulfil(img);
             };
             img.onerror = function () {
                 URL.revokeObjectURL(url);
-                fail(new L.Unsupported('browser cannot decode ' + file.name));
+                fail(new L.Unsupported('browser cannot decode ' + file.name, 'undecodable'));
             };
             img.src = url;
         });
+    }
+
+    function canvasBlob(canvas, mime, quality) {
+        return new Promise(function (fulfil, fail) {
+            canvas.toBlob(function (blob) {
+                if (!blob || (blob.type && blob.type !== mime)) {
+                    fail(new L.Unsupported('canvas could not encode ' + mime, 'engine_unavailable'));
+                    return;
+                }
+                fulfil(blob);
+            }, mime, quality);
+        });
+    }
+
+    /**
+     * Get embeddable bytes plus the oriented pixel size for one image.
+     *
+     * The bytes decide what the file is, not its name or MIME type. A PNG goes in
+     * untouched (transparency survives) and so does an upright, non-CMYK JPEG,
+     * exactly as reportlab passes the original DCT stream through. A JPEG that
+     * carries an EXIF rotation is redrawn at quality 95 like `_oriented_for_pdf()`
+     * does. Everything else (WebP, GIF, BMP) is redrawn as a lossless PNG, which
+     * keeps both its pixels and any transparency; a JPEG there would add a
+     * generation of loss and turn transparent areas black.
+     */
+    async function embeddable(file) {
+        var bytes = new Uint8Array(await file.arrayBuffer());
+        var kind = sniff(bytes);
+        var img = await decodeImage(file);
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w * h > IMAGE_MAX_PIXELS) {
+            throw new L.Unsupported(file.name + ' is ' + w + 'x' + h, 'resource_budget_exceeded');
+        }
+        if (kind === 'png') return { kind: 'png', bytes: bytes, width: w, height: h, raw: true, source: img };
+        if (kind === 'jpeg') {
+            var info = jpegInfo(bytes);
+            if ((info.orientation === 1 || info.orientation === 0) && info.components !== 4) {
+                return { kind: 'jpg', bytes: bytes, width: w, height: h, raw: true, source: img };
+            }
+        }
+        return redraw(img, w, h, kind === 'jpeg' ? 'jpg' : 'png');
+    }
+
+    async function redraw(img, w, h, kind) {
+        if (w * h > IMAGE_MAX_CANVAS) {
+            throw new L.Unsupported('image is ' + w + 'x' + h, 'resource_budget_exceeded');
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        if (!ctx) throw new L.Unsupported('2d canvas context unavailable', 'engine_unavailable');
+        if (kind === 'jpg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
+        ctx.drawImage(img, 0, 0);
+        var blob = kind === 'jpg' ? await canvasBlob(canvas, 'image/jpeg', 0.95) : await canvasBlob(canvas, 'image/png');
+        return { kind: kind, bytes: new Uint8Array(await blob.arrayBuffer()), width: w, height: h };
+    }
+
+    async function embedOne(doc, img) {
+        try {
+            return img.kind === 'png' ? await doc.embedPng(img.bytes) : await doc.embedJpg(img.bytes);
+        } catch (err) {
+            if (!img.raw) throw new L.Unsupported('pdf-lib could not embed the image', 'unsupported_structure');
+            // The original bytes use something pdf-lib cannot embed (for example an unusual PNG
+            // variant): let the browser decode it and embed a lossless copy instead.
+            var again = await redraw(img.source, img.width, img.height, 'png');
+            try { return await doc.embedPng(again.bytes); } catch (e) {
+                throw new L.Unsupported('pdf-lib could not embed the image', 'unsupported_structure');
+            }
+        }
     }
 
     L.register('/api/image/to-pdf', async function (fd) {
         var inputs = L.files(fd, 'file').concat(L.files(fd, 'files'));
         if (!inputs.length) throw new L.Error('At least one image file is required.');
 
-        var marginPt = L.range('margin_pt', L.int(fd, 'margin_pt', 36), 0, 200);
+        var marginPt = inRange('margin_pt', L.int(fd, 'margin_pt', 36), 0, 200);
         var sizeName = String(L.str(fd, 'page_size', 'A4')).toLowerCase();
         var fitMode = L.str(fd, 'fit_mode', 'fit');
+
+        var total = inputs.reduce(function (n, f) { return n + (f.size || 0); }, 0);
+        if (total > (L.constrained() ? IMAGE_MAX_BYTES_MOBILE : IMAGE_MAX_BYTES_DESKTOP)) {
+            throw new L.Unsupported('images total ' + total + ' bytes', 'resource_budget_exceeded');
+        }
 
         var PDFLib = await L.loadPdfLib();
         var doc = await PDFLib.PDFDocument.create({ updateMetadata: false });
 
         for (var i = 0; i < inputs.length; i++) {
             var img = await embeddable(inputs[i]);
-            var embedded = img.kind === 'png'
-                ? await doc.embedPng(img.bytes)
-                : await doc.embedJpg(img.bytes);
+            var embedded = await embedOne(doc, img);
 
             // 'auto' uses the image's own pixel dimensions as points, exactly as
             // images_to_pdf() does.
@@ -714,6 +812,7 @@
                 width: drawW,
                 height: drawH,
             });
+            img.source = null;
         }
 
         return {
