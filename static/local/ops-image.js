@@ -29,7 +29,7 @@
             img.onload = function () {
                 URL.revokeObjectURL(url);
                 if (!img.naturalWidth || !img.naturalHeight) {
-                    fail(new L.Unsupported('image decoded to zero dimensions'));
+                    fail(new L.Unsupported('image decoded to zero dimensions', 'undecodable'));
                     return;
                 }
                 fulfil(img);
@@ -38,7 +38,7 @@
                 URL.revokeObjectURL(url);
                 // A format this browser can't read (HEIC, TIFF, some BMPs).
                 // Pillow on the server can, so let it.
-                fail(new L.Unsupported('browser cannot decode this image format'));
+                fail(new L.Unsupported('browser cannot decode this image format', 'undecodable'));
             };
             img.src = url;
         });
@@ -50,6 +50,11 @@
     var MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
     var MAX_RESIZE_DIMENSION = 8192;
     var MAX_RESIZE_PIXELS = 20000000;
+    // Decoding costs width x height x 4 bytes, so a very large source is left to Pillow.
+    var MAX_INPUT_PIXELS = 40000000;
+    // iOS Safari silently hands back a blank canvas above 16,777,216 px; the
+    // server accepts up to MAX_RESIZE_PIXELS, so the gap between the two goes there.
+    var MAX_CANVAS_PIXELS = 16777216;
 
     /** scripts/image_utils.py picks the output format from the input suffix,
      *  falling back to jpg for anything it doesn't recognise. */
@@ -66,6 +71,18 @@
         return c;
     }
 
+    /** main.py::validate_range wording, which includes "(got N)"; L.range omits it. */
+    function inRange(name, value, min, max) {
+        if (value === null || value === undefined) return value;
+        if (min !== null && min !== undefined && value < min) {
+            throw new L.Error(name + ' must be >= ' + min + ' (got ' + value + ')');
+        }
+        if (max !== null && max !== undefined && value > max) {
+            throw new L.Error(name + ' must be <= ' + max + ' (got ' + value + ')');
+        }
+        return value;
+    }
+
     function validateResize(w, h) {
         if (!(w >= 1 && h >= 1)) {
             throw new L.Error('Resize output dimensions must be at least 1 pixel.');
@@ -74,7 +91,7 @@
             throw new L.Error('Resize output width and height must be <= ' + MAX_RESIZE_DIMENSION + 'px.');
         }
         if (w * h > MAX_RESIZE_PIXELS) {
-            throw new L.Error('Resize output must be <= ' + MAX_RESIZE_PIXELS + ' pixels.');
+            throw new L.Error('Resize output must be <= ' + String(MAX_RESIZE_PIXELS).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' pixels.');
         }
     }
 
@@ -119,6 +136,28 @@
         return render(img, w, h, drawer, fmt === 'jpg' ? '#fff' : null);
     }
 
+    /**
+     * Scale to w x h. Chromium already downsamples well in one draw, but
+     * Firefox and Safari alias when shrinking by more than 2x at once, so halve
+     * until within 2x of the target first (the same effect as Pillow's LANCZOS
+     * support window).
+     */
+    function renderScaled(img, w, h, fmt) {
+        var src = img, sw = img.naturalWidth, sh = img.naturalHeight;
+        while (sw / 2 >= w && sh / 2 >= h) {
+            var half = canvasOf(Math.ceil(sw / 2), Math.ceil(sh / 2));
+            var hx = half.getContext('2d');
+            if (!hx) throw new L.Unsupported('2d canvas context unavailable', 'engine_unavailable');
+            hx.imageSmoothingQuality = 'high';
+            hx.drawImage(src, 0, 0, half.width, half.height);
+            src = half; sw = half.width; sh = half.height;
+        }
+        return renderForFormat(src, w, h, fmt, function (ctx, canvas) {
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+        });
+    }
+
     function only(fd) {
         var all = L.files(fd, 'file');
         if (!all.length) throw new L.Error('No file provided.');
@@ -132,16 +171,19 @@
         if (['dimensions', 'percentage', 'target_size'].indexOf(mode) < 0) {
             throw new L.Error('mode must be one of: dimensions, percentage, target_size');
         }
-        var width = L.range('width', L.int(fd, 'width', null), 1, MAX_RESIZE_DIMENSION);
-        var height = L.range('height', L.int(fd, 'height', null), 1, MAX_RESIZE_DIMENSION);
-        var percentage = L.range('percentage', L.int(fd, 'percentage', null), 1, 500);
-        var targetKb = L.range('target_size_kb', L.int(fd, 'target_size_kb', null), 1);
+        var width = inRange('width', L.int(fd, 'width', null), 1, MAX_RESIZE_DIMENSION);
+        var height = inRange('height', L.int(fd, 'height', null), 1, MAX_RESIZE_DIMENSION);
+        var percentage = inRange('percentage', L.int(fd, 'percentage', null), 1, 500);
+        var targetKb = inRange('target_size_kb', L.int(fd, 'target_size_kb', null), 1);
 
         var file = only(fd);
         var fmt = formatOf(file.name);
         var img = await decode(file);
         var ow = img.naturalWidth, oh = img.naturalHeight;
         var nw, nh;
+        if (ow * oh > MAX_INPUT_PIXELS) {
+            throw new L.Unsupported('source image is ' + ow + 'x' + oh, 'resource_budget_exceeded');
+        }
 
         if (mode === 'dimensions') {
             if (!width && !height) {
@@ -156,19 +198,23 @@
             }
         } else if (mode === 'percentage') {
             if (!percentage) throw new L.Error('Percentage must be provided for percentage mode.');
-            nw = Math.trunc(ow * percentage / 100);
-            nh = Math.trunc(oh * percentage / 100);
+            var scale = percentage / 100;
+            nw = Math.trunc(ow * scale);
+            nh = Math.trunc(oh * scale);
         } else {
             if (!targetKb) throw new L.Error('Target size must be provided for target_size mode.');
             nw = ow; nh = oh;
         }
         validateResize(nw, nh);
+        if (nw * nh > MAX_CANVAS_PIXELS) {
+            throw new L.Unsupported('output is ' + nw + 'x' + nh, 'resource_budget_exceeded');
+        }
 
         var blob;
         if (mode === 'target_size') {
             blob = await toTargetSize(img, ow, oh, targetKb * 1024, fmt);
         } else {
-            blob = await encode(renderForFormat(img, nw, nh, fmt), fmt, 95);
+            blob = await encode(renderScaled(img, nw, nh, fmt), fmt, 95);
         }
 
         return {
@@ -188,6 +234,12 @@
         var canvas = renderForFormat(img, w, h, fmt);
         var best = await encode(canvas, fmt, 95);
         if (best.size <= targetBytes) return best;
+        // Pillow gets a PNG under budget by reducing it to a 76-colour palette at
+        // full size; a canvas cannot write an indexed PNG, and shrinking the
+        // picture instead would return different dimensions than the server.
+        if (fmt === 'png') {
+            throw new L.Unsupported('PNG does not fit the target at full size', 'unsupported_structure');
+        }
 
         var bestQuality = 95;
         if (fmt === 'jpg' || fmt === 'webp') {
@@ -210,7 +262,7 @@
             cw = Math.trunc(cw * 0.9);
             ch = Math.trunc(ch * 0.9);
             if (cw < 10 || ch < 10) break;
-            canvas = renderForFormat(img, cw, ch, fmt);
+            canvas = renderScaled(img, cw, ch, fmt);
             out = await encode(canvas, fmt, bestQuality);
         }
         return out;
