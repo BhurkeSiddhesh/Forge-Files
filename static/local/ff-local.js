@@ -201,13 +201,14 @@
      * return value is always a `Response`, so no call site needs to know which
      * of the two happened.
      */
-    async function ffProcess(path, formData) {
+    async function ffProcess(path, formData, init) {
+        init = init || {};
         var handler = enabled() ? HANDLERS[path] : null;
         var code = null;
 
         if (handler) {
             try {
-                var out = await handler(formData);
+                var out = await handler(formData, { signal: init.signal, onProgress: init.onProgress });
                 var fields = publish(out.blob, out.filename);
                 return jsonResponse(200, Object.assign({
                     status: 'success',
@@ -222,6 +223,9 @@
                     // The user's input is wrong and the server would say so too.
                     return jsonResponse(400, { detail: err.message });
                 }
+                // Cancelling is a decision, not a failure: never hand the file
+                // to the server because the user pressed Cancel.
+                if (err && err.name === 'AbortError') throw err;
                 // Anything else is our problem, not theirs: log it so it is
                 // findable, then ask before the server gets the file.
                 if (!(err instanceof FFLocalUnsupported)) {
@@ -238,7 +242,7 @@
         if (window.__ffSession && window.__ffSession.access_token) {
             headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
         }
-        return fetch(window.apiUrl(path), { method: 'POST', body: formData, headers: headers });
+        return fetch(window.apiUrl(path), { method: 'POST', body: formData, headers: headers, signal: init.signal });
     }
 
     // ── FormData helpers ──────────────────────────────────────────────────
@@ -319,7 +323,7 @@
     // in index.html; the first PDF operation pulls it in and every later one
     // reuses the same promise.
 
-    var pdfLibPromise = null;
+    var vendorPromises = {};
 
     // Resolved from this script's own URL rather than hardcoded, because the
     // two builds mount these assets at different roots: `/static/local/` on the
@@ -327,36 +331,67 @@
     // copies public/static to the app's web root). Sibling-relative is correct
     // in both, with the website layout as the fallback if `currentScript` is
     // unavailable.
-    var VENDOR_URL = (function () {
+    function vendorUrl(file) {
         try {
             var self = document.currentScript && document.currentScript.src;
-            if (self) return new URL('../vendor/pdf-lib.min.js', self).href;
+            if (self) return new URL('../vendor/' + file, self).href;
         } catch (e) { /* fall through */ }
-        return '/static/vendor/pdf-lib.min.js';
-    })();
+        return '/static/vendor/' + file;
+    }
 
-    function loadPdfLib() {
-        if (window.PDFLib) return Promise.resolve(window.PDFLib);
-        if (pdfLibPromise) return pdfLibPromise;
+    /** Load a vendored UMD script once; resolves to its window global. */
+    function loadVendor(file, globalName, version) {
+        if (window[globalName]) return Promise.resolve(window[globalName]);
+        if (vendorPromises[file]) return vendorPromises[file];
 
-        pdfLibPromise = new Promise(function (fulfil, fail) {
+        vendorPromises[file] = new Promise(function (fulfil, fail) {
             var el = document.createElement('script');
-            el.src = VENDOR_URL + '?v=1.17.1';
+            el.src = vendorUrl(file) + '?v=' + version;
             el.async = true;
             el.onload = function () {
-                if (window.PDFLib) fulfil(window.PDFLib);
-                else fail(new FFLocalUnsupported('pdf-lib loaded but did not register'));
+                if (window[globalName]) fulfil(window[globalName]);
+                else fail(new FFLocalUnsupported(file + ' loaded but did not register', 'engine_unavailable'));
             };
             el.onerror = function () {
                 // Reset so a later attempt can retry (the app may have been
                 // offline, or the asset may not be in this build).
-                pdfLibPromise = null;
-                fail(new FFLocalUnsupported('pdf-lib could not be loaded'));
+                delete vendorPromises[file];
+                fail(new FFLocalUnsupported(file + ' could not be loaded', 'engine_unavailable'));
             };
             document.head.appendChild(el);
         });
 
-        return pdfLibPromise;
+        return vendorPromises[file];
+    }
+
+    function loadPdfLib() { return loadVendor('pdf-lib.min.js', 'PDFLib', '1.17.1'); }
+    function loadJsZip() { return loadVendor('jszip.min.js', 'JSZip', '3.10.2'); }
+
+    /**
+     * True on phones and in the native shell, where memory is the limit.
+     * Handlers use it to pick the tighter of their two resource budgets.
+     */
+    function constrained() {
+        if (isNative()) return true;
+        try {
+            return !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** Let the browser paint and handle input between units of work. */
+    function tick() {
+        return new Promise(function (fulfil) { setTimeout(fulfil, 0); });
+    }
+
+    /** Throw the standard abort error when the caller's signal has fired. */
+    function checkAbort(signal) {
+        if (signal && signal.aborted) {
+            var err = new Error('Aborted');
+            err.name = 'AbortError';
+            throw err;
+        }
     }
 
     // ── Native file delivery ──────────────────────────────────────────────
@@ -438,6 +473,10 @@
         brandedName: brandedName,
         hexId: hexId,
         loadPdfLib: loadPdfLib,
+        loadJsZip: loadJsZip,
+        constrained: constrained,
+        tick: tick,
+        checkAbort: checkAbort,
         isNative: isNative,
         nativeShare: nativeShare,
     };

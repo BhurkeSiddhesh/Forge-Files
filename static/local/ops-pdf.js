@@ -50,16 +50,16 @@
      * and silently ignoring it would produce a result the user didn't ask for.
      */
     async function loadDoc(PDFLib, file, password) {
-        if (password) throw new L.Unsupported('password-protected PDFs need the server');
+        if (password) throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
         var doc;
         try {
-            doc = await PDFLib.PDFDocument.load(await bytesOf(file));
+            doc = await PDFLib.PDFDocument.load(new Uint8Array(await bytesOf(file)));
         } catch (err) {
             if (isEncryptionError(err)) {
-                throw new L.Unsupported('PDF is encrypted');
+                throw new L.Unsupported('PDF is encrypted', 'encrypted');
             }
             // Malformed/damaged input: the server has a repair path, we don't.
-            throw new L.Unsupported('pdf-lib could not parse this PDF');
+            throw new L.Unsupported('pdf-lib could not parse this PDF', 'unsupported_structure');
         }
         return doc;
     }
@@ -147,7 +147,7 @@
         // Any per-file password means at least one input is encrypted.
         var passwords = L.str(fd, 'passwords', '');
         if (passwords && passwords.split(',').some(function (p) { return p; })) {
-            throw new L.Unsupported('password-protected PDFs need the server');
+            throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
         }
 
         var PDFLib = await L.loadPdfLib();
@@ -182,6 +182,150 @@
             blob: await save(out),
             filename: L.brandedName(file.name, 'pdf'),
             message: 'Pages extracted',
+        };
+    });
+
+    // ── /api/pdf/split ────────────────────────────────────────────────────
+    //
+    // Mirrors pdf_utils.py::split_pdf_to_zip. Pages are copied structurally (no
+    // rasterising), one output PDF per group, packed into a ZIP.
+
+    // pdf_utils.py::MAX_PDF_RENDER_PAGES - the server refuses larger documents,
+    // so refusing here too keeps the two routes indistinguishable.
+    var SPLIT_MAX_PAGES = 200;
+    // Local memory budgets (work package 01 section 5). Above these the browser
+    // is not a safe place to hold input, parts and archive at once, so the
+    // operation is offered to the server instead (after the user agrees).
+    var SPLIT_MAX_BYTES_DESKTOP = 150 * 1024 * 1024;
+    var SPLIT_MAX_BYTES_MOBILE = 50 * 1024 * 1024;
+
+    function pad3(n) {
+        var t = String(n);
+        while (t.length < 3) t = '0' + t;
+        return t;
+    }
+
+    /** pdf_utils.py::_split_pdf_member_name */
+    function splitMemberName(indices) {
+        var start = indices[0] + 1;
+        var end = indices[indices.length - 1] + 1;
+        if (indices.length === 1) return 'page-' + pad3(start) + '.pdf';
+        return 'pages-' + pad3(start) + '-' + pad3(end) + '.pdf';
+    }
+
+    /** pdf_utils.py::_split_pdf_groups - zero-based page groups per mode. */
+    function splitGroups(total, mode, ranges, n) {
+        if (total > SPLIT_MAX_PAGES) {
+            throw new L.Error('PDF has too many pages to split at once (max ' + SPLIT_MAX_PAGES + ').');
+        }
+        mode = String(mode === null || mode === undefined || mode === '' ? 'each' : mode).trim().toLowerCase();
+        var groups = [];
+        var i;
+
+        if (mode === 'each') {
+            for (i = 0; i < total; i++) groups.push([i]);
+            return groups;
+        }
+
+        if (mode === 'every_n') {
+            var size = Number(n);
+            size = isFinite(size) ? Math.trunc(size) : 0;
+            if (size < 1) throw new L.Error('Split size must be at least 1 page.');
+            for (var start = 0; start < total; start += size) {
+                var group = [];
+                for (i = start; i < Math.min(start + size, total); i++) group.push(i);
+                groups.push(group);
+            }
+            return groups;
+        }
+
+        if (mode === 'ranges') {
+            if (!ranges || !String(ranges).trim()) {
+                throw new L.Error('Provide one or more page ranges to split.');
+            }
+            String(ranges).split(',').forEach(function (segment) {
+                segment = segment.trim();
+                if (segment) groups.push(parsePageSelection(segment, total));
+            });
+            if (!groups.length) throw new L.Error('Provide one or more page ranges to split.');
+            return groups;
+        }
+
+        throw new L.Error('mode must be one of: each, every_n, ranges');
+    }
+
+    /**
+     * Overlapping ranges ("1-2,1-2") would name two members identically; ZIP
+     * extractors then overwrite one with the other. Suffix repeats so every
+     * requested part survives, in the order requested.
+     */
+    function uniqueMemberNames(groups) {
+        var used = {};
+        return groups.map(function (indices) {
+            var name = splitMemberName(indices);
+            if (used[name]) {
+                var base = name.replace(/\.pdf$/, '');
+                var k = used[name] + 1;
+                while (used[base + '-' + k + '.pdf']) k++;
+                used[name] = k;
+                name = base + '-' + k + '.pdf';
+            }
+            used[name] = used[name] || 1;
+            return name;
+        });
+    }
+
+    L.register('/api/pdf/split', async function (fd, ctx) {
+        ctx = ctx || {};
+        var file = only(fd);
+
+        if (L.str(fd, 'password', null)) {
+            throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
+        }
+
+        // Validate the options before reading a byte of the file.
+        var mode = L.str(fd, 'mode', 'each');
+        var ranges = L.str(fd, 'ranges', null);
+        var n = L.int(fd, 'n', null);
+        var modeKey = String(mode).trim().toLowerCase();
+        if (['each', 'every_n', 'ranges'].indexOf(modeKey) < 0) {
+            throw new L.Error('mode must be one of: each, every_n, ranges');
+        }
+        if (modeKey === 'every_n' && !(n >= 1)) throw new L.Error('Split size must be at least 1 page.');
+        if (modeKey === 'ranges' && (!ranges || !ranges.trim())) {
+            throw new L.Error('Provide one or more page ranges to split.');
+        }
+
+        var limit = L.constrained() ? SPLIT_MAX_BYTES_MOBILE : SPLIT_MAX_BYTES_DESKTOP;
+        if (file.size > limit) {
+            throw new L.Unsupported('input exceeds the on-device split budget', 'resource_budget_exceeded');
+        }
+
+        var PDFLib = await L.loadPdfLib();
+        var JSZip = await L.loadJsZip();
+        var src = await loadDoc(PDFLib, file, null);
+
+        var groups = splitGroups(src.getPageCount(), mode, ranges, n);
+        var names = uniqueMemberNames(groups);
+        var zip = new JSZip();
+
+        for (var g = 0; g < groups.length; g++) {
+            L.checkAbort(ctx.signal);
+            var part = await PDFLib.PDFDocument.create();
+            var copied = await part.copyPages(src, groups[g]);
+            copied.forEach(function (page) { part.addPage(page); });
+            zip.file(names[g], await part.save());
+            if (ctx.onProgress) ctx.onProgress(g + 1, groups.length);
+            await L.tick();
+        }
+
+        L.checkAbort(ctx.signal);
+        var blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        return {
+            blob: blob,
+            filename: L.brandedName(file.name, 'zip'),
+            message: 'PDF split into ' + groups.length + ' file(s)',
+            extra: { file_count: groups.length },
         };
     });
 
@@ -619,6 +763,9 @@
     // Exposed for the unit tests, which exercise the pure logic directly.
     L.pdf = {
         parsePageSelection: parsePageSelection,
+        splitGroups: splitGroups,
+        splitMemberName: splitMemberName,
+        uniqueMemberNames: uniqueMemberNames,
         toRoman: toRoman,
         pageLabel: pageLabel,
         safeTitle: safeTitle,

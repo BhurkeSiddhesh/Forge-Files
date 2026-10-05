@@ -1342,6 +1342,7 @@ async function processAction(url, text, formData = null) {
     const statusDisplay = document.getElementById('status-display');
     const statusText = document.getElementById('status-text');
     const resultDisplay = document.getElementById('result-display');
+    let abort = null;
     const passwordArea = document.getElementById('password-input-area');
 
     statusDisplay.classList.remove('hidden');
@@ -1358,7 +1359,11 @@ async function processAction(url, text, formData = null) {
         // Runs on-device when this tool has a local handler, otherwise posts to
         // the backend exactly as before — either way a Response comes back, so
         // everything below is unchanged. See static/local/ff-local.js.
-        const response = await ffProcess(url, formData);
+        abort = ffStartInflight();
+        const response = await ffProcess(url, formData, {
+            signal: abort && abort.signal,
+            onProgress: (done, total) => { statusText.textContent = `${text} (${done}/${total})`; },
+        });
 
         if (response.ok) {
             const data = await response.json();
@@ -1382,9 +1387,11 @@ async function processAction(url, text, formData = null) {
             }
         }
     } catch (error) {
-        ffNotify('Error: ' + error.message);
+        // Cancel already told the user; nothing else to report.
+        if (!ffIsAbort(error)) ffNotify('Error: ' + error.message);
     } finally {
         statusDisplay.classList.add('hidden');
+        ffSetCancelVisible(false);
     }
 
 }
