@@ -1637,7 +1637,7 @@ def _render_tool_page(slug: str) -> str:
     """Server-render a tool landing page (full HTML, no JS needed for crawlers)."""
     return _substitute(seo_content.render_tool_page(slug))
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def read_index():
     return HTMLResponse(_render_page("index.html"))
 
