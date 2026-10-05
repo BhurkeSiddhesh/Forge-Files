@@ -73,6 +73,7 @@
         resource_budget_exceeded: 'this file exceeds the safe limit for processing on this device',
         engine_unavailable: 'the on-device engine could not be loaded',
         ocr_required: 'some pages are scans that need text recognition (OCR)',
+        redaction_server: 'redaction must permanently remove the content underneath, which this device cannot do reliably',
         undecodable: 'this file format could not be decoded on this device',
         unsupported_structure: 'this file uses features that cannot be processed on this device',
         font_coverage_missing: 'this document uses a script the on-device fonts do not cover',

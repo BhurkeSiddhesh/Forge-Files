@@ -3426,15 +3426,17 @@ document.getElementById('process-annotate-pdf-btn')?.addEventListener('click', (
     const x1 = document.getElementById('annot-x1').value;
     const y1 = document.getElementById('annot-y1').value;
     const content = document.getElementById('annot-content').value;
+    // The endpoint takes a JSON array of annotations (it used to be sent the
+    // fields individually, which the server rejected with HTTP 422).
+    const annotation = {
+        type: annotType,
+        page: parseInt(page, 10) || 1,
+        rect: [x0, y0, x1, y1].map(Number),
+    };
+    if (content) annotation.content = content;
     const fd = new FormData();
     fd.append('file', selectedFile);
-    fd.append('annot_type', annotType);
-    fd.append('page', page);
-    fd.append('x0', x0);
-    fd.append('y0', y0);
-    fd.append('x1', x1);
-    fd.append('y1', y1);
-    if (content) fd.append('content', content);
+    fd.append('annotations', JSON.stringify([annotation]));
     processAction('/api/pdf/annotate', 'Adding annotation...', fd);
 });
 
