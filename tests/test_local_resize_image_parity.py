@@ -57,13 +57,13 @@ def page():
         browser.close()
 
 
-_RUN = """async ([name, b64, type, fields]) => {
+_RUN = """async ([name, b64, type, fields, route]) => {
   window.__fetches.length = 0; window.__asked.length = 0;
   const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const fd = new FormData();
   fd.append('file', new File([bin], name, { type }));
   for (const [k, v] of Object.entries(fields)) fd.append(k, String(v));
-  const res = await ffProcess('/api/image/resize', fd);
+  const res = await ffProcess(route, fd);
   const body = await res.json();
   let out = null;
   if (res.ok) {
@@ -77,8 +77,8 @@ _RUN = """async ([name, b64, type, fields]) => {
 }"""
 
 
-def run_local(page, name: str, data: bytes, fields: dict, mime: str = "application/octet-stream") -> dict:
-    r = page.evaluate(_RUN, [name, base64.b64encode(data).decode(), mime, fields])
+def run_local(page, name: str, data: bytes, fields: dict, mime: str = "application/octet-stream", route: str = ROUTE) -> dict:
+    r = page.evaluate(_RUN, [name, base64.b64encode(data).decode(), mime, fields, route])
     r["bytes"] = base64.b64decode(r["out"]) if r["out"] else None
     return r
 

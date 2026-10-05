@@ -271,10 +271,10 @@
     // ── /api/image/crop ───────────────────────────────────────────────────
 
     L.register('/api/image/crop', async function (fd) {
-        var x = L.range('x', L.int(fd, 'x', null), 0);
-        var y = L.range('y', L.int(fd, 'y', null), 0);
-        var w = L.range('width', L.int(fd, 'width', null), 1);
-        var h = L.range('height', L.int(fd, 'height', null), 1);
+        var x = inRange('x', L.int(fd, 'x', null), 0);
+        var y = inRange('y', L.int(fd, 'y', null), 0);
+        var w = inRange('width', L.int(fd, 'width', null), 1);
+        var h = inRange('height', L.int(fd, 'height', null), 1);
         if (x === null || y === null || w === null || h === null) {
             throw new L.Error('x, y, width and height are required.');
         }
@@ -282,6 +282,9 @@
         var file = only(fd);
         var fmt = formatOf(file.name);
         var img = await decode(file);
+        if (img.naturalWidth * img.naturalHeight > MAX_INPUT_PIXELS) {
+            throw new L.Unsupported('source image is ' + img.naturalWidth + 'x' + img.naturalHeight, 'resource_budget_exceeded');
+        }
 
         // crop_image() clamps the box to the image rather than erroring.
         x = Math.max(0, x);
@@ -291,6 +294,9 @@
         var cw = right - x, ch = lower - y;
         if (cw <= 0 || ch <= 0) {
             throw new L.Error('The crop area falls outside the image.');
+        }
+        if (cw * ch > MAX_CANVAS_PIXELS) {
+            throw new L.Unsupported('crop is ' + cw + 'x' + ch, 'resource_budget_exceeded');
         }
 
         var canvas = renderForFormat(img, cw, ch, fmt, function (ctx) {
