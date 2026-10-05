@@ -51,15 +51,26 @@
      */
     async function loadDoc(PDFLib, file, password) {
         if (password) throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
+        // Memory budget: the input, pdf-lib's object graph and the output are all
+        // held at once. Past this the server is offered instead (after consent).
+        if (file.size > (L.constrained() ? 50 : 150) * 1024 * 1024) {
+            throw new L.Unsupported('input exceeds the on-device PDF budget', 'resource_budget_exceeded');
+        }
         var doc;
         try {
-            doc = await PDFLib.PDFDocument.load(new Uint8Array(await bytesOf(file)));
+            // updateMetadata:false: pdf-lib would otherwise stamp its own Producer
+            // and modification date onto a file the user only asked us to rearrange.
+            doc = await PDFLib.PDFDocument.load(new Uint8Array(await bytesOf(file)), { updateMetadata: false });
         } catch (err) {
             if (isEncryptionError(err)) {
                 throw new L.Unsupported('PDF is encrypted', 'encrypted');
             }
             // Malformed/damaged input: the server has a repair path, we don't.
             throw new L.Unsupported('pdf-lib could not parse this PDF', 'unsupported_structure');
+        }
+        // pdf-lib is lenient with damaged files and can return an empty shell.
+        if (!doc.catalog || doc.getPageCount() < 1) {
+            throw new L.Unsupported('PDF structure could not be read', 'unsupported_structure');
         }
         return doc;
     }
@@ -151,7 +162,7 @@
         }
 
         var PDFLib = await L.loadPdfLib();
-        var merged = await PDFLib.PDFDocument.create();
+        var merged = await PDFLib.PDFDocument.create({ updateMetadata: false });
 
         for (var i = 0; i < inputs.length; i++) {
             var src = await loadDoc(PDFLib, inputs[i], null);
@@ -174,7 +185,7 @@
         var src = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
 
         var indices = parsePageSelection(L.str(fd, 'pages', null), src.getPageCount());
-        var out = await PDFLib.PDFDocument.create();
+        var out = await PDFLib.PDFDocument.create({ updateMetadata: false });
         var copied = await out.copyPages(src, indices);
         copied.forEach(function (page) { out.addPage(page); });
 
@@ -311,7 +322,7 @@
 
         for (var g = 0; g < groups.length; g++) {
             L.checkAbort(ctx.signal);
-            var part = await PDFLib.PDFDocument.create();
+            var part = await PDFLib.PDFDocument.create({ updateMetadata: false });
             var copied = await part.copyPages(src, groups[g]);
             copied.forEach(function (page) { part.addPage(page); });
             zip.file(names[g], await part.save());
@@ -397,7 +408,7 @@
 
         // copyPages() with a repeated index returns independent copies, which is
         // what makes "1,1,2" duplicate rather than alias a single page.
-        var out = await PDFLib.PDFDocument.create();
+        var out = await PDFLib.PDFDocument.create({ updateMetadata: false });
         var copied = await out.copyPages(src, order.map(function (p) { return p - 1; }));
         copied.forEach(function (page) { out.addPage(page); });
 
@@ -605,7 +616,7 @@
         var fitMode = L.str(fd, 'fit_mode', 'fit');
 
         var PDFLib = await L.loadPdfLib();
-        var doc = await PDFLib.PDFDocument.create();
+        var doc = await PDFLib.PDFDocument.create({ updateMetadata: false });
 
         for (var i = 0; i < inputs.length; i++) {
             var img = await embeddable(inputs[i]);
@@ -658,7 +669,7 @@
         var dims = pageSize(L.str(fd, 'page_size', 'A4'));
 
         var PDFLib = await L.loadPdfLib();
-        var doc = await PDFLib.PDFDocument.create();
+        var doc = await PDFLib.PDFDocument.create({ updateMetadata: false });
         for (var i = 0; i < numPages; i++) doc.addPage([dims[0], dims[1]]);
 
         return {
@@ -709,7 +720,7 @@
         var dims = pageSize(L.str(fd, 'page_size', 'A4'));
 
         var PDFLib = await L.loadPdfLib();
-        var doc = await PDFLib.PDFDocument.create();
+        var doc = await PDFLib.PDFDocument.create({ updateMetadata: false });
         doc.setTitle(title);
         var font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
 

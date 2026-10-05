@@ -209,6 +209,9 @@
         if (handler) {
             try {
                 var out = await handler(formData, { signal: init.signal, onProgress: init.onProgress });
+                if (out instanceof Response) {
+                    return out;
+                }
                 var fields = publish(out.blob, out.filename);
                 return jsonResponse(200, Object.assign({
                     status: 'success',
@@ -371,6 +374,7 @@
 
     function loadPdfLib() { return loadVendor('pdf-lib.min.js', 'PDFLib', '1.17.1'); }
     function loadJsZip() { return loadVendor('jszip.min.js', 'JSZip', '3.10.2'); }
+    function loadExcelJs() { return loadVendor('exceljs.min.js', 'ExcelJS', '4.4.0'); }
 
     var PDFJS_VERSION = '6.4.299';
     var pdfJsPromise = null;
@@ -548,6 +552,7 @@
         hexId: hexId,
         loadPdfLib: loadPdfLib,
         loadJsZip: loadJsZip,
+        loadExcelJs: loadExcelJs,
         loadPdfJs: loadPdfJs,
         openPdfJs: openPdfJs,
         vendorUrl: vendorUrl,

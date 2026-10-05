@@ -9,7 +9,12 @@ content-security policy. Vendoring keeps the bundle self-contained.
 |---|---|---|---|
 | `pdf-lib.min.js` | [`pdf-lib`](https://www.npmjs.com/package/pdf-lib) | 1.17.1 | MIT (`pdf-lib.LICENSE.md`) |
 | `jszip.min.js` | [`jszip`](https://www.npmjs.com/package/jszip) | 3.10.2 | MIT OR GPL-3.0-or-later, used under MIT (`jszip.LICENSE.md`) |
+| `exceljs.min.js` | [`exceljs`](https://www.npmjs.com/package/exceljs) | 4.4.0 | MIT (`exceljs.LICENSE.md`) |
 | `pdfjs/` | [`pdfjs-dist`](https://www.npmjs.com/package/pdfjs-dist) | 6.4.299 | Apache-2.0 (`pdfjs/LICENSE`; wasm decoders carry their own `LICENSE_*` files) |
+
+`exceljs.min.js` is the untouched `dist/exceljs.min.js`; it defines `window.ExcelJS` and is loaded on demand
+by `static/local/ff-local.js` (`loadExcelJs`) the first time an Excel/spreadsheet tool runs on-device.
+Its SHA-256 is `7e49da68588e250dbb8bba190d2caa8ab3787cc0284bda1d8b2f805c4df742c9`.
 
 `jszip.min.js` is the untouched `dist/jszip.min.js`; it defines `window.JSZip` and is loaded on demand
 by `static/local/ff-local.js` (`loadJsZip`) the first time a tool builds a ZIP on-device. Its SHA-256 is

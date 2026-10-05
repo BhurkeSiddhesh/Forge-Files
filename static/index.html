@@ -568,6 +568,7 @@
                     <!-- Sign PDF Options -->
                     <div id="sign-area" class="password-area hidden">
                         <p class="helper-text">Upload your signature image (PNG with transparency works best):</p>
+                        <small class="helper-text" style="display:block; margin-bottom:0.4rem;">This places an image of your signature on the page (a visual signature). It is not a certificate-based digital signature.</small>
                         <input type="file" id="signature-image" accept="image/png,image/jpeg" aria-label="Signature image">
                         <input type="number" id="sign-page" min="1" value="1" placeholder="Page number" aria-label="Page number">
                         <select id="sign-position" aria-label="Signature position">
@@ -1669,6 +1670,7 @@
     <script src="/static/local/ops-pdf-text.js?v=20261005"></script>
     <script src="/static/local/ops-pdf-annotate.js?v=20261005"></script>
     <script src="/static/local/ops-pdf-metadata.js?v=20261005"></script>
+    <script src="/static/local/ops-pdf-sign.js?v=20261005"></script>
     <script src="/static/script.js?v=20261005"></script>
     {{CONSENT_BANNER}}
 </body>

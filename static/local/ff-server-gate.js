@@ -53,9 +53,9 @@
         '/api/image/rotate': ['Rotate Image', 'this image could not be processed on your device'],
         '/api/image/watermark': ['Watermark Image', 'this image could not be processed on your device'],
         '/api/excel/to-pdf': ['Excel to PDF', 'this conversion needs a full office layout engine to preserve pages, fonts and charts'],
-        '/api/excel/csv-to-xlsx': ['CSV to Excel', 'this file could not be converted on your device'],
-        '/api/excel/xlsx-to-csv': ['Excel to CSV', 'this file could not be converted on your device'],
-        '/api/excel/merge': ['Merge Excel', 'merging workbooks needs the server\'s spreadsheet engine'],
+        '/api/excel/csv-to-xlsx': ['CSV to Excel', 'this CSV is too large or uses an encoding this device cannot convert safely'],
+        '/api/excel/xlsx-to-csv': ['Excel to CSV', 'this workbook needs server parsing to export its cells safely'],
+        '/api/excel/merge': ['Merge Excel', 'these workbooks are too complex or large to merge on this device'],
         '/api/ppt/to-pdf': ['PowerPoint to PDF', 'this conversion needs a full office layout engine to preserve slides, fonts and charts'],
         '/api/ppt/to-images': ['PowerPoint to Images', 'this conversion needs a full office layout engine to preserve slides, fonts and charts'],
         '/api/ppt/merge': ['Merge PowerPoint', 'merging presentations needs the server\'s office engine'],
@@ -85,12 +85,12 @@
         return TOOLS[p] || null;
     }
 
-    function describe(path, code) {
+    function describe(path, code, customReason) {
         var entry = lookup(path);
         return {
             known: !!entry,
             tool: entry ? entry[0] : 'This tool',
-            reason: (code && CODES[code]) || (entry ? entry[1] : 'this operation needs the server'),
+            reason: customReason || (code && CODES[code]) || (entry ? entry[1] : 'this operation needs the server'),
         };
     }
 
@@ -218,7 +218,7 @@
     function request(req) {
         req = req || {};
         if (active) return Promise.resolve(false);
-        var info = describe(req.path, req.code);
+        var info = describe(req.path, req.code, req.reason);
         return new Promise(function (resolve) {
             var custom = api.handler;
             var settle = function (result) {

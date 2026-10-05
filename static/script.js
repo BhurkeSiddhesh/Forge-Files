@@ -2644,9 +2644,7 @@ async function runWorkflow() {
     };
 
     try {
-        const response = await ffServerFetch('/api/workflow/execute', {
-            method: 'POST',
-            body: formData,
+        const response = await ffProcess('/api/workflow/execute', formData, {
             signal: abort && abort.signal,
         });
 
@@ -3068,7 +3066,7 @@ async function processExcelAction(url, text, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await ffServerFetch(url, { method: 'POST', body: formData });
+        const response = await ffProcess(url, formData);
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
