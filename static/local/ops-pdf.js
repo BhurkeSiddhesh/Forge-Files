@@ -745,14 +745,31 @@
 
     // ── /api/pdf/create-from-text ─────────────────────────────────────────
 
-    /** create_pdf_from_text()'s filename rule: keep alnum/space/_/-, cap at 50. */
+    /**
+     * create_pdf_from_text()'s filename rule: keep letters, digits, space, '_' and
+     * '-' (Python's str.isalnum() is Unicode-aware, so accented and non-Latin
+     * letters stay while combining marks go), cap at 50, spaces become '_'.
+     */
     function safeTitle(title) {
-        var kept = String(title === null || title === undefined ? '' : title)
-            .split('')
-            .filter(function (ch) { return /[0-9A-Za-z]/.test(ch) || ch === ' ' || ch === '_' || ch === '-'; })
-            .join('')
-            .slice(0, 50);
+        var kept = Array.from(String(title === null || title === undefined ? '' : title))
+            .filter(function (ch) { return /[\p{L}\p{N}]/u.test(ch) || ch === ' ' || ch === '_' || ch === '-'; })
+            .slice(0, 50)
+            .join('');
         return (kept || 'document').replace(/ /g, '_');
+    }
+
+    var WRAP_SLACK = 2;
+
+    /**
+     * Text width as reportlab measures it: the sum of each glyph's advance, with no
+     * kerning. pdf-lib's own widthOfTextAtSize() applies Helvetica's kerning pairs,
+     * which makes strings a little narrower and would let lines run longer than the
+     * server's.
+     */
+    function plainWidth(font, text, size) {
+        var total = 0;
+        for (var i = 0; i < text.length; i++) total += font.widthOfTextAtSize(text.charAt(i), size);
+        return total;
     }
 
     /** Greedy word wrap against the embedded font's real metrics. */
@@ -763,7 +780,9 @@
         var line = words[0];
         for (var i = 1; i < words.length; i++) {
             var candidate = line + ' ' + words[i];
-            if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+            // reportlab lets a line run slightly past the frame width (measured: about
+            // 2 pt, 1.0-2.9 pt depending on size and margin), so allow the same.
+            if (plainWidth(font, candidate, fontSize) <= maxWidth + WRAP_SLACK) {
                 line = candidate;
             } else {
                 lines.push(line);
@@ -774,14 +793,33 @@
         return lines;
     }
 
-    L.register('/api/pdf/create-from-text', async function (fd) {
+    // reportlab's Frame pads its content by 6 pt on every side, so the text block
+    // starts 6 pt inside the margin and is 12 pt narrower than margin-to-margin.
+    var FRAME_PAD = 6;
+    var TEXT_MAX_CHARS = 2000000;   // about 2 MB of text
+    var TEXT_MAX_PAGES = 1000;
+
+    L.register('/api/pdf/create-from-text', async function (fd, ctx) {
+        ctx = ctx || {};
         var content = L.str(fd, 'content', '');
         if (!content || !content.trim()) throw new L.Error('Content cannot be empty.');
 
-        var title = L.str(fd, 'title', 'Document');
+        // An empty title is kept empty (the server then names the file "document").
+        var rawTitle = fd.get('title');
+        var title = rawTitle === null || rawTitle === undefined ? 'Document' : String(rawTitle);
         var fontSize = L.int(fd, 'font_size', 12);
         var marginPt = L.int(fd, 'margin_pt', 72);
         var dims = pageSize(L.str(fd, 'page_size', 'A4'));
+
+        // Sizes the server will lay out in its own way (or reject) are not guessed
+        // at here: a zero or enormous font, a negative margin, or margins that leave
+        // no room for text all go to the server after the user agrees.
+        if (!(fontSize >= 4 && fontSize <= 72) || marginPt < 0 || dims[0] - 2 * marginPt - 2 * FRAME_PAD < 100) {
+            throw new L.Unsupported('layout values outside the on-device range', 'unsupported_structure');
+        }
+        if (content.length > TEXT_MAX_CHARS) {
+            throw new L.Unsupported('text exceeds the on-device size budget', 'resource_budget_exceeded');
+        }
 
         var PDFLib = await L.loadPdfLib();
         var doc = await PDFLib.PDFDocument.create({ updateMetadata: false });
@@ -792,42 +830,50 @@
         // paragraph, and a half-line gap for a blank source line.
         var leading = fontSize * 1.4;
         var spaceAfter = 6;
-        var maxWidth = dims[0] - 2 * marginPt;
+        var left = marginPt + FRAME_PAD;
+        var bottom = marginPt + FRAME_PAD;
+        var maxWidth = dims[0] - 2 * marginPt - 2 * FRAME_PAD;
 
         var page = doc.addPage([dims[0], dims[1]]);
-        var y = dims[1] - marginPt;
+        var y = dims[1] - marginPt - FRAME_PAD;
 
         function newPage() {
+            if (doc.getPageCount() >= TEXT_MAX_PAGES) {
+                throw new L.Unsupported('document exceeds the on-device page budget', 'resource_budget_exceeded');
+            }
             page = doc.addPage([dims[0], dims[1]]);
-            y = dims[1] - marginPt;
+            y = dims[1] - marginPt - FRAME_PAD;
         }
 
+        var paragraphs = content.split('\n');
         try {
-            var paragraphs = content.split('\n');
             for (var p = 0; p < paragraphs.length; p++) {
+                if (p % 200 === 199) { L.checkAbort(ctx.signal); await L.tick(); }
                 if (!paragraphs[p].trim()) {
                     y -= fontSize * 0.5;
                     continue;
                 }
                 var lines = wrap(font, paragraphs[p], fontSize, maxWidth);
                 for (var i = 0; i < lines.length; i++) {
-                    if (y - leading < marginPt) newPage();
-                    y -= leading;
+                    if (y - leading < bottom) newPage();
+                    // reportlab puts a paragraph's first baseline one font size below
+                    // its top, then steps down by the leading for each further line.
                     page.drawText(lines[i], {
-                        x: marginPt, y: y, size: fontSize, font: font,
+                        x: left, y: y - fontSize, size: fontSize, font: font,
                         color: PDFLib.rgb(0, 0, 0),
                     });
+                    y -= leading;
                 }
                 y -= spaceAfter;
             }
         } catch (err) {
+            if (err instanceof L.Unsupported) throw err;
             // StandardFonts.Helvetica is WinAnsi-only; text outside it (emoji,
-            // CJK, most non-Latin scripts) throws here. reportlab's Helvetica
-            // has the same limit, but the server has fonts we don't, so let it
-            // try rather than shipping a mangled document.
-            throw new L.Unsupported('text contains characters the built-in font cannot encode');
+            // CJK, most non-Latin scripts) throws here.
+            throw new L.Unsupported('text contains characters the built-in font cannot encode', 'font_coverage_missing');
         }
 
+        L.checkAbort(ctx.signal);
         return {
             blob: await save(doc),
             filename: safeTitle(title) + '_' + L.hexId(6) + '.pdf',
