@@ -390,7 +390,8 @@
 
     // ── /api/pdf/organize ─────────────────────────────────────────────────
 
-    L.register('/api/pdf/organize', async function (fd) {
+    L.register('/api/pdf/organize', async function (fd, ctx) {
+        ctx = ctx || {};
         var raw = String(L.str(fd, 'page_order', '') || '').trim();
         var order;
         if (raw.charAt(0) === '[') {
@@ -421,11 +422,26 @@
             }
         });
 
+        // A long list of repeats multiplies the output (and memory) well beyond the
+        // input, so the OUTPUT page count has its own budget.
+        if (order.length > (L.constrained() ? 500 : 2000)) {
+            throw new L.Unsupported('output page count exceeds the on-device organize budget', 'resource_budget_exceeded');
+        }
+
         // copyPages() with a repeated index returns independent copies, which is
-        // what makes "1,1,2" duplicate rather than alias a single page.
+        // what makes "1,1,2" duplicate rather than alias a single page. Copied in
+        // chunks so progress and Cancel work on long lists.
         var out = await PDFLib.PDFDocument.create({ updateMetadata: false });
-        var copied = await out.copyPages(src, order.map(function (p) { return p - 1; }));
-        copied.forEach(function (page) { out.addPage(page); });
+        var CHUNK = 25;
+        for (var at = 0; at < order.length; at += CHUNK) {
+            L.checkAbort(ctx.signal);
+            var slice = order.slice(at, at + CHUNK).map(function (p) { return p - 1; });
+            var copied = await out.copyPages(src, slice);
+            copied.forEach(function (page) { out.addPage(page); });
+            if (ctx.onProgress) ctx.onProgress(Math.min(at + CHUNK, order.length), order.length);
+            await L.tick();
+        }
+        L.checkAbort(ctx.signal);
 
         return {
             blob: await save(out),

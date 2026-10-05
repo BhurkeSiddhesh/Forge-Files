@@ -284,3 +284,36 @@ test('cancelling a merge stops it and never uploads', async () => {
     assert.equal(ctx.fetchCalls.length, 0);
     assert.equal(ctx.asked.length, 0);
 });
+
+// ── Organize PDF (work package 19): progress and cancellation ─────────────
+
+test('organize reports progress in chunks and returns the reordered pages', async () => {
+    const ctx = load();
+    const pdf = await makePdf(ctx.sandbox, 3);
+    const fd = new FormData();
+    fd.append('file', pdf, 'a.pdf');
+    fd.append('page_order', Array.from({ length: 60 }, (_, i) => (i % 3) + 1).join(','));
+    const seen = [];
+    const res = await ctx.sandbox.ffProcess('/api/pdf/organize', fd, { onProgress: (d, t) => seen.push([d, t]) });
+    assert.equal(res.ok, true);
+    assert.deepEqual(seen, [[25, 60], [50, 60], [60, 60]]);
+    const body = await res.json();
+    assert.equal(body.message, 'PDF organized (60 pages in output)');
+    assert.equal(ctx.fetchCalls.length, 0);
+});
+
+test('cancelling an organize stops it and never uploads', async () => {
+    const ctx = load({ consent: true });
+    const pdf = await makePdf(ctx.sandbox, 2);
+    const fd = new FormData();
+    fd.append('file', pdf, 'a.pdf');
+    fd.append('page_order', Array.from({ length: 100 }, () => '1').join(','));
+    const abort = new AbortController();
+    const run = ctx.sandbox.ffProcess('/api/pdf/organize', fd, {
+        signal: abort.signal,
+        onProgress: (d) => { if (d >= 25) abort.abort(); },
+    });
+    await assert.rejects(run, (e) => e.name === 'AbortError');
+    assert.equal(ctx.fetchCalls.length, 0);
+    assert.equal(ctx.asked.length, 0);
+});
