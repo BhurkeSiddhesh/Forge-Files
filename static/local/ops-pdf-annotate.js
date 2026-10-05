@@ -242,6 +242,9 @@
             throw new L.Unsupported('pdf-lib could not open this PDF', enc ? 'encrypted' : 'unsupported_structure');
         }
 
+        if (!doc.catalog || doc.getPageCount() < 1) {
+            throw new L.Unsupported('PDF structure could not be read', 'unsupported_structure');
+        }
         var total = doc.getPageCount();
         var items = list.map(function (ann) { return normalise(ann, total); });
 
