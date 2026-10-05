@@ -36,14 +36,35 @@
         });
     }
 
-    function textOf(file) {
-        if (file.text) return file.text();
-        return new Promise(function (fulfil, fail) {
-            var reader = new FileReader();
-            reader.onload = function () { fulfil(reader.result); };
-            reader.onerror = function () { fail(reader.error); };
-            reader.readAsText(file, 'utf-8');
-        });
+    /**
+     * Decode CSV bytes without ever guessing. A UTF-8/UTF-16 BOM is honoured;
+     * otherwise the bytes must be valid UTF-8. Anything else (legacy code pages,
+     * BOM-less UTF-16, binary) raises Unsupported('undecodable') so the user is
+     * asked before the server is used, rather than converting mojibake.
+     */
+    async function decodeCsv(file) {
+        var bytes = new Uint8Array(await bytesOf(file));
+        var label = 'utf-8';
+        var offset = 0;
+        if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+            offset = 3;
+        } else if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+            label = 'utf-16le'; offset = 2;
+        } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+            label = 'utf-16be'; offset = 2;
+        } else if (bytes.indexOf(0) >= 0) {
+            throw new L.Unsupported('CSV contains NUL bytes (binary or BOM-less UTF-16)', 'undecodable');
+        }
+        var text;
+        try {
+            text = new TextDecoder(label, { fatal: true }).decode(offset ? bytes.subarray(offset) : bytes);
+        } catch (err) {
+            throw new L.Unsupported('CSV is not valid ' + label, 'undecodable');
+        }
+        if (text.indexOf('\uFFFD') >= 0) {
+            throw new L.Unsupported('CSV contains replacement characters', 'undecodable');
+        }
+        return text;
     }
 
     /** Parse CSV text into 2D array, handling BOM, delimiters, quotes, newlines. */
@@ -135,6 +156,48 @@
         return v === null || v === undefined ? '' : String(v);
     }
 
+    /**
+     * Merge is a values-and-number-formats operation. Workbooks carrying parts
+     * ExcelJS would silently drop (macros, charts, drawings, external links,
+     * pivots) are refused so the user is asked before the server is used.
+     */
+    var COMPLEX_PARTS = /^xl\/(vbaProject\.bin|charts\/|chartsheets\/|externalLinks\/|pivotTables\/|pivotCache\/|drawings\/[^/]*\.xml$|embeddings\/)/i;
+
+    async function assertSimpleWorkbook(bytes) {
+        var JSZip = await L.loadJsZip();
+        var zip;
+        try {
+            zip = await JSZip.loadAsync(bytes);
+        } catch (err) {
+            throw new L.Unsupported('Could not open workbook package', 'unsupported_structure');
+        }
+        var names = Object.keys(zip.files);
+        for (var n = 0; n < names.length; n++) {
+            if (COMPLEX_PARTS.test(names[n])) {
+                throw new L.Unsupported('Workbook contains ' + names[n], 'unsupported_structure');
+            }
+        }
+        var ct = zip.file('[Content_Types].xml');
+        if (ct) {
+            var xml = await ct.async('string');
+            if (/macroEnabled|vbaProject/i.test(xml)) {
+                throw new L.Unsupported('Workbook contains macros', 'unsupported_structure');
+            }
+        }
+    }
+
+    /** Value-only copy of a cell: a formula becomes its cached result. */
+    function valueOnly(cell) {
+        var v = cell.value;
+        if (v && typeof v === 'object' && !(v instanceof Date) && ('formula' in v || 'sharedFormula' in v)) {
+            if (v.result === undefined || v.result === null) {
+                throw new L.Unsupported('Formula cell missing cached value requires recalculation', 'unsupported_structure');
+            }
+            return v.result;
+        }
+        return v;
+    }
+
     // ── WP32: CSV to XLSX ───────────────────────────────────────────────────
 
     L.register('/api/excel/csv-to-xlsx', async function (formData, ctx) {
@@ -159,8 +222,9 @@
 
         var text;
         try {
-            text = await textOf(file);
+            text = await decodeCsv(file);
         } catch (err) {
+            if (err instanceof L.Unsupported) throw err;
             throw new L.Unsupported('Could not decode CSV text', 'undecodable');
         }
 
@@ -317,14 +381,15 @@
             var file = fileList[fIdx];
             L.checkAbort(ctx.signal);
 
-            // Lab acceptance criteria: reject or warn for workbooks with macros (.xlsm)
+            // Lab acceptance criteria: macros, charts and external links need the server.
             if (/\.xlsm$/i.test(file.name)) {
                 throw new L.Unsupported('Workbooks with macros require server processing', 'unsupported_structure');
             }
 
             var wb = new ExcelJS.Workbook();
+            var bytes = await bytesOf(file);
+            await assertSimpleWorkbook(bytes);
             try {
-                var bytes = await bytesOf(file);
                 await wb.xlsx.load(bytes);
             } catch (err) {
                 throw new L.Unsupported('Could not load Excel workbook', 'unsupported_structure');
@@ -342,7 +407,7 @@
                     var dstRow = dstSheet.getRow(rn);
                     row.eachCell({ includeEmpty: true }, function (cell, cn) {
                         var dstCell = dstRow.getCell(cn);
-                        dstCell.value = cell.value;
+                        dstCell.value = valueOnly(cell);
                         if (cell.numFmt) dstCell.numFmt = cell.numFmt;
                     });
                 });

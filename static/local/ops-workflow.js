@@ -11,7 +11,97 @@
     var L = window.ffLocal;
     if (!L) return;
 
-    var MAX_WORKFLOW_STEPS = 10;
+    // Mirrors main.py's MAX_WORKFLOW_STEPS default (env-configurable server side).
+    // A deployment that raises it can set window.FF_MAX_WORKFLOW_STEPS; the server
+    // still validates the steps it receives.
+    var DEFAULT_MAX_WORKFLOW_STEPS = 20;
+    function maxSteps() {
+        var n = Number(window.FF_MAX_WORKFLOW_STEPS);
+        return isFinite(n) && n >= 1 ? Math.floor(n) : DEFAULT_MAX_WORKFLOW_STEPS;
+    }
+
+    // ── Step typing (preflight) ───────────────────────────────────────────
+    //
+    // File classes a step accepts and produces. `null` output = unknown (the
+    // chain stops being type-checked from there rather than guessing).
+    var EXT_CLASS = {
+        pdf: 'pdf', csv: 'csv', xlsx: 'xlsx', xls: 'xls', docx: 'docx', doc: 'doc',
+        pptx: 'pptx', ppt: 'ppt', txt: 'txt', epub: 'epub', heic: 'heic', heif: 'heic',
+        jpg: 'image', jpeg: 'image', png: 'image', webp: 'image', gif: 'image',
+        bmp: 'image', tif: 'image', tiff: 'image',
+    };
+    var IMG_IN = ['image', 'heic'];
+    var STEP_TYPES = {
+        rotate_pdf: { in: ['pdf'], out: 'pdf' },
+        organize_pdf: { in: ['pdf'], out: 'pdf' },
+        add_page_numbers: { in: ['pdf'], out: 'pdf' },
+        protect_pdf: { in: ['pdf'], out: 'pdf' },
+        remove_password: { in: ['pdf'], out: 'pdf' },
+        annotate_pdf: { in: ['pdf'], out: 'pdf' },
+        edit_metadata: { in: ['pdf'], out: 'pdf' },
+        compress_pdf: { in: ['pdf'], out: 'pdf' },
+        repair_pdf: { in: ['pdf'], out: 'pdf' },
+        extract_text: { in: ['pdf'], out: 'txt' },
+        pdf_to_word: { in: ['pdf'], out: 'docx' },
+        pdf_to_excel: { in: ['pdf'], out: 'xlsx' },
+        pdf_to_pptx: { in: ['pdf'], out: 'pptx' },
+        pdf_to_epub: { in: ['pdf'], out: 'epub' },
+        resize_image: { in: IMG_IN, out: 'image' },
+        crop_image: { in: IMG_IN, out: 'image' },
+        rotate_image: { in: IMG_IN, out: 'image' },
+        compress_image: { in: IMG_IN, out: 'image' },
+        watermark_image: { in: IMG_IN, out: 'image' },
+        convert_image: { in: IMG_IN, out: 'image' },
+        heic_to_jpeg: { in: ['heic'], out: 'image' },
+        csv_to_xlsx: { in: ['csv'], out: 'xlsx' },
+        xlsx_to_csv: { in: ['xlsx'], out: 'csv' },
+        excel_to_pdf: { in: ['xlsx', 'xls'], out: 'pdf' },
+        ppt_to_pdf: { in: ['pptx', 'ppt'], out: 'pdf' },
+        ppt_to_images: { in: ['pptx', 'ppt'], out: null },
+        word_to_pdf: { in: ['docx', 'doc'], out: 'pdf' },
+        word_to_pptx: { in: ['docx', 'doc'], out: 'pptx' },
+    };
+
+    function classOf(name) {
+        var m = /\.([A-Za-z0-9]+)$/.exec(String(name || ''));
+        return m ? (EXT_CLASS[m[1].toLowerCase()] || null) : null;
+    }
+
+    function stepName(step, i) {
+        return 'Step ' + (i + 1) + ' (' + (step.label || step.type) + ')';
+    }
+
+    /**
+     * Validate the whole chain before any step runs or any byte moves. Unknown
+     * step types are left to the server to judge; a known step fed an
+     * incompatible file class is rejected here.
+     */
+    function preflight(file, stepList) {
+        var cls = classOf(file.name);
+        for (var i = 0; i < stepList.length; i++) {
+            var meta = STEP_TYPES[stepList[i].type];
+            if (!meta) { cls = null; continue; }
+            if (cls && meta.in.indexOf(cls) < 0) {
+                throw new L.Error(stepName(stepList[i], i) + ' cannot accept a ' + cls +
+                    ' file (expects ' + meta.in.join(', ') + ').');
+            }
+            cls = meta.out;
+        }
+    }
+
+    function isLocalStep(step) {
+        var path = STEP_PATH_MAP[step.type];
+        return !!(path && L.enabled() && L.handlers[path]);
+    }
+
+    function authHeaders() {
+        var headers = {};
+        if (window.__ffSession && window.__ffSession.access_token) {
+            headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
+        }
+        return headers;
+    }
+
 
     var STEP_PATH_MAP = {
         rotate_pdf: '/api/pdf/rotate',
@@ -139,150 +229,158 @@
         if (!Array.isArray(stepList) || stepList.length === 0) {
             throw new L.Error('steps must be a non-empty list');
         }
-        if (stepList.length > MAX_WORKFLOW_STEPS) {
-            throw new L.Error('Too many steps (max ' + MAX_WORKFLOW_STEPS + ')');
+        if (stepList.length > maxSteps()) {
+            throw new L.Error('Too many steps (max ' + maxSteps() + ')');
         }
         for (var sIdx = 0; sIdx < stepList.length; sIdx++) {
             if (!stepList[sIdx] || typeof stepList[sIdx] !== 'object') {
                 throw new L.Error('Each step must be an object');
             }
         }
+        preflight(file, stepList);
 
-        // Return a ReadableStream that delivers SSE formatted events
         var encoder = new TextEncoder();
         var stream = new ReadableStream({
             start: async function (controller) {
                 function send(obj) {
                     controller.enqueue(encoder.encode('data: ' + JSON.stringify(obj) + '\n\n'));
                 }
+                function fail(detail) {
+                    send({ event: 'error', detail: detail });
+                    controller.close();
+                }
 
-                send({ event: 'start', total: stepList.length });
-
-                var currentFile = file;
                 var totalSteps = stepList.length;
+                var currentFile = file;
+                send({ event: 'start', total: totalSteps });
 
-                for (var i = 0; i < totalSteps; i++) {
+                var i = 0;
+                while (i < totalSteps) {
                     L.checkAbort(ctx.signal);
 
                     var step = stepList[i];
-                    var stepType = step.type;
-                    var stepLabel = step.label || stepType;
-                    var path = STEP_PATH_MAP[stepType];
-                    var localHandler = path && L.handlers[path];
+                    var stepLabel = step.label || step.type;
+                    var failCode = null;   // set when a local attempt fell through
 
-                    var canRunLocal = !!localHandler;
-
-                    if (canRunLocal) {
+                    if (isLocalStep(step)) {
                         send({ event: 'step_start', step: i, total: totalSteps, label: stepLabel });
                         try {
-                            var stepFd = buildStepFormData(currentFile, step);
-                            var out = await localHandler(stepFd, { signal: ctx.signal });
+                            var out = await L.handlers[STEP_PATH_MAP[step.type]](
+                                buildStepFormData(currentFile, step), { signal: ctx.signal });
                             currentFile = new File([out.blob], out.filename, { type: out.blob.type });
                             send({ event: 'step_complete', step: i, total: totalSteps, label: stepLabel });
+                            i++;
                             await L.tick();
-                            continue; // Step finished locally, move to next step
+                            continue;
                         } catch (err) {
-                            if (err instanceof L.Error) {
-                                send({ event: 'error', detail: err.message });
-                                controller.close();
-                                return;
-                            }
-                            if (err && err.name === 'AbortError') {
-                                controller.error(err);
-                                return;
-                            }
-                            // Handler threw Unsupported or runtime error -> fall through to server for remaining steps
-                            canRunLocal = false;
+                            if (err instanceof L.Error) { fail(err.message); return; }
+                            if (err && err.name === 'AbortError') { controller.error(err); return; }
+                            failCode = err instanceof L.Unsupported ? err.code : 'engine_unavailable';
                         }
                     }
 
-                    // This step needs server processing!
-                    var reasonText = 'Step ' + stepLabel + ' needs server processing because its conversion engine is unavailable locally';
-                    var agreed = false;
-                    try {
-                        agreed = window.ffConsent ? await window.ffConsent.request({
-                            path: '/api/workflow/execute',
-                            reason: reasonText,
-                            filename: currentFile.name,
-                        }) : false;
-                    } catch (e) {
-                        agreed = false;
-                    }
+                    // Server segment: this step plus any directly following steps
+                    // that have no on-device handler. Local steps after it run
+                    // on-device again on the downloaded result.
+                    var segEnd = i + 1;
+                    while (segEnd < totalSteps && !isLocalStep(stepList[segEnd])) segEnd++;
+                    var segment = stepList.slice(i, segEnd);
 
-                    if (!agreed) {
-                        send({ event: 'error', detail: 'Cancelled. Your file was not uploaded.' });
-                        controller.close();
+                    var reason = 'Step ' + stepLabel + ' needs server processing because ' +
+                        (failCode && window.ffConsent && window.ffConsent.describe
+                            ? window.ffConsent.describe('/api/workflow/execute', failCode).reason
+                            : 'its conversion engine is unavailable locally');
+
+                    var serverFd = new FormData();
+                    serverFd.append('file', currentFile);
+                    serverFd.append('steps', JSON.stringify(segment));
+
+                    var serverRes;
+                    try {
+                        serverRes = await window.ffProcess('/api/workflow/execute', serverFd, {
+                            signal: ctx.signal,
+                            serverOnly: true,
+                            consent: { reason: reason, filename: currentFile.name },
+                        });
+                    } catch (netErr) {
+                        if (netErr && netErr.name === 'AbortError') { controller.error(netErr); return; }
+                        fail(netErr.message || 'Workflow server connection failed');
                         return;
                     }
 
-                    // User agreed: upload current intermediate and remaining steps
-                    var remainingSteps = stepList.slice(i);
-                    var serverFd = new FormData();
-                    serverFd.append('file', currentFile);
-                    serverFd.append('steps', JSON.stringify(remainingSteps));
-
-                    var headers = {};
-                    if (window.__ffSession && window.__ffSession.access_token) {
-                        headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
+                    var ctype = serverRes.headers.get('content-type') || '';
+                    if (!serverRes.ok && ctype.indexOf('text/event-stream') < 0) {
+                        var errDetail = 'Server workflow request failed';
+                        try {
+                            var errJson = await serverRes.json();
+                            if (errJson && errJson.detail) errDetail = errJson.detail;
+                        } catch (e) { /* ignore */ }
+                        fail(errDetail);
+                        return;
                     }
 
+                    var terminal = null;
                     try {
-                        var serverRes = await fetch(window.apiUrl('/api/workflow/execute'), {
-                            method: 'POST',
-                            body: serverFd,
-                            headers: headers,
-                            signal: ctx.signal,
-                        });
-
-                        if (!serverRes.ok && !serverRes.headers.get('content-type')?.includes('text/event-stream')) {
-                            var errDetail = 'Server workflow request failed';
-                            try {
-                                var errJson = await serverRes.json();
-                                if (errJson && errJson.detail) errDetail = errJson.detail;
-                            } catch (e) { /* ignore */ }
-                            send({ event: 'error', detail: errDetail });
-                            controller.close();
-                            return;
-                        }
-
-                        // Stream and forward SSE from server with adjusted step offsets
                         var reader = serverRes.body.getReader();
                         var decoder = new TextDecoder();
                         var buffer = '';
-
                         while (true) {
                             var chunk = await reader.read();
                             if (chunk.done) break;
                             buffer += decoder.decode(chunk.value, { stream: true });
-                            var lines = buffer.split('\n\n');
-                            buffer = lines.pop();
-
-                            for (var lIdx = 0; lIdx < lines.length; lIdx++) {
-                                var line = lines[lIdx];
-                                if (line.indexOf('data: ') === 0) {
-                                    try {
-                                        var parsed = JSON.parse(line.substring(6));
-                                        if (parsed.event === 'step_start' || parsed.event === 'step_complete') {
-                                            parsed.step = parsed.step + i;
-                                            parsed.total = totalSteps;
-                                        }
-                                        send(parsed);
-                                    } catch (e) {
-                                        // Pass raw line if unparseable
-                                        controller.enqueue(encoder.encode(line + '\n\n'));
-                                    }
+                            var frames = buffer.split('\n\n');
+                            buffer = frames.pop();
+                            for (var f = 0; f < frames.length; f++) {
+                                if (frames[f].indexOf('data: ') !== 0) continue;
+                                var parsed;
+                                try { parsed = JSON.parse(frames[f].substring(6)); } catch (e) { continue; }
+                                if (parsed.event === 'start') continue;
+                                if (parsed.event === 'step_start' || parsed.event === 'step_complete') {
+                                    parsed.step = parsed.step + i;
+                                    parsed.total = totalSteps;
+                                    send(parsed);
+                                } else if (parsed.event === 'complete' || parsed.event === 'error') {
+                                    terminal = parsed;
+                                } else {
+                                    send(parsed);
                                 }
                             }
                         }
-                    } catch (netErr) {
-                        send({ event: 'error', detail: netErr.message || 'Workflow server connection failed' });
+                    } catch (streamErr) {
+                        if (streamErr && streamErr.name === 'AbortError') { controller.error(streamErr); return; }
+                        fail(streamErr.message || 'Workflow server connection failed');
+                        return;
                     }
 
-                    controller.close();
-                    return;
+                    if (!terminal) { fail('Workflow ended without a result'); return; }
+                    if (terminal.event === 'error') { send(terminal); controller.close(); return; }
+
+                    if (segEnd >= totalSteps) {
+                        // The server produced the final file; hand its token on as is.
+                        send(terminal);
+                        controller.close();
+                        return;
+                    }
+
+                    // More steps follow (local ones): fetch the server result as the
+                    // next intermediate. This is a download, not an upload.
+                    try {
+                        var dl = await fetch(window.apiUrl('/api/download/' + encodeURIComponent(terminal.download_token)), {
+                            headers: authHeaders(),
+                            signal: ctx.signal,
+                        });
+                        if (!dl.ok) throw new Error('Could not retrieve the server result');
+                        var blob = await dl.blob();
+                        currentFile = new File([blob], terminal.filename || currentFile.name, { type: blob.type });
+                    } catch (dlErr) {
+                        if (dlErr && dlErr.name === 'AbortError') { controller.error(dlErr); return; }
+                        fail(dlErr.message || 'Could not retrieve the server result');
+                        return;
+                    }
+                    i = segEnd;
                 }
 
-                // All steps completed locally on-device!
+                // Every step ran on-device.
                 var published = L.publish(currentFile, currentFile.name);
                 send({
                     event: 'complete',
@@ -304,6 +402,8 @@
 
     L.workflow = {
         STEP_PATH_MAP: STEP_PATH_MAP,
+        STEP_TYPES: STEP_TYPES,
         buildStepFormData: buildStepFormData,
+        preflight: preflight,
     };
 })();

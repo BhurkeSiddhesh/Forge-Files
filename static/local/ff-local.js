@@ -178,11 +178,14 @@
      * Fails closed: with no consent module there is nobody to ask, so the answer
      * is no.
      */
-    async function consentOrDecline(path, code) {
+    async function consentOrDecline(path, code, extra) {
         var gate = window.ffConsent;
         var agreed = false;
         try {
-            agreed = !!(gate && await gate.request({ path: path, code: code }));
+            var req = { path: path, code: code };
+            if (extra && extra.reason) req.reason = extra.reason;
+            if (extra && extra.filename) req.filename = extra.filename;
+            agreed = !!(gate && await gate.request(req));
         } catch (e) {
             agreed = false;
         }
@@ -203,8 +206,11 @@
      */
     async function ffProcess(path, formData, init) {
         init = init || {};
-        var handler = enabled() ? HANDLERS[path] : null;
-        var code = null;
+        // `init.serverOnly` skips the on-device handler: the caller (the workflow
+        // runner) has already decided this exact request needs the server and
+        // may pass `init.consent` ({reason, filename}) to word the dialog.
+        var handler = (enabled() && !init.serverOnly) ? HANDLERS[path] : null;
+        var code = init.serverCode || null;
 
         if (handler) {
             try {
@@ -238,7 +244,7 @@
             }
         }
 
-        var declined = await consentOrDecline(path, code);
+        var declined = await consentOrDecline(path, code, init.consent);
         if (declined) return declined;
 
         var headers = {};
@@ -536,6 +542,7 @@
         handlers: HANDLERS,
 
         isLocalToken: isLocalToken,
+        publish: publish,
         resolve: resolve,
         release: release,
 
