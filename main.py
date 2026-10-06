@@ -2064,7 +2064,7 @@ async def api_merge_pdfs(
 @app.post("/api/pdf/watermark")
 async def api_add_watermark(
     file: UploadFile = File(...),
-    text: str = Form(...),
+    text: str = Form(""),
     position: str = Form("diagonal"),
     opacity: float = Form(0.3),
     password: str = Form(None),
@@ -2072,9 +2072,14 @@ async def api_add_watermark(
     font_size: int = Form(0),
     tile: bool = Form(False),
     layer: str = Form("over"),
+    logo: UploadFile = File(None),
+    logo_scale: float = Form(0.4),
 ):
-    """Stamp a text watermark on every page."""
+    """Stamp a text or PNG/JPEG logo watermark on every page."""
     safe_filename = secure_filename(file.filename)
+    logo_bytes = None
+    if logo is not None and logo.filename:
+        logo_bytes = await logo.read(5 * 1024 * 1024 + 1)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
     result_dir = new_result_dir()
     try:
@@ -2082,7 +2087,7 @@ async def api_add_watermark(
             "pdf_watermark",
             run_in_threadpool(
                 add_watermark, str(temp_path), str(result_dir), text, position, opacity, password or None,
-                color, font_size, tile, layer,
+                color, font_size, tile, layer, logo_bytes, logo_scale,
             ),
         )
         return {"status": "success", "message": "Watermark added", **download_fields(output_path)}

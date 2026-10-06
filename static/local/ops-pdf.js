@@ -551,7 +551,11 @@
     L.register('/api/pdf/watermark', async function (fd, ctx) {
         ctx = ctx || {};
         var text = L.str(fd, 'text', '');
-        if (!text || !text.trim()) throw new L.Error('Watermark text cannot be empty.');
+        var logoFiles = L.files(fd, 'logo');
+        var logoFile = logoFiles.length && logoFiles[0].size ? logoFiles[0] : null;
+        if (!logoFile && (!text || !text.trim())) throw new L.Error('Watermark text cannot be empty.');
+        var logoScale = L.num(fd, 'logo_scale', 0.4);
+        if (!(logoScale >= 0.05 && logoScale <= 1.0)) throw new L.Error('logo_scale must be between 0.05 and 1.0.');
 
         var position = L.str(fd, 'position', 'diagonal');
         if (['diagonal', 'top', 'center', 'bottom'].indexOf(position) < 0) {
@@ -589,10 +593,23 @@
         var grey = PDFLib.rgb(parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255);
 
         // Helvetica here is WinAnsi only; text in other scripts cannot be drawn.
-        try {
-            font.widthOfTextAtSize(text, 12);
-        } catch (err) {
-            throw new L.Unsupported('watermark text needs glyphs the built-in font lacks', 'font_coverage_missing');
+        if (!logoFile) {
+            try {
+                font.widthOfTextAtSize(text, 12);
+            } catch (err) {
+                throw new L.Unsupported('watermark text needs glyphs the built-in font lacks', 'font_coverage_missing');
+            }
+        }
+
+        var logo = null;
+        if (logoFile) {
+            if (logoFile.size > 5 * 1024 * 1024) throw new L.Error('Logo image is too large (max 5 MB).');
+            var lb = new Uint8Array(await logoFile.arrayBuffer());
+            var isPng = lb.length > 8 && lb[0] === 0x89 && lb[1] === 0x50 && lb[2] === 0x4e && lb[3] === 0x47;
+            var isJpg = lb.length > 3 && lb[0] === 0xff && lb[1] === 0xd8;
+            if (!isPng && !isJpg) throw new L.Error('Logo must be a PNG or JPEG image.');
+            try { logo = isPng ? await doc.embedPng(lb) : await doc.embedJpg(lb); }
+            catch (err) { throw new L.Unsupported('logo image could not be embedded on-device', 'unsupported_structure'); }
         }
 
         for (var n = 0; n < pages.length; n++) {
@@ -605,7 +622,42 @@
             // of the page's content streams.
             if (layer === 'under') page.pushOperators(PDFLib.pushGraphicsState());
 
-            if (tile) {
+            if (logo) {
+                // Mirrors the logo branch of pdf_utils.py::add_watermark.
+                var rot = position === 'diagonal';
+                var lw = crop.width * logoScale, lh = lw * logo.height / logo.width;
+                var kk = rot ? Math.SQRT1_2 : 1;
+                var boxW = rot ? (lw + lh) * kk : lw, boxH = rot ? (lw + lh) * kk : lh;
+                var centres = [];
+                if (tile) {
+                    var su = lw * 1.4, sv = lh * 1.6;
+                    var rch = Math.hypot(crop.width, crop.height) / 2 + su;
+                    var cu = rot ? Math.SQRT1_2 : 1, cs = rot ? Math.SQRT1_2 : 0;
+                    for (var gv = -rch; gv <= rch; gv += sv) {
+                        for (var gu = -rch; gu <= rch; gu += su) {
+                            var gx = crop.width / 2 + gu * cu + gv * cs;
+                            var gy = crop.height / 2 - gu * cs + gv * cu;
+                            if (gx < -boxW || gx > crop.width + boxW || gy < -boxH || gy > crop.height + boxH) continue;
+                            if (centres.length >= 2000) throw new L.Error('Watermark would be tiled too many times; make it larger.');
+                            centres.push([gx, gy]);
+                        }
+                    }
+                } else {
+                    var frac = { top: 0.1, center: 0.5, bottom: 0.9 }[position];
+                    var gy0 = rot ? crop.height / 2 : crop.height * frac;
+                    centres.push([crop.width / 2, Math.min(Math.max(gy0, boxH / 2), crop.height - boxH / 2)]);
+                }
+                centres.forEach(function (c) {
+                    var cxp = crop.x + c[0], cyp = crop.y + crop.height - c[1];
+                    // pdf-lib rotates about the image's bottom-left corner.
+                    var ox = rot ? cxp - (lw / 2 - lh / 2) * kk : cxp - lw / 2;
+                    var oy = rot ? cyp - (lw / 2 + lh / 2) * kk : cyp - lh / 2;
+                    page.drawImage(logo, {
+                        x: ox, y: oy, width: lw, height: lh, opacity: opacity,
+                        rotate: PDFLib.degrees(rot ? 45 : 0),
+                    });
+                });
+            } else if (tile) {
                 // Mirrors pdf_utils.py::_watermark_tile_points (top-left origin there).
                 var rotated = position === 'diagonal';
                 var textW = font.widthOfTextAtSize(text, fontSize);

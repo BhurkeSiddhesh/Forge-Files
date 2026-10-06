@@ -948,22 +948,20 @@ def parse_hex_color(value: str) -> tuple:
     return tuple(int(text[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def _watermark_tile_points(width: float, height: float, size: float, text_width: float, rotated: bool):
-    """Top-left-origin start points (and morph angle) covering a page with tiles.
+def _tile_grid(width: float, height: float, step_u: float, step_v: float, rotated: bool,
+               margin_u: float, margin_v: float) -> list:
+    """Top-left-origin grid points covering a page.
 
-    Rows run along the text direction; when ``rotated`` that direction is 45
-    degrees up and to the right, and the grid is laid out in that frame.
+    Rows run along u; when ``rotated`` that direction is 45 degrees up and to
+    the right, and the grid is laid out in that frame.
     """
     import math
 
-    step_u = text_width * 1.4 + size
-    step_v = size * 4
     cx, cy = width / 2, height / 2
     reach = math.hypot(width, height) / 2 + step_u
     c = math.sqrt(0.5) if rotated else 1.0
     s = math.sqrt(0.5) if rotated else 0.0
-    # u runs along the text; v runs perpendicular, down the page.
-    du, dv = (c, -s), (s, c)
+    du, dv = (c, -s), (s, c)  # u runs along the text; v runs perpendicular, down the page
     points = []
     v = -reach
     while v <= reach:
@@ -971,13 +969,49 @@ def _watermark_tile_points(width: float, height: float, size: float, text_width:
         while u <= reach:
             x = cx + u * du[0] + v * dv[0]
             y = cy + u * du[1] + v * dv[1]
-            if -step_u <= x <= width + step_u and -size <= y <= height + size:
-                points.append(((x, y), 45 if rotated else 0))
+            if -margin_u <= x <= width + margin_u and -margin_v <= y <= height + margin_v:
+                points.append((x, y))
             u += step_u
         v += step_v
     if len(points) > MAX_WATERMARK_TILES:
-        raise ValueError("Watermark would be tiled too many times; use a larger font size.")
+        raise ValueError("Watermark would be tiled too many times; make it larger.")
     return points
+
+
+def _watermark_tile_points(width: float, height: float, size: float, text_width: float, rotated: bool):
+    """Start points (and morph angle) for tiled text watermarks."""
+    step_u = text_width * 1.4 + size
+    pts = _tile_grid(width, height, step_u, size * 4, rotated, step_u, size)
+    return [(pt, 45 if rotated else 0) for pt in pts]
+
+
+MAX_WATERMARK_LOGO_BYTES = 5 * 1024 * 1024
+
+
+def _prepare_watermark_logo(data: bytes, opacity: float, rotated: bool):
+    """PNG bytes (opacity baked into alpha, pre-rotated 45 degrees if asked) plus the
+    unrotated pixel size. PyMuPDF cannot fade or rotate an inserted image itself."""
+    import io
+    from PIL import Image
+
+    if len(data) > MAX_WATERMARK_LOGO_BYTES:
+        raise ValueError("Logo image is too large (max 5 MB).")
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            fmt = im.format
+            im.load()
+            rgba = im.convert("RGBA")
+    except Exception:
+        raise ValueError("Logo must be a PNG or JPEG image.")
+    if fmt not in ("PNG", "JPEG"):
+        raise ValueError("Logo must be a PNG or JPEG image.")
+    size = rgba.size
+    rgba.putalpha(rgba.getchannel("A").point(lambda a: int(a * opacity)))
+    if rotated:
+        rgba = rgba.rotate(45, expand=True, resample=Image.BICUBIC)
+    out = io.BytesIO()
+    rgba.save(out, format="PNG")
+    return out.getvalue(), size
 
 
 def add_watermark(
@@ -991,8 +1025,13 @@ def add_watermark(
     font_size: int = 0,
     tile: bool = False,
     layer: str = "over",
+    logo_bytes: bytes = None,
+    logo_scale: float = 0.4,
 ) -> str:
-    """Stamp a text watermark on every page.
+    """Stamp a text (or, with ``logo_bytes``, a PNG/JPEG logo) watermark on every page.
+
+    A logo is ``logo_scale`` of the page width wide (0.05-1.0); text, color and
+    font_size are then ignored.
 
     color is ``#RRGGBB``; font_size 0 picks a size from the page width; tile
     repeats the text across the page (rotated 45 degrees when position is
@@ -1000,8 +1039,14 @@ def add_watermark(
     """
     import fitz
 
-    if not text or not text.strip():
+    if logo_bytes is None and (not text or not text.strip()):
         raise ValueError("Watermark text cannot be empty.")
+    try:
+        logo_scale = float(logo_scale)
+    except (TypeError, ValueError):
+        raise ValueError("logo_scale must be a number between 0.05 and 1.0.")
+    if not 0.05 <= logo_scale <= 1.0:
+        raise ValueError("logo_scale must be between 0.05 and 1.0.")
     try:
         opacity = float(opacity)
     except (TypeError, ValueError):
@@ -1020,6 +1065,10 @@ def add_watermark(
     if layer not in ("over", "under"):
         raise ValueError("layer must be 'over' or 'under'.")
     overlay = layer == "over"
+    rotated = position == "diagonal"
+    logo_png = logo_size = None
+    if logo_bytes is not None:
+        logo_png, logo_size = _prepare_watermark_logo(logo_bytes, opacity, rotated)
 
     input_file = Path(input_path)
     output_file = Path(output_dir) / branded_filename(input_file, "pdf")
@@ -1035,7 +1084,26 @@ def add_watermark(
                 # Pick a font size relative to page width.
                 size = font_size or max(24, int(rect.width / 12))
 
-                if tile:
+                if logo_png is not None:
+                    import math
+
+                    w = rect.width * logo_scale
+                    h = w * logo_size[1] / logo_size[0]
+                    k = math.sqrt(0.5) if rotated else 1.0
+                    # Drawn box: the logo itself, or the bounding box of the 45-degree turn.
+                    bw = (w + h) * k if rotated else w
+                    bh = (w + h) * k if rotated else h
+                    if tile:
+                        centres = _tile_grid(rect.width, rect.height, w * 1.4, h * 1.6, rotated, bw, bh)
+                    else:
+                        cy = rect.height / 2 if rotated else rect.height * {"top": 0.1, "center": 0.5, "bottom": 0.9}[position]
+                        centres = [(rect.width / 2, min(max(cy, bh / 2), rect.height - bh / 2))]
+                    for cx, cy in centres:
+                        page.insert_image(
+                            fitz.Rect(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2),
+                            stream=logo_png, overlay=overlay,
+                        )
+                elif tile:
                     for pt, morph_angle in _watermark_tile_points(
                         rect.width, rect.height, size,
                         fitz.get_text_length(text, fontname="helv", fontsize=size),

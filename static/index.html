@@ -324,6 +324,10 @@
                             <option value="over" selected>Over page content</option>
                             <option value="under">Under page content</option>
                         </select>
+                        <label class="helper-text" for="watermark-logo">Or use a logo image (PNG or JPG, replaces the text)</label>
+                        <input type="file" id="watermark-logo" accept="image/png,image/jpeg" aria-label="Watermark logo image">
+                        <label class="helper-text" for="watermark-logo-scale">Logo width: <span id="watermark-logo-scale-value">40%</span> of the page</label>
+                        <input type="range" id="watermark-logo-scale" min="0.05" max="1" step="0.05" value="0.4">
                         <label class="helper-text"><input type="checkbox" id="watermark-tile"> Tile across the page</label>
                         <button id="process-watermark-btn" class="primary-btn">Add Watermark</button>
                     </div>

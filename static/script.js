@@ -1277,7 +1277,8 @@ if (watermarkOpacityInput) {
 document.getElementById('process-watermark-btn').onclick = () => {
     if (!selectedFile) { ffNotify('Please select a file first.'); return; }
     const text = document.getElementById('watermark-text').value.trim();
-    if (!text) { ffNotify('Please enter watermark text.'); return; }
+    const logo = document.getElementById('watermark-logo')?.files?.[0] || null;
+    if (!text && !logo) { ffNotify('Please enter watermark text or choose a logo image.'); return; }
     const position = document.getElementById('watermark-position').value;
     const opacity = document.getElementById('watermark-opacity').value;
 
@@ -1290,6 +1291,10 @@ document.getElementById('process-watermark-btn').onclick = () => {
     formData.append('font_size', document.getElementById('watermark-size')?.value || '0');
     formData.append('layer', document.getElementById('watermark-layer')?.value || 'over');
     formData.append('tile', document.getElementById('watermark-tile')?.checked ? 'true' : 'false');
+    if (logo) {
+        formData.append('logo', logo);
+        formData.append('logo_scale', document.getElementById('watermark-logo-scale')?.value || '0.4');
+    }
 
     processAction('/api/pdf/watermark', 'Adding watermark...', formData);
 };
@@ -4175,3 +4180,8 @@ setInterval(() => {
     } catch (e) {}
 }, 60000);
 
+
+document.getElementById('watermark-logo-scale')?.addEventListener('input', (e) => {
+    const out = document.getElementById('watermark-logo-scale-value');
+    if (out) out.textContent = Math.round(parseFloat(e.target.value) * 100) + '%';
+});
