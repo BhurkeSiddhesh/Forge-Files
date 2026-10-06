@@ -127,3 +127,49 @@ def test_workflow_client_polls_the_job_registry_after_stream_loss():
     assert "jobId = data.job_id" in workflow
     assert "pollJobStatus(jobId, statusText" in workflow
     assert "'workflow'" in workflow
+
+
+def test_job_registry_prune_removes_only_expired_entries():
+    """JobRegistry.get() only expires an entry when something polls that exact
+    job_id. A workflow whose SSE consumer never disconnects — the common case,
+    the tab stayed open and read 'complete' straight off the stream — never
+    calls get() for its own job_id, so before this fix the entry sat in
+    app.state.jobs._entries forever: one leaked dict per job, for the life of
+    the process, on every box running this app. prune() must reclaim exactly
+    the entries old enough that get() would have expired them anyway, and
+    leave live ones (pending or just-finished) alone.
+    """
+    registry = main.JobRegistry()
+
+    old_done = registry.create()
+    registry.set_result(old_done, {"event": "complete", "download_token": "t1"})
+    old_pending = registry.create()
+    fresh_done = registry.create()
+    registry.set_result(fresh_done, {"event": "complete", "download_token": "t2"})
+
+    # Age the two "old" entries past FILE_TTL_SECONDS directly, the same way
+    # get()'s own expiry check works, without waiting in real time.
+    for job_id in (old_done, old_pending):
+        registry._entries[job_id]["created"] -= (main.FILE_TTL_SECONDS + 1)
+
+    removed = registry.prune()
+
+    assert removed == 2
+    assert set(registry._entries) == {fresh_done}
+    # fresh_done must still be fully intact, not merely "not deleted".
+    assert registry.get(fresh_done)["event"]["download_token"] == "t2"
+
+
+def test_cleanup_stale_files_loop_sweeps_the_job_registry():
+    """Reconnect/recovery for both execute_workflow and
+    api_convert_to_word_stream route through this one registry; verify the
+    periodic sweep (the only place anything would ever call prune() in a
+    process where no client happens to reconnect) actually drains it, mirroring
+    the already-wired rate_limiter.prune() call right above it."""
+    import inspect
+
+    body = inspect.getsource(main.cleanup_stale_files_loop)
+    assert "app.state.jobs.prune()" in body
+    rate_limiter_idx = body.index("app.state.rate_limiter.prune()")
+    jobs_idx = body.index("app.state.jobs.prune()")
+    assert rate_limiter_idx < jobs_idx, "jobs.prune() should run alongside rate_limiter.prune()"

@@ -611,6 +611,11 @@ async def cleanup_stale_files_loop():
         # more. The limiter's map would otherwise grow one entry per distinct
         # client seen since boot.
         app.state.rate_limiter.prune()
+        # Same reasoning applies to the SSE job registry (reconnect/recovery
+        # for execute_workflow and api_convert_to_word_stream): a job whose
+        # consumer never reconnects never calls jobs.get() for its own id, so
+        # without this it grows one entry per job for the life of the process.
+        app.state.jobs.prune()
         # Enforce the 90-day retention policy on funnel_events and operation_events.
         await run_in_threadpool(event_log.prune_expired_events)
         await asyncio.sleep(900)
@@ -1062,6 +1067,27 @@ class JobRegistry:
                 del self._entries[job_id]
                 return None
             return dict(entry)
+
+    def prune(self) -> int:
+        """Drop entries older than FILE_TTL_SECONDS. Returns the count removed.
+
+        get() only expires an entry when something looks it up by its exact
+        job_id — the reconnect/recovery path. A job whose SSE consumer never
+        disconnects (the common case: the browser tab stayed open and read the
+        'complete' event straight off the stream) never calls get() for its own
+        job_id, so its entry sits in _entries forever. That is the same
+        unbounded-growth shape SlidingWindowRateLimiter.prune() already exists
+        to fix for the rate limiter's per-client map; JobRegistry had no
+        equivalent, so cleanup_stale_files_loop's periodic sweep left this one
+        process-local dict growing by one entry per workflow/stream job for the
+        life of the process.
+        """
+        cutoff = time.monotonic() - FILE_TTL_SECONDS
+        with self._lock:
+            stale = [jid for jid, entry in self._entries.items() if entry["created"] <= cutoff]
+            for jid in stale:
+                del self._entries[jid]
+            return len(stale)
 
 
 app.state.jobs = JobRegistry()
