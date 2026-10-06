@@ -276,7 +276,14 @@
         if (L.str(fd, 'password', '')) throw new L.Unsupported('Encrypted PDFs use the server engine.', 'encrypted_pdf');
         var mode = L.str(fd, 'mode', 'structural');
         var result;
-        if (mode === 'lossy') result = await lossy(file, level, ctx.signal, ctx.onProgress);
+        if (mode === 'lossy') {
+            result = await lossy(file, level, ctx.signal, ctx.onProgress);
+            // Rasterising a small or already-lean PDF can grow it; never hand
+            // back a bigger file than the original.
+            if (result.bytes.length >= file.size) {
+                result = { bytes: new Uint8Array(await file.arrayBuffer()), noSaving: true };
+            }
+        }
         else if (mode === 'images') result = await images(file, level, ctx.signal, ctx.onProgress);
         else if (mode === 'structural') result = await structural(file, ctx.signal);
         else throw new L.Error('Invalid compression mode.');
@@ -298,7 +305,7 @@
                 compressed_size: size,
                 reduction_pct: Math.round(reduction * 10) / 10,
                 compression_mode: mode,
-                rasterized: mode === 'lossy',
+                rasterized: mode === 'lossy' && !result.noSaving,
                 dpi: result.dpi || null,
                 compression_note: note,
                 images_recompressed: result.imagesRecompressed == null ? null : result.imagesRecompressed,
