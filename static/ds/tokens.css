@@ -1,0 +1,39 @@
+/* Forge Files design-system tokens (from Claude Design project, 2026-10-05).
+   Scoped to .ff-ds so they do not collide with the legacy style.css variables
+   (--shadow-1/2, --font-sans, --success, --text-muted ...) during migration.
+   Wrap a page region (or <body>) in class="ff-ds" to opt in. Dark mode follows
+   the existing [data-theme="dark"] switch on <html>. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&display=swap");
+
+.ff-ds{--bg-page:#FAFAFA;--bg-panel:#FFFFFF;--bg-subtle:#F5F5F5;--bg-muted:#EFEFEF;
+--text-primary:#171717;--text-secondary:#5F5F5F;--text-muted:#8A8A8A;--text-inverse:#FFFFFF;
+--border-subtle:#EAEAEA;--border-default:#DADADA;--border-strong:#BDBDBD;
+--accent:#006FEE;--accent-hover:#005ED1;--accent-soft:#EAF4FF;
+--success:#17A673;--success-soft:#E8F7F1;--warning:#F5A524;--warning-soft:#FFF4D9;--danger:#E5484D;--danger-soft:#FDEBEC;
+--focus-ring:rgba(0,111,238,.25);
+--file-pdf:#E5484D;--file-word:#2B78E4;--file-excel:#20A464;--file-ppt:#E36C3A;--file-image:#C3479B;--file-zip:#7B61FF;
+--grad-brand:linear-gradient(100deg,#007cf0 0%,#7928ca 42%,#ff0080 70%,#f9cb28 100%);
+--font-brand:"Bricolage Grotesque","Geist",system-ui,sans-serif;--font-sans:"Geist",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--font-mono:"Geist Mono","SFMono-Regular",Consolas,"Liberation Mono",monospace;
+--text-xs:.75rem;--text-sm:.875rem;--text-base:1rem;--text-lg:1.125rem;--text-xl:1.25rem;--text-2xl:1.5rem;--text-3xl:2rem;--text-4xl:2.5rem;--text-5xl:clamp(2.75rem,6vw,4.25rem);
+--weight-body:400;--weight-label:500;--weight-heading:600;--weight-strong:700;
+--leading-tight:1.10;--leading-snug:1.30;--leading-body:1.55;--leading-relaxed:1.70;
+--tracking-body:-.005em;--tracking-h1:-.045em;--tracking-h2:-.03em;--tracking-h3:-.02em;
+--space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;--space-20:5rem;
+--radius-xs:4px;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-full:999px;
+--shadow-1:0 0 0 1px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.03);
+--shadow-2:0 0 0 1px rgba(0,0,0,.05),0 2px 4px rgba(0,0,0,.04),0 8px 20px rgba(0,0,0,.04);
+--shadow-popover:0 12px 40px rgba(0,0,0,.14);
+--duration-fast:120ms;--duration-normal:180ms;--duration-slow:260ms;--ease-standard:cubic-bezier(.2,.8,.2,1);
+--content-max:1280px;--workspace-max:1440px;--tap-min:44px;
+font-family:var(--font-sans);color:var(--text-primary);letter-spacing:var(--tracking-body)}
+[data-theme="dark"] .ff-ds,.ff-ds[data-theme="dark"]{--bg-page:#111111;--bg-panel:#171717;--bg-subtle:#1E1E1E;--bg-muted:#252525;
+--text-primary:#F5F5F5;--text-secondary:#B9B9B9;--text-muted:#858585;--text-inverse:#111111;
+--border-subtle:#282828;--border-default:#353535;--border-strong:#4A4A4A;
+--accent:#3B95FF;--accent-hover:#63AAFF;--accent-soft:rgba(59,149,255,.13);
+--success:#31C48D;--success-soft:rgba(49,196,141,.12);--warning:#F9B84A;--warning-soft:rgba(249,184,74,.12);--danger:#F06266;--danger-soft:rgba(240,98,102,.12);
+--focus-ring:rgba(59,149,255,.30);
+--shadow-1:0 0 0 1px rgba(255,255,255,.06);--shadow-2:0 0 0 1px rgba(255,255,255,.08),0 8px 20px rgba(0,0,0,.4);--shadow-popover:0 12px 40px rgba(0,0,0,.6)}
+.ff-ds *{box-sizing:border-box}
+.ff-ds :focus-visible{outline:none;box-shadow:0 0 0 3px var(--focus-ring);border-radius:var(--radius-md)}
+@media (prefers-reduced-motion:reduce){.ff-ds *{animation-duration:.01ms!important;transition-duration:.01ms!important}}

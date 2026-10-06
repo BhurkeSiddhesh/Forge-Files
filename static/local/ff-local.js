@@ -22,17 +22,19 @@
 //   * **Never regress.** `ffProcess()` returns a real `Response`, so callers
 //     keep their existing `response.ok` / `response.json()` / error handling
 //     untouched. If no local handler is registered for a path, or the handler
-//     throws anything that isn't a deliberate validation error, the request
-//     falls through to the server exactly as before. A bug in a handler costs
-//     an upload, not a broken tool.
+//     throws anything that isn't a deliberate validation error, the user is
+//     asked whether the server may take the file. A bug in a handler costs a
+//     prompt, not a broken tool and never a silent upload.
 //   * **Match the server byte-for-contract.** Handlers return the same
 //     `filename` (`<stem>_forgefiles.org.<ext>`) and the same `message` strings
 //     the Python endpoints return, so the UI needs no special-casing and a
 //     result is indistinguishable from a server-produced one.
 //   * **Refuse rather than guess.** Password-protected PDFs, formats the
 //     browser cannot decode, and anything else outside a handler's competence
-//     raise `FFLocalUnsupported` and defer to the server, which still has
-//     pikepdf/PyMuPDF/Pillow.
+//     raise `FFLocalUnsupported`. That never uploads on its own: the user is
+//     asked first (ff-server-gate.js), and declining stops the conversion. Only
+//     after an explicit yes does the server, which still has
+//     pikepdf/PyMuPDF/Pillow, get the file.
 //
 // Not ported (deliberately, they need the server): everything under
 // /api/word/*, /api/ppt/*, /api/excel/*, /api/pdf/convert-to-word*,
@@ -56,10 +58,13 @@
     }
     FFLocalError.prototype = Object.create(Error.prototype);
 
-    /** Outside this handler's competence. Silently defers to the server. */
-    function FFLocalUnsupported(message) {
+    /** Outside this handler's competence. Asks the user before using the server. */
+    function FFLocalUnsupported(message, code) {
         this.name = 'FFLocalUnsupported';
         this.message = message || 'not supported on-device';
+        // Bounded reason code (see ff-server-gate.js CODES) used for the consent
+        // dialog wording. The message itself is never shown to the user.
+        this.code = code || null;
     }
     FFLocalUnsupported.prototype = Object.create(Error.prototype);
 
@@ -168,6 +173,30 @@
     }
 
     /**
+     * The only way to the server. Resolves null when the user agreed to this
+     * upload, otherwise a ready-made "declined" Response and no request was made.
+     * Fails closed: with no consent module there is nobody to ask, so the answer
+     * is no.
+     */
+    async function consentOrDecline(path, code, extra) {
+        var gate = window.ffConsent;
+        var agreed = false;
+        try {
+            var req = { path: path, code: code };
+            if (extra && extra.reason) req.reason = extra.reason;
+            if (extra && extra.filename) req.filename = extra.filename;
+            agreed = !!(gate && await gate.request(req));
+        } catch (e) {
+            agreed = false;
+        }
+        if (agreed) return null;
+        return jsonResponse(499, {
+            detail: 'Cancelled. Your file was not uploaded.',
+            declined: true,
+        });
+    }
+
+    /**
      * Drop-in replacement for `fetch(apiUrl(path), {method:'POST', body: fd})`.
      *
      * Runs the operation on-device when a handler is registered and able;
@@ -175,12 +204,20 @@
      * return value is always a `Response`, so no call site needs to know which
      * of the two happened.
      */
-    async function ffProcess(path, formData) {
-        var handler = enabled() ? HANDLERS[path] : null;
+    async function ffProcess(path, formData, init) {
+        init = init || {};
+        // `init.serverOnly` skips the on-device handler: the caller (the workflow
+        // runner) has already decided this exact request needs the server and
+        // may pass `init.consent` ({reason, filename}) to word the dialog.
+        var handler = (enabled() && !init.serverOnly) ? HANDLERS[path] : null;
+        var code = init.serverCode || null;
 
         if (handler) {
             try {
-                var out = await handler(formData);
+                var out = await handler(formData, { signal: init.signal, onProgress: init.onProgress });
+                if (out instanceof Response) {
+                    return out;
+                }
                 var fields = publish(out.blob, out.filename);
                 return jsonResponse(200, Object.assign({
                     status: 'success',
@@ -195,19 +232,26 @@
                     // The user's input is wrong and the server would say so too.
                     return jsonResponse(400, { detail: err.message });
                 }
-                // Anything else is our problem, not theirs: log it (so it is
-                // findable) and let the server do the job.
+                // Cancelling is a decision, not a failure: never hand the file
+                // to the server because the user pressed Cancel.
+                if (err && err.name === 'AbortError') throw err;
+                // Anything else is our problem, not theirs: log it so it is
+                // findable, then ask before the server gets the file.
                 if (!(err instanceof FFLocalUnsupported)) {
-                    console.warn('[ff-local] ' + path + ' fell back to the server:', err);
+                    console.warn('[ff-local] ' + path + ' could not run on-device:', err);
                 }
+                code = err instanceof FFLocalUnsupported ? err.code : 'engine_unavailable';
             }
         }
+
+        var declined = await consentOrDecline(path, code, init.consent);
+        if (declined) return declined;
 
         var headers = {};
         if (window.__ffSession && window.__ffSession.access_token) {
             headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
         }
-        return fetch(window.apiUrl(path), { method: 'POST', body: formData, headers: headers });
+        return fetch(window.apiUrl(path), { method: 'POST', body: formData, headers: headers, signal: init.signal });
     }
 
     // ── FormData helpers ──────────────────────────────────────────────────
@@ -288,44 +332,150 @@
     // in index.html; the first PDF operation pulls it in and every later one
     // reuses the same promise.
 
-    var pdfLibPromise = null;
+    var vendorPromises = {};
 
     // Resolved from this script's own URL rather than hardcoded, because the
     // two builds mount these assets at different roots: `/static/local/` on the
     // website, `/local/` inside the Capacitor bundle (mobile/build-web.mjs
     // copies public/static to the app's web root). Sibling-relative is correct
     // in both, with the website layout as the fallback if `currentScript` is
-    // unavailable.
-    var VENDOR_URL = (function () {
+    // unavailable. It must be read while this script is executing:
+    // `document.currentScript` is null by the time a tool asks for a library.
+    var VENDOR_BASE = (function () {
         try {
             var self = document.currentScript && document.currentScript.src;
-            if (self) return new URL('../vendor/pdf-lib.min.js', self).href;
+            if (self) return new URL('../vendor/', self).href;
         } catch (e) { /* fall through */ }
-        return '/static/vendor/pdf-lib.min.js';
+        return '/static/vendor/';
     })();
 
-    function loadPdfLib() {
-        if (window.PDFLib) return Promise.resolve(window.PDFLib);
-        if (pdfLibPromise) return pdfLibPromise;
+    function vendorUrl(file) {
+        return VENDOR_BASE + file;
+    }
 
-        pdfLibPromise = new Promise(function (fulfil, fail) {
+    /** Load a vendored UMD script once; resolves to its window global. */
+    function loadVendor(file, globalName, version) {
+        if (window[globalName]) return Promise.resolve(window[globalName]);
+        if (vendorPromises[file]) return vendorPromises[file];
+
+        vendorPromises[file] = new Promise(function (fulfil, fail) {
             var el = document.createElement('script');
-            el.src = VENDOR_URL + '?v=1.17.1';
+            el.src = vendorUrl(file) + '?v=' + version;
             el.async = true;
             el.onload = function () {
-                if (window.PDFLib) fulfil(window.PDFLib);
-                else fail(new FFLocalUnsupported('pdf-lib loaded but did not register'));
+                if (window[globalName]) fulfil(window[globalName]);
+                else fail(new FFLocalUnsupported(file + ' loaded but did not register', 'engine_unavailable'));
             };
             el.onerror = function () {
                 // Reset so a later attempt can retry (the app may have been
                 // offline, or the asset may not be in this build).
-                pdfLibPromise = null;
-                fail(new FFLocalUnsupported('pdf-lib could not be loaded'));
+                delete vendorPromises[file];
+                fail(new FFLocalUnsupported(file + ' could not be loaded', 'engine_unavailable'));
             };
             document.head.appendChild(el);
         });
 
-        return pdfLibPromise;
+        return vendorPromises[file];
+    }
+
+    function loadPdfLib() { return loadVendor('pdf-lib.min.js', 'PDFLib', '1.17.1'); }
+    function loadJsZip() { return loadVendor('jszip.min.js', 'JSZip', '3.10.2'); }
+    function loadExcelJs() { return loadVendor('exceljs.min.js', 'ExcelJS', '4.4.0'); }
+
+    var PDFJS_VERSION = '6.4.299';
+    var pdfJsPromise = null;
+
+    /**
+     * pdf.js is an ES module, so it is imported rather than script-tagged. The
+     * worker, wasm decoders, standard fonts, CMaps and ICC profile are all
+     * same-origin files under vendor/pdfjs/ (never a CDN). Tests may pre-set
+     * `window.pdfjsLib`.
+     */
+    function loadPdfJs() {
+        if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+        if (pdfJsPromise) return pdfJsPromise;
+        pdfJsPromise = import(vendorUrl('pdfjs/pdf.min.mjs') + '?v=' + PDFJS_VERSION).then(function (mod) {
+            mod.GlobalWorkerOptions.workerSrc = vendorUrl('pdfjs/pdf.worker.min.mjs') + '?v=' + PDFJS_VERSION;
+            window.pdfjsLib = mod;
+            return mod;
+        }).catch(function () {
+            pdfJsPromise = null;
+            throw new FFLocalUnsupported('pdf.js could not be loaded', 'engine_unavailable');
+        });
+        return pdfJsPromise;
+    }
+
+    function isPasswordError(err) {
+        return !!(err && (err.name === 'PasswordException' || /password/i.test(String(err.message || ''))));
+    }
+
+    /**
+     * Open a File with pdf.js: no script execution, no XFA, and every font,
+     * CMap, decoder and ICC profile from our own origin. Resolves a document the
+     * caller must `destroy()`. Encrypted input becomes `Unsupported('encrypted')`;
+     * anything else that fails to open becomes `Unsupported('unsupported_structure')`.
+     */
+    async function openPdfJs(file) {
+        var pdfjs = await loadPdfJs();
+        var buf = file.arrayBuffer ? await file.arrayBuffer() : await new Promise(function (fulfil, fail) {
+            var reader = new FileReader();
+            reader.onload = function () { fulfil(reader.result); };
+            reader.onerror = function () { fail(reader.error); };
+            reader.readAsArrayBuffer(file);
+        });
+        var task = pdfjs.getDocument({
+            data: new Uint8Array(buf),
+            isEvalSupported: false,
+            enableXfa: false,
+            stopAtErrors: false,
+            standardFontDataUrl: vendorUrl('pdfjs/standard_fonts/'),
+            cMapUrl: vendorUrl('pdfjs/cmaps/'),
+            cMapPacked: true,
+            wasmUrl: vendorUrl('pdfjs/wasm/'),
+            iccUrl: vendorUrl('pdfjs/iccs/'),
+        });
+        try {
+            return await task.promise;
+        } catch (err) {
+            try { await task.destroy(); } catch (e) { /* already gone */ }
+            if (isPasswordError(err)) throw new FFLocalUnsupported('PDF is encrypted', 'encrypted');
+            throw new FFLocalUnsupported('pdf.js could not open this PDF', 'unsupported_structure');
+        }
+    }
+
+    /** The original name without extension or brand suffix (utils.py::original_stem). */
+    function stem(originalName) {
+        var base = String(originalName || 'file');
+        var dot = base.lastIndexOf('.');
+        var out = dot > 0 ? base.slice(0, dot) : base;
+        return out.replace(BRAND_SUFFIX, '');
+    }
+
+    /**
+     * True on phones and in the native shell, where memory is the limit.
+     * Handlers use it to pick the tighter of their two resource budgets.
+     */
+    function constrained() {
+        if (isNative()) return true;
+        try {
+            return !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** Let the browser paint and handle input between units of work. */
+    function tick() {
+        return new Promise(function (fulfil) { setTimeout(fulfil, 0); });
+    }
+
+    /** Throw the standard abort error when the caller's signal has fired. */
+    function checkAbort(signal) {
+        if (signal && signal.aborted) {
+            var err = new Error('Aborted');
+            err.name = 'AbortError';
+            throw err;
+        }
     }
 
     // ── Native file delivery ──────────────────────────────────────────────
@@ -386,11 +536,13 @@
     window.ffProcess = ffProcess;
     window.ffLocal = {
         register: register,
+        consentOrDecline: consentOrDecline,
         enabled: enabled,
         capable: CAPABLE,
         handlers: HANDLERS,
 
         isLocalToken: isLocalToken,
+        publish: publish,
         resolve: resolve,
         release: release,
 
@@ -406,6 +558,15 @@
         brandedName: brandedName,
         hexId: hexId,
         loadPdfLib: loadPdfLib,
+        loadJsZip: loadJsZip,
+        loadExcelJs: loadExcelJs,
+        loadPdfJs: loadPdfJs,
+        openPdfJs: openPdfJs,
+        vendorUrl: vendorUrl,
+        stem: stem,
+        constrained: constrained,
+        tick: tick,
+        checkAbort: checkAbort,
         isNative: isNative,
         nativeShare: nativeShare,
     };

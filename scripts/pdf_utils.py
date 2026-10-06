@@ -273,7 +273,55 @@ def _split_pdf_groups(total_pages: int, mode: str, ranges: str = None, n: int = 
             raise ValueError("Provide one or more page ranges to split.")
         return groups
 
-    raise ValueError("mode must be one of: each, every_n, ranges")
+    raise ValueError("mode must be one of: each, every_n, ranges, by_size")
+
+
+def _parse_split_max_mb(max_mb) -> int:
+    """Validated byte limit for the by_size split mode."""
+    try:
+        value = float(max_mb)
+    except (TypeError, ValueError):
+        raise ValueError("max_mb must be a number between 0.1 and 500.")
+    if not 0.1 <= value <= 500:
+        raise ValueError("max_mb must be between 0.1 and 500.")
+    return int(value * 1024 * 1024)
+
+
+def _split_groups_by_size(total_pages: int, max_bytes: int, part_bytes) -> List[tuple]:
+    """Greedy page packing: each part is the longest run of pages that still fits.
+
+    ``part_bytes(indices)`` returns the serialised PDF for those pages. Resources
+    shared across pages mean size is not additive, so each run is found by
+    binary search over its length. A single page larger than the limit still
+    becomes its own part. Returns ``[(indices, pdf_bytes), ...]``.
+    """
+    if total_pages > MAX_PDF_RENDER_PAGES:
+        raise ValueError(f"PDF has too many pages to split at once (max {MAX_PDF_RENDER_PAGES}).")
+    parts = []
+    start = 0
+    while start < total_pages:
+        cache = {}
+
+        def attempt(k, start=start, cache=cache):
+            if k not in cache:
+                cache[k] = part_bytes(list(range(start, start + k)))
+            return cache[k]
+
+        lo, hi = 2, total_pages - start
+        best = 1
+        # A page that alone exceeds the limit is emitted at once; searching longer runs
+        # would only serialise bigger and bigger candidates to reach the same answer.
+        if len(attempt(1)) > max_bytes:
+            hi = 0
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if len(attempt(mid)) <= max_bytes:
+                best, lo = mid, mid + 1
+            else:
+                hi = mid - 1
+        parts.append((list(range(start, start + best)), attempt(best)))
+        start += best
+    return parts
 
 
 def _split_pdf_member_name(indices: List[int]) -> str:
@@ -291,8 +339,12 @@ def split_pdf_to_zip(
     ranges: str = None,
     n: int = None,
     password: str = None,
+    max_mb: float = None,
 ) -> dict:
-    """Split a PDF into several PDFs and package them in a ZIP."""
+    """Split a PDF into several PDFs and package them in a ZIP.
+
+    mode ``by_size`` packs pages into parts of at most ``max_mb`` megabytes.
+    """
     import io
     import zipfile
 
@@ -302,15 +354,24 @@ def split_pdf_to_zip(
 
     try:
         with pikepdf.open(decrypted_path) as pdf:
-            groups = _split_pdf_groups(len(pdf.pages), mode, ranges, n)
+            def build(indices):
+                out_pdf = pikepdf.Pdf.new()
+                for idx in indices:
+                    out_pdf.pages.append(pdf.pages[idx])
+                buf = io.BytesIO()
+                out_pdf.save(buf)
+                return buf.getvalue()
+
+            if (mode or "").strip().lower() == "by_size":
+                parts = _split_groups_by_size(len(pdf.pages), _parse_split_max_mb(max_mb), build)
+                groups = [indices for indices, _ in parts]
+            else:
+                groups = _split_pdf_groups(len(pdf.pages), mode, ranges, n)
+                parts = None
             with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for indices in groups:
-                    out_pdf = pikepdf.Pdf.new()
-                    for idx in indices:
-                        out_pdf.pages.append(pdf.pages[idx])
-                    buf = io.BytesIO()
-                    out_pdf.save(buf)
-                    zf.writestr(_split_pdf_member_name(indices), buf.getvalue())
+                for i, indices in enumerate(groups):
+                    data = parts[i][1] if parts else build(indices)
+                    zf.writestr(_split_pdf_member_name(indices), data)
     finally:
         if needs_cleanup:
             Path(decrypted_path).unlink(missing_ok=True)
@@ -934,6 +995,97 @@ def merge_pdfs(input_paths: List[str], output_dir: str, passwords: List[str] = N
     return str(output_file)
 
 
+MAX_WATERMARK_TILES = 2000
+MAX_WATERMARK_GRID_STEPS = 400_000  # loop iterations, before the on-page filter
+MAX_WATERMARK_LOGO_PIXELS = 25_000_000
+MAX_WATERMARK_LOGO_SIDE = 8000
+
+
+def parse_hex_color(value: str) -> tuple:
+    """``#RRGGBB`` (or ``RRGGBB``) to an (r, g, b) tuple of 0-1 floats."""
+    import re
+
+    text = (value or "").strip()
+    if not re.fullmatch(r"#?[0-9a-fA-F]{6}", text):
+        raise ValueError("color must be a #RRGGBB hex value.")
+    text = text.lstrip("#")
+    return tuple(int(text[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def _tile_grid(width: float, height: float, step_u: float, step_v: float, rotated: bool,
+               margin_u: float, margin_v: float) -> list:
+    """Top-left-origin grid points covering a page.
+
+    Rows run along u; when ``rotated`` that direction is 45 degrees up and to
+    the right, and the grid is laid out in that frame.
+    """
+    import math
+
+    cx, cy = width / 2, height / 2
+    reach = math.hypot(width, height) / 2 + step_u
+    if step_u <= 0 or step_v <= 0 or (2 * reach / step_u + 1) * (2 * reach / step_v + 1) > MAX_WATERMARK_GRID_STEPS:
+        raise ValueError("Watermark would be tiled too many times; make it larger.")
+    c = math.sqrt(0.5) if rotated else 1.0
+    s = math.sqrt(0.5) if rotated else 0.0
+    du, dv = (c, -s), (s, c)  # u runs along the text; v runs perpendicular, down the page
+    points = []
+    v = -reach
+    while v <= reach:
+        u = -reach
+        while u <= reach:
+            x = cx + u * du[0] + v * dv[0]
+            y = cy + u * du[1] + v * dv[1]
+            if -margin_u <= x <= width + margin_u and -margin_v <= y <= height + margin_v:
+                if len(points) >= MAX_WATERMARK_TILES:
+                    raise ValueError("Watermark would be tiled too many times; make it larger.")
+                points.append((x, y))
+            u += step_u
+        v += step_v
+    return points
+
+
+def _watermark_tile_points(width: float, height: float, size: float, text_width: float, rotated: bool):
+    """Start points (and morph angle) for tiled text watermarks."""
+    step_u = text_width * 1.4 + size
+    pts = _tile_grid(width, height, step_u, size * 4, rotated, step_u, size)
+    return [(pt, 45 if rotated else 0) for pt in pts]
+
+
+MAX_WATERMARK_LOGO_BYTES = 5 * 1024 * 1024
+
+
+def _prepare_watermark_logo(data: bytes, opacity: float, rotated: bool):
+    """PNG bytes (opacity baked into alpha, pre-rotated 45 degrees if asked) plus the
+    unrotated pixel size. PyMuPDF cannot fade or rotate an inserted image itself."""
+    import io
+    from PIL import Image
+
+    if len(data) > MAX_WATERMARK_LOGO_BYTES:
+        raise ValueError("Logo image is too large (max 5 MB).")
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            fmt = im.format
+            width, height = im.size  # header only; nothing is decoded yet
+            if fmt not in ("PNG", "JPEG"):
+                raise ValueError("Logo must be a PNG or JPEG image.")
+            if (width * height > MAX_WATERMARK_LOGO_PIXELS
+                    or max(width, height) > MAX_WATERMARK_LOGO_SIDE):
+                raise ValueError("Logo image dimensions are too large.")
+            im.load()
+            rgba = im.convert("RGBA")
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("Logo must be a PNG or JPEG image.")
+    size = rgba.size
+    rgba.putalpha(rgba.getchannel("A").point(lambda a: int(a * opacity)))
+    if rotated:
+        rgba = rgba.rotate(45, expand=True, resample=Image.BICUBIC)
+    out = io.BytesIO()
+    rgba.save(out, format="PNG")
+    return out.getvalue(), size
+
+
 def add_watermark(
     input_path: str,
     output_dir: str,
@@ -941,12 +1093,32 @@ def add_watermark(
     position: str = "diagonal",
     opacity: float = 0.3,
     password: str = None,
+    color: str = "#808080",
+    font_size: int = 0,
+    tile: bool = False,
+    layer: str = "over",
+    logo_bytes: bytes = None,
+    logo_scale: float = 0.4,
 ) -> str:
-    """Stamp a text watermark on every page."""
+    """Stamp a text (or, with ``logo_bytes``, a PNG/JPEG logo) watermark on every page.
+
+    A logo is ``logo_scale`` of the page width wide (0.05-1.0); text, color and
+    font_size are then ignored.
+
+    color is ``#RRGGBB``; font_size 0 picks a size from the page width; tile
+    repeats the text across the page (rotated 45 degrees when position is
+    ``diagonal``); layer ``under`` places it beneath the page content.
+    """
     import fitz
 
-    if not text or not text.strip():
+    if logo_bytes is None and (not text or not text.strip()):
         raise ValueError("Watermark text cannot be empty.")
+    try:
+        logo_scale = float(logo_scale)
+    except (TypeError, ValueError):
+        raise ValueError("logo_scale must be a number between 0.05 and 1.0.")
+    if not 0.05 <= logo_scale <= 1.0:
+        raise ValueError("logo_scale must be between 0.05 and 1.0.")
     try:
         opacity = float(opacity)
     except (TypeError, ValueError):
@@ -955,6 +1127,20 @@ def add_watermark(
         raise ValueError("Opacity must be between 0.1 and 1.0.")
     if position not in ("diagonal", "top", "center", "bottom"):
         raise ValueError("Position must be one of: diagonal, top, center, bottom.")
+    rgb = parse_hex_color(color)
+    try:
+        font_size = int(font_size)
+    except (TypeError, ValueError):
+        raise ValueError("font_size must be an integer.")
+    if font_size != 0 and not 8 <= font_size <= 200:
+        raise ValueError("font_size must be 0 (auto) or between 8 and 200.")
+    if layer not in ("over", "under"):
+        raise ValueError("layer must be 'over' or 'under'.")
+    overlay = layer == "over"
+    rotated = position == "diagonal"
+    logo_png = logo_size = None
+    if logo_bytes is not None:
+        logo_png, logo_size = _prepare_watermark_logo(logo_bytes, opacity, rotated)
 
     input_file = Path(input_path)
     output_file = Path(output_dir) / branded_filename(input_file, "pdf")
@@ -968,10 +1154,45 @@ def add_watermark(
             for page in doc:
                 rect = page.rect
                 # Pick a font size relative to page width.
-                font_size = max(24, int(rect.width / 12))
-                color = (0.5, 0.5, 0.5)
+                size = font_size or max(24, int(rect.width / 12))
 
-                if position == "diagonal":
+                if logo_png is not None:
+                    import math
+
+                    w = rect.width * logo_scale
+                    h = w * logo_size[1] / logo_size[0]
+                    k = math.sqrt(0.5) if rotated else 1.0
+                    # Drawn box: the logo itself, or the bounding box of the 45-degree turn.
+                    bw = (w + h) * k if rotated else w
+                    bh = (w + h) * k if rotated else h
+                    if tile:
+                        centres = _tile_grid(rect.width, rect.height, w * 1.4, h * 1.6, rotated, bw, bh)
+                    else:
+                        cy = rect.height / 2 if rotated else rect.height * {"top": 0.1, "center": 0.5, "bottom": 0.9}[position]
+                        centres = [(rect.width / 2, min(max(cy, bh / 2), rect.height - bh / 2))]
+                    for cx, cy in centres:
+                        shown = fitz.Rect(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2)
+                        # Coordinates above are on the page as displayed; insert_image works in
+                        # the unrotated page space, so map the box back and turn the picture
+                        # against the page rotation to keep it upright on screen.
+                        target = shown * page.derotation_matrix
+                        target.normalize()
+                        page.insert_image(
+                            target, stream=logo_png, overlay=overlay, rotate=(-page.rotation) % 360,
+                        )
+                elif tile:
+                    for pt, morph_angle in _watermark_tile_points(
+                        rect.width, rect.height, size,
+                        fitz.get_text_length(text, fontname="helv", fontsize=size),
+                        position == "diagonal",
+                    ):
+                        point = fitz.Point(*pt)
+                        kw = {"morph": (point, fitz.Matrix(1, 1).prerotate(morph_angle))} if morph_angle else {}
+                        page.insert_text(
+                            point, text, fontname="helv", fontsize=size,
+                            color=rgb, fill_opacity=opacity, overlay=overlay, **kw,
+                        )
+                elif position == "diagonal":
                     # Diagonal stamp anchored at page center (PyMuPDF rotate= must be a
                     # multiple of 90, so apply the 45° rotation via morph).
                     point = fitz.Point(rect.width / 2, rect.height / 2)
@@ -979,9 +1200,10 @@ def add_watermark(
                         point,
                         text,
                         fontname="helv",
-                        fontsize=font_size,
-                        color=color,
+                        fontsize=size,
+                        color=rgb,
                         fill_opacity=opacity,
+                        overlay=overlay,
                         morph=(point, fitz.Matrix(1, 1).prerotate(45)),
                     )
                 else:
@@ -992,15 +1214,16 @@ def add_watermark(
                     else:  # bottom
                         y = rect.height * 0.9
                     # Rough horizontal centering.
-                    text_width = font_size * 0.5 * len(text)
+                    text_width = size * 0.5 * len(text)
                     x = max(10, (rect.width - text_width) / 2)
                     page.insert_text(
                         fitz.Point(x, y),
                         text,
                         fontname="helv",
-                        fontsize=font_size,
-                        color=color,
+                        fontsize=size,
+                        color=rgb,
                         fill_opacity=opacity,
+                        overlay=overlay,
                     )
             doc.save(str(output_file), garbage=3, deflate=True)
         finally:
@@ -1018,10 +1241,17 @@ def pdf_to_images_zip(
     dpi: int = 150,
     fmt: str = "jpg",
     password: str = None,
+    mode: str = "pages",
 ) -> dict:
-    """Render every PDF page to an image and return a zip."""
+    """Render every PDF page to an image (mode="pages") or extract the images
+    embedded in the PDF without re-encoding them (mode="embedded"), as a zip."""
     import zipfile
     import fitz
+
+    if mode not in ("pages", "embedded"):
+        raise ValueError("mode must be 'pages' or 'embedded'.")
+    if mode == "embedded":
+        return _pdf_extract_embedded_images_zip(input_path, output_dir, password)
 
     try:
         dpi = int(dpi)
@@ -1062,6 +1292,63 @@ def pdf_to_images_zip(
             Path(decrypted_path).unlink(missing_ok=True)
 
     return {"output_path": str(output_file), "page_count": page_count}
+
+
+MAX_EMBEDDED_IMAGES = 500
+MAX_EMBEDDED_BYTES = 200 * 1024 * 1024
+MAX_EMBEDDED_IMAGE_PIXELS = 100_000_000
+MAX_EMBEDDED_IMAGE_SIDE = 30_000
+MAX_EMBEDDED_DECODED_BYTES = 400 * 1024 * 1024
+
+
+def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password: str = None) -> dict:
+    """Zip every image XObject referenced by a page, in object-number order."""
+    import zipfile
+    import fitz
+
+    input_file = Path(input_path)
+    output_file = Path(output_dir) / branded_filename(input_file, "zip")
+    decrypted_path, needs_cleanup = _get_decrypted_pdf_path(input_path, password)
+    try:
+        doc = fitz.open(decrypted_path)
+        try:
+            dims = {}
+            for page in doc:
+                for img in page.get_images(full=True):
+                    # width, height, bits per component, colour space name (image dictionary)
+                    dims[img[0]] = (img[2], img[3], img[4], str(img[5] or ""))
+            xrefs = sorted(dims)
+            if not xrefs:
+                raise ValueError("No embedded images were found in this PDF.")
+            if len(xrefs) > MAX_EMBEDDED_IMAGES:
+                raise ValueError(f"PDF has too many embedded images (max {MAX_EMBEDDED_IMAGES}).")
+            # Check declared sizes before extract_image(), which may decode a whole raster.
+            for xref in xrefs:
+                width, height, bpc, colorspace = dims[xref]
+                components = 1 if "Gray" in colorspace else 4 if "CMYK" in colorspace else 3
+                decoded = width * height * components * max(1, (int(bpc or 8) + 7) // 8)
+                if (width * height > MAX_EMBEDDED_IMAGE_PIXELS
+                        or max(width, height) > MAX_EMBEDDED_IMAGE_SIDE
+                        or decoded > MAX_EMBEDDED_DECODED_BYTES):
+                    raise ValueError("An embedded image is too large to extract.")
+            total = 0
+            with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for n, xref in enumerate(xrefs, start=1):
+                    info = doc.extract_image(xref)
+                    if not info:
+                        continue
+                    total += len(info["image"])
+                    if total > MAX_EMBEDDED_BYTES:
+                        raise ValueError("Embedded images exceed the extraction size limit.")
+                    ext = "jpg" if info["ext"] in ("jpeg", "jpg") else info["ext"]
+                    zf.writestr(f"{original_stem(input_file)}_img_{n:03d}.{ext}", info["image"])
+            count = len(xrefs)
+        finally:
+            doc.close()
+    finally:
+        if needs_cleanup:
+            Path(decrypted_path).unlink(missing_ok=True)
+    return {"output_path": str(output_file), "page_count": count}
 
 
 def sign_pdf(
@@ -1153,6 +1440,75 @@ def merge_docx_files(input_files: list, output_file: str) -> None:
         composer.append(Document_docx(str(docx_path)))
 
     composer.save(output_file)
+
+def _crop_margins_in_page_space(rotation: int, top: float, bottom: float, left: float, right: float):
+    """Map margins measured on the page as displayed to (left, top, right, bottom)
+    margins on the unrotated page, in the same units."""
+    rotation %= 360
+    if rotation == 90:
+        return top, right, bottom, left
+    if rotation == 180:
+        return right, bottom, left, top
+    if rotation == 270:
+        return bottom, left, top, right
+    return left, top, right, bottom
+
+
+def crop_pdf(
+    input_path: str,
+    output_dir: str,
+    top: float = 0,
+    bottom: float = 0,
+    left: float = 0,
+    right: float = 0,
+    pages: str = None,
+    password: str = None,
+) -> str:
+    """Crop pages by setting the CropBox inwards by a percentage of the displayed page.
+
+    Margins are percentages (0-90) of the displayed height (top, bottom) or
+    width (left, right). The page content is not removed, only hidden.
+    """
+    try:
+        margins = [float(v) for v in (top, bottom, left, right)]
+    except (TypeError, ValueError):
+        raise ValueError("Crop margins must be numbers.")
+    top, bottom, left, right = margins
+    if any(not 0 <= v <= 90 for v in margins):
+        raise ValueError("Each crop margin must be between 0 and 90 percent.")
+    if top + bottom > 90 or left + right > 90:
+        raise ValueError("Opposite crop margins must add up to at most 90 percent.")
+    if not any(margins):
+        raise ValueError("Choose at least one margin to crop.")
+
+    input_file = Path(input_path)
+    output_file = Path(output_dir) / branded_filename(input_file, "pdf")
+    decrypted_path, needs_cleanup = _get_decrypted_pdf_path(input_path, password)
+    try:
+        with pikepdf.open(decrypted_path) as pdf:
+            total_pages = len(pdf.pages)
+            selected = list(range(total_pages)) if pages is None else _parse_page_selection(pages, total_pages)
+            for idx in selected:
+                page = pdf.pages[idx]
+                x0, y0, x1, y1 = (float(v) for v in page.cropbox)
+                x0, x1 = min(x0, x1), max(x0, x1)
+                y0, y1 = min(y0, y1), max(y0, y1)
+                rotation = int(page.get("/Rotate", 0)) % 360
+                shown_w, shown_h = (y1 - y0, x1 - x0) if rotation in (90, 270) else (x1 - x0, y1 - y0)
+                m_left, m_top, m_right, m_bottom = _crop_margins_in_page_space(
+                    rotation,
+                    shown_h * top / 100, shown_h * bottom / 100, shown_w * left / 100, shown_w * right / 100,
+                )
+                page.cropbox = [
+                    round(x0 + m_left, 3), round(y0 + m_bottom, 3),
+                    round(x1 - m_right, 3), round(y1 - m_top, 3),
+                ]
+            pdf.save(output_file)
+    finally:
+        if needs_cleanup:
+            Path(decrypted_path).unlink(missing_ok=True)
+    return str(output_file)
+
 
 def rotate_pdf(input_path: str, output_dir: str, angle: int, pages: str = None, password: str = None) -> str:
     """Rotate PDF pages by specified angle (90, 180, 270).
@@ -2609,8 +2965,12 @@ def organize_pdf(
     output_dir: str,
     page_order: List[int],
     password: str = None,
+    remove_pages: str = None,
 ) -> str:
     """Reorder, delete, or duplicate PDF pages.
+
+    ``remove_pages`` (e.g. ``"2,4-6"``) instead keeps every page except those,
+    in their original order; ``page_order`` is then ignored.
 
     Args:
         input_path: Path to input PDF.
@@ -2623,7 +2983,7 @@ def organize_pdf(
     Returns:
         Path to the reorganized PDF.
     """
-    if not page_order:
+    if not page_order and not (remove_pages and remove_pages.strip()):
         raise ValueError("page_order cannot be empty.")
 
     input_file = Path(input_path)
@@ -2634,6 +2994,11 @@ def organize_pdf(
     try:
         with pikepdf.open(decrypted_path) as pdf:
             total = len(pdf.pages)
+            if remove_pages and remove_pages.strip():
+                removed = set(_parse_page_selection(remove_pages, total))
+                page_order = [i + 1 for i in range(total) if i not in removed]
+                if not page_order:
+                    raise ValueError("You cannot remove every page.")
             # Validate all page numbers
             for pnum in page_order:
                 if not isinstance(pnum, int) or pnum < 1 or pnum > total:
@@ -2665,6 +3030,8 @@ def add_page_numbers(
     skip_first: int = 0,
     fmt: str = "decimal",
     password: str = None,
+    template: str = "{n}",
+    end_page: int = 0,
 ) -> str:
     """Insert page numbers on each page of a PDF.
 
@@ -2678,6 +3045,9 @@ def add_page_numbers(
         skip_first: Number of pages to skip from the beginning (e.g., cover page).
         fmt: 'decimal' (1,2,3), 'roman' (I,II,III), 'alpha' (A,B,C).
         password: PDF password if encrypted.
+        template: Label text; ``{n}`` is the formatted number and ``{total}``
+                  the document page count (e.g. ``"Page {n} of {total}"``).
+        end_page: Last page (1-based) to number; 0 means the final page.
 
     Returns:
         Path to the numbered PDF.
@@ -2694,6 +3064,13 @@ def add_page_numbers(
         raise ValueError("start_number must be >= 1.")
     if font_size < 4 or font_size > 72:
         raise ValueError("font_size must be between 4 and 72.")
+    template = template or "{n}"
+    if "{n}" not in template:
+        raise ValueError("template must contain {n}.")
+    if len(template) > 100 or not all(32 <= ord(c) < 127 for c in template):
+        raise ValueError("template must be printable ASCII, at most 100 characters.")
+    if end_page < 0:
+        raise ValueError("end_page must be >= 0.")
 
     def _to_roman(n: int) -> str:
         val = [(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
@@ -2714,16 +3091,17 @@ def add_page_numbers(
     try:
         doc = fitz.open(decrypted_path)
         for i, page in enumerate(doc):
-            if i < skip_first:
+            if i < skip_first or (end_page and i >= end_page):
                 continue
 
             page_num = start_number + (i - skip_first)
             if fmt == "roman":
-                label = _to_roman(page_num)
+                number = _to_roman(page_num)
             elif fmt == "alpha":
-                label = chr(64 + page_num) if page_num <= 26 else str(page_num)
+                number = chr(64 + page_num) if page_num <= 26 else str(page_num)
             else:
-                label = str(page_num)
+                number = str(page_num)
+            label = template.replace("{n}", number).replace("{total}", str(len(doc)))
 
             rect = page.rect
             margin = 20

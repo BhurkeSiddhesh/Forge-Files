@@ -20,11 +20,19 @@ import html
 import hmac
 import json
 import logging
+import mimetypes
 from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar, Token
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
+
+# ES modules (vendored pdf.js is .mjs) are refused by browsers unless served as
+# a JavaScript MIME type, and the platform mime tables don't reliably know .mjs
+# (Windows and minimal Linux images answer text/plain). Register before the
+# static mount below is created.
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
 
 # --- Logging Setup ---
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -48,6 +56,7 @@ from scripts.pdf_utils import (
     compress_pdf,
     merge_pdfs,
     add_watermark,
+    crop_pdf,
     pdf_to_images_zip,
     sign_pdf,
     rotate_pdf,
@@ -195,11 +204,34 @@ async def canonical_host_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# On-device Office engine (LibreOffice WASM) needs SharedArrayBuffer, so its page
+# must be cross-origin isolated: COOP same-origin (already sent everywhere) plus
+# COEP require-corp. Only this dedicated, ad-free route and the engine and viewer
+# files it loads get COEP; the rest of the site is untouched because COEP can
+# block third-party ads. Worker scripts must carry COEP themselves, which is why
+# the vendor directories are listed here and not just the page.
+_ISOLATED_PREFIXES = (
+    "/on-device-office",
+    "/static/on-device-office/",
+    "/static/vendor/lo-wasm/",
+    "/static/vendor/pdfjs/",
+    "/static/vendor/jszip.min.js",
+)
+_ENGINE_PREFIX = "/static/vendor/lo-wasm/"
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    path = request.url.path
+    if path.startswith(_ISOLATED_PREFIXES):
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        if path.startswith(_ENGINE_PREFIX) and response.status_code == 200 and not path.endswith("MANIFEST.json"):
+            # Version-pinned directory: safe to cache for a year.
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").lower()
     if proto == "https":
         response.headers.setdefault(
@@ -238,6 +270,15 @@ MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 MAX_UPLOAD_TOTAL_MB_ENV = os.environ.get("MAX_UPLOAD_TOTAL_MB", "").strip()
 DISABLE_AI = os.environ.get("DISABLE_AI", "0") == "1"
 FILE_TTL_SECONDS = int(os.environ.get("FILE_TTL_SECONDS", "3600"))
+# A finished result is deleted the moment it is downloaded; one that is never
+# downloaded is swept after this long. Shorter than FILE_TTL_SECONDS on purpose:
+# that value is the safety net for uploads and background jobs, where a long
+# conversion must not lose its input mid-run, whereas a finished result has no
+# reason to outlive the visitor's session.
+RESULT_TTL_SECONDS = int(os.environ.get("RESULT_TTL_SECONDS", "600"))
+# How often the sweeper wakes. Must stay well under RESULT_TTL_SECONDS or the
+# stated retention is off by up to one interval.
+SWEEP_INTERVAL_SECONDS = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "60"))
 # Bounds how many steps a single /api/workflow/execute request can chain, so a
 # caller can't pair a huge step list with the heavy-tier rate limit to pin the
 # server on one "request".
@@ -328,18 +369,33 @@ def _build_consent_banner() -> str:
         return ""
     return (
         '<div id="ff-consent" role="dialog" aria-live="polite" aria-label="Cookie consent" hidden'
-        ' style="position:fixed;left:0;right:0;bottom:0;z-index:9999;display:none;flex-wrap:wrap;'
-        'gap:12px;align-items:center;justify-content:center;padding:14px 18px;'
-        'background:#181b22;color:#e8eaed;border-top:1px solid #262b35;'
-        'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif">'
-        '<span style="max-width:640px">We use cookies to serve ads that keep Forge Files free. '
-        'See our <a href="/privacy" style="color:#4f8cff">Privacy Policy</a>.</span>'
-        '<span style="display:flex;gap:8px">'
-        '<button id="ff-consent-decline" type="button" style="cursor:pointer;border:1px solid #262b35;'
-        'border-radius:8px;padding:8px 16px;background:transparent;color:#e8eaed;font:inherit">Decline</button>'
-        '<button id="ff-consent-accept" type="button" style="cursor:pointer;border:0;'
-        'border-radius:8px;padding:8px 16px;background:#4f8cff;color:#fff;font:inherit;font-weight:600">Accept</button>'
-        '</span></div>\n'
+        ' style="position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;display:none;justify-content:center;'
+        'pointer-events:none">'
+        '<style>'
+        '#ff-consent .cc{pointer-events:auto;box-sizing:border-box;width:100%;max-width:620px;display:flex;'
+        'align-items:center;gap:8px 14px;padding:8px 8px 8px 14px;background:#181b22;color:#c9ced8;'
+        'border:1px solid #2c3240;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.35);'
+        'font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
+        '#ff-consent .cc-text{flex:1 1 auto;min-width:0;margin:0}'
+        '#ff-consent .cc-text a{color:#8fb4ff;text-decoration:underline;text-underline-offset:2px}'
+        '#ff-consent .cc-actions{display:flex;gap:6px;flex:none}'
+        '#ff-consent button{cursor:pointer;border-radius:6px;padding:0 12px;height:30px;font:inherit;font-weight:600}'
+        '#ff-consent button:focus-visible{outline:2px solid #8fb4ff;outline-offset:2px}'
+        '#ff-consent .cc-decline{background:transparent;color:#c9ced8;border:1px solid #3a4150}'
+        '#ff-consent .cc-decline:hover{background:#222733}'
+        '#ff-consent .cc-accept{background:#4f8cff;color:#fff;border:1px solid #4f8cff}'
+        '#ff-consent .cc-accept:hover{background:#3f7bf0}'
+        '@media(max-width:520px){#ff-consent .cc{flex-wrap:wrap;padding:10px 12px}'
+        '#ff-consent .cc-text{flex-basis:100%}#ff-consent .cc-actions{width:100%}'
+        '#ff-consent .cc-actions button{flex:1}}'
+        '</style>'
+        '<div class="cc">'
+        '<p class="cc-text">We use cookies for ads and analytics. '
+        '<a href="/privacy">Privacy Policy</a></p>'
+        '<div class="cc-actions">'
+        '<button id="ff-consent-decline" class="cc-decline" type="button">Decline</button>'
+        '<button id="ff-consent-accept" class="cc-accept" type="button">Accept</button>'
+        '</div></div></div>\n'
         '<script>(function(){'
         "var K='ff_consent',b=document.getElementById('ff-consent');if(!b)return;"
         'var c=null;try{c=localStorage.getItem(K);}catch(e){}'
@@ -518,7 +574,29 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+class _StaticFilesWithModuleTypes(StaticFiles):
+    """StaticFiles that always labels ES modules and wasm correctly.
+
+    `mimetypes.add_type` above is not enough on its own: anything that later
+    calls `mimetypes.init()` resets the table, and the response would revert to
+    text/plain, which browsers refuse for module scripts. Pinning the header
+    here removes that dependency.
+    """
+
+    _FIXED_TYPES = {
+        ".mjs": "text/javascript; charset=utf-8",
+        ".wasm": "application/wasm",
+    }
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        fixed = self._FIXED_TYPES.get(os.path.splitext(path)[1].lower())
+        if fixed and response.status_code == 200:
+            response.headers["content-type"] = fixed
+        return response
+
+
+app.mount("/static", _StaticFilesWithModuleTypes(directory=str(BASE_DIR / "static")), name="static")
 
 # --- Stale-file sweeper (privacy guarantee) ---
 from scripts.security_utils import secure_filename
@@ -551,16 +629,27 @@ def _delete_stale_files(directory: Path, ttl: int) -> None:
             pass
 
 async def cleanup_stale_files_loop():
+    sweeps = 0
     while True:
-        for d in (UPLOAD_DIR, OUTPUT_DIR):
-            await run_in_threadpool(_delete_stale_files, d, FILE_TTL_SECONDS)
+        # Uploads keep the long safety-net TTL (their handlers delete them when
+        # processing ends); results use the short one.
+        await run_in_threadpool(_delete_stale_files, UPLOAD_DIR, FILE_TTL_SECONDS)
+        await run_in_threadpool(_delete_stale_files, OUTPUT_DIR, RESULT_TTL_SECONDS)
         # Same cadence, same purpose: reclaim bookkeeping nobody can reach any
         # more. The limiter's map would otherwise grow one entry per distinct
         # client seen since boot.
         app.state.rate_limiter.prune()
+        # Same reasoning applies to the SSE job registry (reconnect/recovery
+        # for execute_workflow and api_convert_to_word_stream): a job whose
+        # consumer never reconnects never calls jobs.get() for its own id, so
+        # without this it grows one entry per job for the life of the process.
+        app.state.jobs.prune()
         # Enforce the 90-day retention policy on funnel_events and operation_events.
-        await run_in_threadpool(event_log.prune_expired_events)
-        await asyncio.sleep(900)
+        # That is a database pass, so it runs about every 15 minutes, not every sweep.
+        if sweeps % max(1, 900 // SWEEP_INTERVAL_SECONDS) == 0:
+            await run_in_threadpool(event_log.prune_expired_events)
+        sweeps += 1
+        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
 
 # --- Upload intake ---
 # Every endpoint that accepts an UploadFile goes through save_upload() or
@@ -938,7 +1027,7 @@ class DownloadRegistry:
         path, owner, created = entry
         # Entries expire with the files themselves, so a token can never
         # outlive its result and point at a directory reused later.
-        if time.monotonic() - created > FILE_TTL_SECONDS:
+        if time.monotonic() - created > RESULT_TTL_SECONDS:
             with self._lock:
                 self._entries.pop(token, None)
             return None
@@ -1009,6 +1098,27 @@ class JobRegistry:
                 del self._entries[job_id]
                 return None
             return dict(entry)
+
+    def prune(self) -> int:
+        """Drop entries older than FILE_TTL_SECONDS. Returns the count removed.
+
+        get() only expires an entry when something looks it up by its exact
+        job_id — the reconnect/recovery path. A job whose SSE consumer never
+        disconnects (the common case: the browser tab stayed open and read the
+        'complete' event straight off the stream) never calls get() for its own
+        job_id, so its entry sits in _entries forever. That is the same
+        unbounded-growth shape SlidingWindowRateLimiter.prune() already exists
+        to fix for the rate limiter's per-client map; JobRegistry had no
+        equivalent, so cleanup_stale_files_loop's periodic sweep left this one
+        process-local dict growing by one entry per workflow/stream job for the
+        life of the process.
+        """
+        cutoff = time.monotonic() - FILE_TTL_SECONDS
+        with self._lock:
+            stale = [jid for jid, entry in self._entries.items() if entry["created"] <= cutoff]
+            for jid in stale:
+                del self._entries[jid]
+            return len(stale)
 
 
 app.state.jobs = JobRegistry()
@@ -1584,7 +1694,7 @@ def _render_tool_page(slug: str) -> str:
     """Server-render a tool landing page (full HTML, no JS needed for crawlers)."""
     return _substitute(seo_content.render_tool_page(slug))
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def read_index():
     return HTMLResponse(_render_page("index.html"))
 
@@ -1879,6 +1989,7 @@ async def api_split_pdf(
     ranges: str = Form(None),
     n: Optional[int] = Form(None),
     password: str = Form(None),
+    max_mb: Optional[float] = Form(None),
 ):
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
@@ -1887,7 +1998,7 @@ async def api_split_pdf(
     try:
         result = await event_log.timed(
             "pdf_split",
-            run_in_threadpool(split_pdf_to_zip, str(temp_path), str(result_dir), mode, ranges, n, password),
+            run_in_threadpool(split_pdf_to_zip, str(temp_path), str(result_dir), mode, ranges, n, password, max_mb),
         )
         return {
             "status": "success",
@@ -1985,20 +2096,30 @@ async def api_merge_pdfs(
 @app.post("/api/pdf/watermark")
 async def api_add_watermark(
     file: UploadFile = File(...),
-    text: str = Form(...),
+    text: str = Form(""),
     position: str = Form("diagonal"),
     opacity: float = Form(0.3),
     password: str = Form(None),
+    color: str = Form("#808080"),
+    font_size: int = Form(0),
+    tile: bool = Form(False),
+    layer: str = Form("over"),
+    logo: UploadFile = File(None),
+    logo_scale: float = Form(0.4),
 ):
-    """Stamp a text watermark on every page."""
+    """Stamp a text or PNG/JPEG logo watermark on every page."""
     safe_filename = secure_filename(file.filename)
+    logo_bytes = None
+    if logo is not None and logo.filename:
+        logo_bytes = await logo.read(5 * 1024 * 1024 + 1)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
     result_dir = new_result_dir()
     try:
         output_path = await event_log.timed(
             "pdf_watermark",
             run_in_threadpool(
-                add_watermark, str(temp_path), str(result_dir), text, position, opacity, password or None
+                add_watermark, str(temp_path), str(result_dir), text, position, opacity, password or None,
+                color, font_size, tile, layer, logo_bytes, logo_scale,
             ),
         )
         return {"status": "success", "message": "Watermark added", **download_fields(output_path)}
@@ -2012,6 +2133,42 @@ async def api_add_watermark(
             try:
                 os.remove(temp_path)
             except PermissionError:
+                pass
+
+
+@app.post("/api/pdf/crop")
+async def api_crop_pdf(
+    file: UploadFile = File(...),
+    top: float = Form(0),
+    bottom: float = Form(0),
+    left: float = Form(0),
+    right: float = Form(0),
+    pages: str = Form(None),
+    password: str = Form(None),
+):
+    """Crop PDF pages by percentage margins (sets the CropBox)."""
+    safe_filename = secure_filename(file.filename)
+    temp_path = await save_upload(file, PDF_EXTENSIONS)
+    result_dir = new_result_dir()
+    try:
+        output_path = await event_log.timed(
+            "pdf_crop",
+            run_in_threadpool(
+                crop_pdf, str(temp_path), str(result_dir), top, bottom, left, right,
+                pages or None, password or None,
+            ),
+        )
+        return {"status": "success", "message": "PDF cropped", **download_fields(output_path)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))
+    except Exception as e:
+        logger.exception("PDF crop failed for %s", safe_filename)
+        raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
                 pass
 
 
@@ -2053,8 +2210,9 @@ async def api_pdf_to_images(
     dpi: int = Form(150),
     fmt: str = Form("jpg"),
     password: str = Form(None),
+    mode: str = Form("pages"),
 ):
-    """Render every page to an image and return a zip."""
+    """Render every page to an image, or extract embedded images, and return a zip."""
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
     result_dir = new_result_dir()
@@ -2062,12 +2220,13 @@ async def api_pdf_to_images(
         result = await event_log.timed(
             "pdf_to_images",
             run_in_threadpool(
-                pdf_to_images_zip, str(temp_path), str(result_dir), dpi, fmt, password or None
+                pdf_to_images_zip, str(temp_path), str(result_dir), dpi, fmt, password or None, mode
             ),
         )
         return {
             "status": "success",
-            "message": f"Rendered {result['page_count']} page(s) to images",
+            "message": (f"Extracted {result['page_count']} embedded image(s)" if mode == "embedded"
+                        else f"Rendered {result['page_count']} page(s) to images"),
             **download_fields(result["output_path"]),
             "page_count": result["page_count"],
         }
@@ -3247,10 +3406,13 @@ async def api_ocr_pdf(
 @app.post("/api/pdf/organize")
 async def api_organize_pdf(
     file: UploadFile = File(...),
-    page_order: str = Form(...),
+    page_order: str = Form(""),
     password: str = Form(None),
+    remove_pages: str = Form(None),
 ):
-    """Reorder, delete, or duplicate PDF pages. page_order is comma-separated 1-based page numbers."""
+    """Reorder, delete, or duplicate PDF pages. page_order is comma-separated 1-based page numbers.
+
+    remove_pages (e.g. "2,4-6") keeps every other page in order instead."""
     import json as _json
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
@@ -3258,15 +3420,21 @@ async def api_organize_pdf(
     try:
         # Parse page_order: accepts "1,3,2" or "[1,3,2]"
         raw = page_order.strip()
-        if raw.startswith("["):
+        if remove_pages and remove_pages.strip():
+            order = []
+        elif raw.startswith("["):
             order = _json.loads(raw)
         else:
             order = [int(x.strip()) for x in raw.split(",") if x.strip()]
 
         output_path = await event_log.timed(
             "pdf_organize",
-            run_in_threadpool(organize_pdf, str(temp_path), str(result_dir), order, password or None),
+            run_in_threadpool(
+                organize_pdf, str(temp_path), str(result_dir), order, password or None, remove_pages or None
+            ),
         )
+        if remove_pages and remove_pages.strip():
+            return {"status": "success", "message": "Pages removed", **download_fields(output_path)}
         return {"status": "success", "message": f"PDF organized ({len(order)} pages in output)", **download_fields(output_path)}
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))
@@ -3293,6 +3461,8 @@ async def api_add_page_numbers(
     skip_first: int = Form(0),
     fmt: str = Form("decimal"),
     password: str = Form(None),
+    template: str = Form("{n}"),
+    end_page: int = Form(0),
 ):
     """Insert page numbers onto each PDF page."""
     safe_filename = secure_filename(file.filename)
@@ -3303,7 +3473,8 @@ async def api_add_page_numbers(
             "pdf_add_page_numbers",
             run_in_threadpool(
                 add_page_numbers, str(temp_path), str(result_dir),
-                position, start_number, font_size, skip_first, fmt, password or None
+                position, start_number, font_size, skip_first, fmt, password or None,
+                template, end_page,
             ),
         )
         return {"status": "success", "message": "Page numbers added", **download_fields(output_path)}
@@ -3744,6 +3915,17 @@ async def ads_txt():
 # adding a <link> to all eight templates) covers the home page, all tool pages
 # and all content pages at once. Must stay above the /{slug} catch-all below,
 # which would otherwise swallow these as unknown slugs and 404.
+@app.get("/on-device-office", include_in_schema=False)
+@app.get("/on-device-office/", include_in_schema=False)
+async def serve_on_device_office():
+    """Isolated, ad-free page that runs the on-device Office engine."""
+    return FileResponse(
+        BASE_DIR / "static" / "on-device-office" / "index.html",
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Robots-Tag": "noindex, nofollow"},
+    )
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico():
     return FileResponse(

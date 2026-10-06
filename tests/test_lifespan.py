@@ -82,7 +82,8 @@ def test_lifespan_sweeps_upload_and_output_dirs(monkeypatch):
 
     asyncio.run(run())
     assert [d for d, _ in swept] == [main.UPLOAD_DIR, main.OUTPUT_DIR]
-    assert all(ttl == main.FILE_TTL_SECONDS for _, ttl in swept)
+    # Uploads keep the long safety-net TTL; finished results use the short one.
+    assert [ttl for _, ttl in swept] == [main.FILE_TTL_SECONDS, main.RESULT_TTL_SECONDS]
 
 
 def test_warmup_is_skipped_unless_opted_in(monkeypatch):

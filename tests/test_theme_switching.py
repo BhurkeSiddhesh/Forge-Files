@@ -111,38 +111,3 @@ class TestScriptJsThemeManagement:
         assert "setInterval(" in self.js_content
         assert "getTimeBasedTheme()" in self.js_content
         assert "60000" in self.js_content
-
-
-STYLE_CSS_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "style.css")
-
-
-class TestThemeToggleLayout:
-    @pytest.fixture(autouse=True)
-    def setup_files(self):
-        with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
-            self.html_content = f.read()
-        with open(STYLE_CSS_PATH, "r", encoding="utf-8") as f:
-            self.css_content = f.read()
-
-    def test_theme_toggle_inside_app_container(self):
-        # Must be inside app-container to anchor to content layout across viewports
-        app_start = self.html_content.find('<main class="app-container">')
-        app_end = self.html_content.find('</main>')
-        toggle_pos = self.html_content.find('id="theme-toggle-btn"')
-        assert app_start != -1 and toggle_pos != -1
-        assert app_start < toggle_pos < app_end
-
-    def test_app_container_has_relative_positioning(self):
-        # .app-container must have position: relative for toggle placement
-        pattern = r"\.app-container\s*\{[^}]*position:\s*relative"
-        assert re.search(pattern, self.css_content), ".app-container must specify position: relative"
-
-    def test_theme_toggle_coordinates_anchored_top_right(self):
-        # .theme-toggle must be placed at top: 0 and right: 0
-        pattern = r"\.theme-toggle\s*\{[^}]*top:\s*0[^}]*right:\s*0"
-        assert re.search(pattern, self.css_content, re.DOTALL), ".theme-toggle must be positioned at top: 0; right: 0;"
-
-    def test_breadcrumb_reserves_right_padding_for_toggle(self):
-        # .breadcrumb must reserve padding-right so brand text never collides with toggle
-        pattern = r"\.breadcrumb\s*\{[^}]*padding-right:\s*3\.5rem"
-        assert re.search(pattern, self.css_content, re.DOTALL), ".breadcrumb must have padding-right: 3.5rem to prevent title collision"

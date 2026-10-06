@@ -22,6 +22,7 @@ from scripts import seo_content as sc
 from scripts.content_examples import render_example
 from scripts.seo_content import (
     ASSET_V, SITE, GITHUB, BASE, ADS_HEAD, ADS_SLOT, CONSENT_BANNER,
+    DS_HEAD, DS_NAV, DS_FOOT, DS_THEME_JS, ds_breadcrumb, ds_faq,
     SITE_VERIFY, CF_ANALYTICS, GA_ANALYTICS, DATAFAST_ANALYTICS, FUNNEL_BEACON, TOOL_PAGES,
     _attr, _plain, _jsonld,
 )
@@ -167,13 +168,13 @@ def _faq_schema(faqs: List[Tuple[str, str]]) -> dict:
     }
 
 
-def _related_tools_html(slugs: List[str]) -> str:
+def _related_tools_html(slugs: List[str], sep: str = " · ") -> str:
     links = []
     for s in slugs:
         t = TOOL_PAGES.get(s)
         if t:
             links.append('<a href="/' + s + '">' + t["app"] + "</a>")
-    return " · ".join(links)
+    return sep.join(links)
 
 
 _HEAD = """<!DOCTYPE html>
@@ -203,7 +204,7 @@ _HEAD = """<!DOCTYPE html>
     <meta name="twitter:image" content="{base}/static/og-image.png">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="{base}/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/style.css?v={asset_v}">
+    {ds_head}
     {ads_head}
     {cf_analytics}
     {ga_analytics}
@@ -227,65 +228,61 @@ def render_guide(slug: str) -> str:
         site_verify=SITE_VERIFY, title=_attr(g["title"]), meta=_attr(g["meta"]),
         canonical=canonical, og_type="article", site=SITE, og_title=_attr(og_title),
         og_desc=_attr(g["meta"]), base=BASE, asset_v=ASSET_V, ads_head=ADS_HEAD,
-        cf_analytics=CF_ANALYTICS, ga_analytics=GA_ANALYTICS,
+        cf_analytics=CF_ANALYTICS, ga_analytics=GA_ANALYTICS, ds_head=DS_HEAD,
         datafast_analytics=DATAFAST_ANALYTICS, schema_blocks=schema_blocks,
     )
 
     sections = "\n".join(
-        f'        <section id="section-{i}"><h2>{h2}</h2>\n        {body}</section>'
+        f'        <section class="sec" id="section-{i}"><i>{i:02d}</i><div><h2>{h2}</h2>\n        {body}</div></section>'
         for i, (h2, body) in enumerate(g["body"], 1)
     )
-    contents = "".join(f'<li><a href="#section-{i}">{_attr(h2)}</a></li>' for i, (h2, _) in enumerate(g["body"], 1))
-    example = render_example(g["example"]) if g.get("example") else ""
-    faqs = "\n".join(
-        "        <h3>" + _plain(q) + "</h3>\n        <p>" + a + "</p>"
-        for q, a in g["faqs"]
+    contents = "".join(
+        f'<a href="#section-{i}"><i>{i:02d}</i>{_attr(h2)}</a>' for i, (h2, _) in enumerate(g["body"], 1)
     )
+    example = render_example(g["example"]) if g.get("example") else ""
+    faqs = ds_faq(g["faqs"])
     tool = TOOL_PAGES[g["primary_tool"]]
     cta_href = "/" + g["primary_tool"]
 
     return f"""{head}
-<body class="seo-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
+<body class="ff-ds ffc">
     <a class="skip-content" href="#main-content">Skip to content</a>
-    <main class="page-wrap" id="main-content">
-        <nav class="page-nav" aria-label="Main navigation"><a href="/" class="brand-nav-link"><img src="{BASE}/static/apple-touch-icon.png" alt="Forge Files" class="brand-nav-icon" width="22" height="22"><span>Forge <span class="accent">Files</span></span></a><a href="/">All tools</a><a href="/blog">{SITE} Guides</a><a href="/about">About</a></nav>
+    {DS_NAV}
+    <main class="ffc-wrap ffc-main ffc-wide" id="main-content">
+        {ds_breadcrumb(("Guides", "/blog"), (_attr(g["h1"]), ""))}
 
-        <h1>{g['h1']}</h1>
-        <p class="lede">{g['dek']}</p>
-        <p class="content-meta">Published by <a href="/about">Forge Files</a> · Updated <time datetime="{g['date']}">{g['date']}</time></p>
+        <h1 class="ffc-h1">{g['h1']}</h1>
+        <p class="ffc-lede">{g['dek']}</p>
+        <p class="ffc-meta content-meta">Published by <a href="/about">Forge Files</a> · Updated <time datetime="{g['date']}">{g['date']}</time></p>
 
-        <p><a class="cta" href="{cta_href}">Open the free {tool['app']} tool &rarr;</a></p>
-
-        <nav class="article-contents" aria-label="In this guide"><strong>In this guide</strong><ol>{contents}</ol></nav>
+        <div class="ff-art">
+            <nav class="toc article-contents" aria-label="In this guide"><b>In this guide</b>{contents}</nav>
+            <div class="ffc-artbody">
+        <div class="cta"><a class="ff-btn primary" href="{cta_href}">Open the free {tool['app']} tool &rarr;</a></div>
 
 {sections}
 
 {example}
 
-        <h2>Frequently asked questions</h2>
+        <h2 class="ffc-section-h">Frequently asked questions</h2>
 {faqs}
 
-        <aside class="processing-note"><h2>About this guide</h2><p>These instructions describe Forge Files' current controls and known conversion limits.
+        <aside class="processing-note ffc-note"><h2>About this guide</h2><p>These instructions describe Forge Files' current controls and known conversion limits.
             Examples use original synthetic files, with actual outputs and reproducible measurements where shown.
             AI-assisted drafting was checked against the implementation and the supplied examples; no external expert review is claimed.
             <a href="/contact">Report an error or a confusing step</a>.</p></aside>
 
         {ADS_SLOT}
 
-        <h2>Related free tools</h2>
-        <p>{_related_tools_html([g['primary_tool']] + g['related'])}</p>
-
-        <footer class="page-footer">
-            <a href="/">Home</a> · <a href="/blog">Guides</a> · <a href="/about">About</a>
-            · <a href="/privacy">Privacy</a> · <a href="{GITHUB}" target="_blank" rel="noopener">GitHub</a>
-        </footer>
+        <h2 class="ffc-section-h">Related free tools</h2>
+        <div class="ffc-related">{_related_tools_html([g['primary_tool']] + g['related'], sep='')}</div>
+            </div>
+        </div>
     </main>
+    {DS_FOOT}
     {CONSENT_BANNER}
     {FUNNEL_BEACON}
+    {DS_THEME_JS}
 </body>
 
 </html>
@@ -310,42 +307,39 @@ def render_blog_index() -> str:
         site_verify=SITE_VERIFY, title=_attr(title), meta=_attr(meta),
         canonical=canonical, og_type="website", site=SITE, og_title=_attr(title.split(" | ")[0]),
         og_desc=_attr(meta), base=BASE, asset_v=ASSET_V, ads_head="",
-        cf_analytics=CF_ANALYTICS, ga_analytics=GA_ANALYTICS,
+        cf_analytics=CF_ANALYTICS, ga_analytics=GA_ANALYTICS, ds_head=DS_HEAD,
         datafast_analytics=DATAFAST_ANALYTICS, schema_blocks=schema_blocks,
     )
     cards = "\n".join(
-        f'            <li><a href="/blog/{slug}"><strong>{_attr(g["h1"])}</strong>'
-        f'<span>{_attr(g["meta"])}</span><small>Updated {g["date"]}</small></a></li>'
+        f'            <li><a class="ff-gcard" href="/blog/{slug}"><h4>{_attr(g["h1"])}</h4>'
+        f'<p>{_attr(g["meta"])}</p><span class="m"><span class="ff-chip">Updated {g["date"]}</span></span></a></li>'
         for slug, g in GUIDES.items()
     )
     return f"""{head}
-<body class="seo-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-    <main class="page-wrap">
-        <nav class="page-nav"><a href="/" class="brand-nav-link"><img src="{BASE}/static/apple-touch-icon.png" alt="Forge Files" class="brand-nav-icon" width="22" height="22"><span>Forge <span class="accent">Files</span></span></a><a href="/">&larr; All tools</a></nav>
+<body class="ff-ds ffc">
+    <a class="skip-content" href="#main-content">Skip to content</a>
+    {DS_NAV}
+    <main class="ffc-wrap ffc-main ffc-wide" id="main-content">
+        {ds_breadcrumb(("Guides", ""))}
 
-        <h1>Forge Files Guides</h1>
-        <p class="lede">Know what changes before you share it.</p>
+        <h1 class="ffc-h1">Forge Files Guides</h1>
+        <p class="ffc-lede">Know what changes before you share it.</p>
+        <div class="ff-prose">
         <p>A smaller scan can lose fine print. A PDF converted to Word can shift tables or leave scanned text as an image.
             Try a practice file, compare the source with the output, and keep your original.</p>
         <p>Choose a guide below for the right tool, original downloadable examples, and checks to make before sharing your result.</p>
+        </div>
 
-        <ul class="guide-list">
+        <ul class="ffc-gridwrap guide-list">
 {cards}
         </ul>
 
-        <p><a class="cta" href="/">Browse all free tools &rarr;</a></p>
-
-        <footer class="page-footer">
-            <a href="/">Home</a> · <a href="/about">About</a> · <a href="/faq">FAQ</a>
-            · <a href="/privacy">Privacy</a> · <a href="{GITHUB}" target="_blank" rel="noopener">GitHub</a>
-        </footer>
+        <p class="ffc-cta-row"><a class="ff-btn primary" href="/">Browse all free tools &rarr;</a></p>
     </main>
+    {DS_FOOT}
     {CONSENT_BANNER}
     {FUNNEL_BEACON}
+    {DS_THEME_JS}
 </body>
 
 </html>

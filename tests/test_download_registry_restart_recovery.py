@@ -69,10 +69,10 @@ def test_resolve_does_not_recover_a_directory_with_multiple_files(tmp_path, regi
 
 
 def test_resolve_honors_ttl_on_a_recovered_entry(tmp_path, registry, monkeypatch):
-    """A file old enough to be past FILE_TTL_SECONDS must not be recovered as
+    """A file old enough to be past RESULT_TTL_SECONDS must not be recovered as
     live just because it's still physically present (the sweeper hasn't
     gotten to it yet, but resolve() must agree with what the sweeper will do)."""
-    monkeypatch.setattr(main, "FILE_TTL_SECONDS", 3600)
+    monkeypatch.setattr(main, "RESULT_TTL_SECONDS", 3600)
     token = "stale-token-1234567890123"
     _make_result(tmp_path, token, age_seconds=7200)
 
@@ -80,7 +80,7 @@ def test_resolve_honors_ttl_on_a_recovered_entry(tmp_path, registry, monkeypatch
 
 
 def test_resolve_recovers_a_fresh_file_within_ttl(tmp_path, registry, monkeypatch):
-    monkeypatch.setattr(main, "FILE_TTL_SECONDS", 3600)
+    monkeypatch.setattr(main, "RESULT_TTL_SECONDS", 3600)
     token = "fresh-token-12345678901234"
     expected = _make_result(tmp_path, token, age_seconds=60)
 

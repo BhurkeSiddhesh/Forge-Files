@@ -276,7 +276,26 @@ window.ffCancelInflight = ffCancelInflight;
 window.ffIsAbort = ffIsAbort;
 window.ffStartInflight = ffStartInflight;
 
-const _ffProcessFallback = (path, formData, init) => {
+// The one door to the server for uploads. Resolves a declined Response (and
+// sends nothing) unless the person agreed to this specific operation; see
+// static/local/ff-server-gate.js. With the consent module missing there is nobody to
+// ask, so the answer is no.
+async function ffServerFetch(path, init, code) {
+    let agreed = false;
+    try {
+        agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
+    } catch (e) {
+        agreed = false;
+    }
+    if (!agreed) {
+        return new Response(JSON.stringify({ detail: 'Cancelled. Your file was not uploaded.', declined: true }),
+            { status: 499, headers: { 'Content-Type': 'application/json' } });
+    }
+    return fetch(apiUrl(path), init);
+}
+window.ffServerFetch = ffServerFetch;
+
+const _ffProcessFallback = async (path, formData, init) => {
     if (!ffCheckUploadSize(ffFormDataFiles(formData))) {
         return Promise.resolve(new Response(JSON.stringify({
             detail: 'This file is too large (limit ' + ffUploadLimitMb + ' MB). Try a smaller file.',
@@ -293,7 +312,11 @@ const _ffProcessFallback = (path, formData, init) => {
     if (window.__ffSession && window.__ffSession.access_token && !requestInit.headers.Authorization) {
         requestInit.headers.Authorization = 'Bearer ' + window.__ffSession.access_token;
     }
-    return fetch(apiUrl(path), requestInit).finally(function () { ffSetCancelVisible(false); });
+    try {
+        return await ffServerFetch(path, requestInit);
+    } finally {
+        ffSetCancelVisible(false);
+    }
 };
 const ffProcess = window.ffProcess
     || _ffProcessFallback;
@@ -451,6 +474,16 @@ function updateDownloadLink(element, token, filename) {
     // fired by the backend Measurement Protocol — do NOT fire it here.
     ffShowSuccessUpsell(element);
     ffShowSuccessShare(element, filename, local);
+
+    // The shared notice promises server copies are temporary, which is
+    // misleading for results that never left the browser.
+    const notice = element.parentElement?.querySelector('.file-deleted-notice span');
+    if (notice) {
+        if (!notice.dataset.serverText) notice.dataset.serverText = notice.textContent;
+        notice.textContent = local
+            ? 'Processed on your device — your file never left this browser.'
+            : notice.dataset.serverText;
+    }
 
     if (local) {
         ffHeldLocalTokens.set(element, token);
@@ -772,6 +805,8 @@ function hidePdfActionAreas() {
     document.getElementById('extract-text-area')?.classList.add('hidden');
     document.getElementById('ocr-pdf-area')?.classList.add('hidden');
     document.getElementById('organize-pdf-area')?.classList.add('hidden');
+    document.getElementById('remove-pages-area')?.classList.add('hidden');
+    document.getElementById('crop-pdf-area')?.classList.add('hidden');
     document.getElementById('page-numbers-area')?.classList.add('hidden');
     document.getElementById('repair-pdf-area')?.classList.add('hidden');
     document.getElementById('create-pdf-area')?.classList.add('hidden');
@@ -784,6 +819,36 @@ function hidePdfActionAreas() {
     // Panels are closing, so no action is picked anymore.
     ffClearActionSelection(document.getElementById('pdf-page'));
 }
+
+// Picking another tool starts a new step for the same file: the previous
+// tool's result and green "Result" step no longer apply. Runs after the card's
+// own handler (bubble phase) so it sees the final file state, e.g. merge having
+// seeded or dropped the selection.
+document.addEventListener('click', (e) => {
+    const card = e.target.closest && e.target.closest('#pdf-page .action-card');
+    if (!card) return;
+    document.getElementById('result-display')?.classList.add('hidden');
+    document.getElementById('status-display')?.classList.add('hidden');
+    const hasFile = !!selectedFile || selectedFiles.length > 0;
+    ffUpdateStepTracker('pdf', hasFile ? 2 : 1);
+});
+
+// Once a result has been downloaded the job is finished: clear the file, panels
+// and step tracker so the next conversion starts from an empty upload box. Runs
+// after the link's own handler (bubble phase) and skips downloads it cancelled
+// (e.g. the result had expired). The short delay lets the browser start saving.
+document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('a.download-btn');
+    if (!link || e.defaultPrevented) return;
+    setTimeout(() => {
+        const tool = currentTool;
+        const op = currentOp;
+        resetUI();
+        ffClearActionSelection(document);
+        currentTool = tool;
+        currentOp = op;
+    }, 800);
+});
 
 // Move the selected PDF option panel after its card. The action grid gives
 // panels a full-width row, keeping the controls close to the chosen action.
@@ -802,6 +867,8 @@ const PDF_AREA_CARD = {
     'extract-text-area': 'extract-text-btn',
     'ocr-pdf-area': 'ocr-pdf-btn',
     'organize-pdf-area': 'organize-pdf-btn',
+    'remove-pages-area': 'remove-pages-btn',
+    'crop-pdf-area': 'crop-pdf-btn',
     'page-numbers-area': 'page-numbers-btn',
     'repair-pdf-area': 'repair-pdf-btn',
     'create-pdf-area': 'create-pdf-btn',
@@ -818,22 +885,54 @@ function openPdfArea(areaId) {
     if (!area) return;
 
     const card = document.getElementById(PDF_AREA_CARD[areaId]);
-    if (card) {
-        card.insertAdjacentElement('afterend', area);
-        ffSelectActionCard(card);
-    }
+    // The option panel stays where the design system lays it out (between the
+    // upload zone and the tool grid); only the selected card is highlighted.
+    if (card) ffSelectActionCard(card);
 
     area.classList.remove('hidden');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Visual page picker for the page-based tools; the text input stays the source of truth.
+    if (window.ffPageGrid && window.ffPageGrid.supports(areaId) && selectedFile) {
+        window.ffPageGrid.mount(areaId, selectedFile);
+        // Announce the newly shown panel to keyboard and screen-reader users.
+        area.setAttribute('tabindex', '-1');
+        area.focus({ preventScroll: true });
+    }
 }
 
-function setMergeMode(on) {
-    fileInput.multiple = !!on;
-    if (!on) {
-        selectedFiles = [];
-    } else {
-        selectedFile = null;
+function ffShowSelectedFiles() {
+    const files = fileInput.multiple && selectedFiles.length ? selectedFiles : (selectedFile ? [selectedFile] : []);
+    if (!files.length) {
+        filenameDisplay.textContent = 'No file selected';
+        fileInfo.classList.add('hidden');
+        return;
     }
+    filenameDisplay.textContent = files.length === 1
+        ? files[0].name
+        : `${files.length} files: ${files.map(f => f.name).join(', ')}`;
+    fileInfo.classList.remove('hidden');
+}
+
+// The chosen PDF stays selected while the visitor moves between tools, so one
+// upload can go through Word, then Compress, then anything else. Merge is the
+// only tool that needs several files: it starts from the current file and adds
+// the ones picked next. Leaving merge keeps a lone file, but drops a multi-file
+// pick, since "which of these?" has no answer for a single-file tool.
+function setMergeMode(on) {
+    // Leaving merge mode must also close its panel and highlight. Most card
+    // handlers bail out with "select a file first" right after calling this, so
+    // without it Merge stayed open and selected under a different tool's title.
+    if (!on && fileInput.multiple) hidePdfActionAreas();
+    const wasMerge = fileInput.multiple;
+    fileInput.multiple = !!on;
+    if (on) {
+        if (!wasMerge) selectedFiles = selectedFile ? [selectedFile] : [];
+    } else if (wasMerge) {
+        if (selectedFiles.length > 1) selectedFile = null;
+        else if (selectedFiles.length === 1) selectedFile = selectedFiles[0];
+        selectedFiles = [];
+    }
+    ffShowSelectedFiles();
 }
 
 function handleFiles(files) {
@@ -845,18 +944,17 @@ function handleFiles(files) {
         selectedFiles = [];
         selectedFile = null;
         fileInput.value = '';
-        filenameDisplay.textContent = 'No file selected';
-        fileInfo.classList.add('hidden');
+        ffShowSelectedFiles();
         ffNotify('Please select PDF files.');
         return;
     }
     if (!ffCheckUploadSize(pdfs)) return;
-    selectedFiles = pdfs;
-    selectedFile = pdfs[0];
-    filenameDisplay.textContent = pdfs.length === 1
-        ? pdfs[0].name
-        : `${pdfs.length} files: ${pdfs.map(f => f.name).join(', ')}`;
-    fileInfo.classList.remove('hidden');
+    // Picks add to what merge already holds (the current file included).
+    const key = f => `${f.name}|${f.size}|${f.lastModified}`;
+    const have = new Set(selectedFiles.map(key));
+    selectedFiles = selectedFiles.concat(pdfs.filter(f => !have.has(key(f))));
+    selectedFile = selectedFiles[0];
+    ffShowSelectedFiles();
     document.getElementById('status-display').classList.add('hidden');
     ffUpdateStepTracker('pdf', 2);
     ffConsumePendingOp();
@@ -874,9 +972,13 @@ function handleFile(file) {
     filenameDisplay.textContent = file.name;
     fileInfo.classList.remove('hidden');
 
-    // Reset displays
+    // Reset displays, then keep the tool the visitor already chose open so
+    // swapping the file doesn't force them to re-pick it.
     document.getElementById('status-display').classList.add('hidden');
+    const activeArea = Object.keys(PDF_AREA_CARD).find(id =>
+        id !== 'merge-area' && !document.getElementById(id)?.classList.contains('hidden'));
     hidePdfActionAreas();
+    if (activeArea) openPdfArea(activeArea);
     const extractInput = document.getElementById('extract-pages-input');
     if (extractInput) extractInput.value = '';
     ffUpdateStepTracker('pdf', 2);
@@ -948,14 +1050,19 @@ document.getElementById('ocr-pdf-btn').onclick = () => {
 document.querySelectorAll('input[name="compress-level"]').forEach(function (radio) {
     radio.addEventListener('change', ffUpdatePdfCompressPreview);
 });
+document.querySelectorAll('input[name="compress-mode"]').forEach(function (radio) {
+    radio.addEventListener('change', ffUpdatePdfCompressPreview);
+});
 
 document.getElementById('process-compress-btn').onclick = async () => {
     const level = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
+    const mode = document.querySelector('input[name="compress-mode"]:checked')?.value || 'structural';
     if (!ffCheckUploadSize(selectedFile)) return;
 
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('level', level);
+    formData.append('mode', mode);
 
     const statusDisplay = document.getElementById('status-display');
     const statusText = document.getElementById('status-text');
@@ -967,9 +1074,7 @@ document.getElementById('process-compress-btn').onclick = async () => {
 
     const abort = ffStartInflight();
     try {
-        const response = await fetch(apiUrl('/api/pdf/compress'), {
-            method: 'POST',
-            body: formData,
+        const response = await ffProcess('/api/pdf/compress', formData, {
             signal: abort && abort.signal,
         });
         if (response.ok) {
@@ -1122,9 +1227,9 @@ async function convertToWordWithProgress(formData, useAI) {
     };
 
     try {
-        const response = await fetch(apiUrl('/api/pdf/convert-to-word-stream'), {
-            method: 'POST',
-            body: formData,
+        // Through ffProcess so an on-device handler runs first and the server (with its consent
+        // question) is only used when the device cannot convert this file.
+        const response = await ffProcess('/api/pdf/convert-to-word-stream', formData, {
             signal: abort && abort.signal,
         });
 
@@ -1222,12 +1327,18 @@ document.getElementById('process-split-btn').onclick = () => {
         ffNotify('Please enter a valid page count per split.');
         return;
     }
+    const maxMb = document.getElementById('split-pdf-max-mb')?.value;
+    if (mode === 'by_size' && (!maxMb || Number(maxMb) < 0.1 || Number(maxMb) > 500)) {
+        ffNotify('Please enter a maximum size between 0.1 and 500 MB.');
+        return;
+    }
 
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('mode', mode);
     if (mode === 'ranges') formData.append('ranges', ranges);
     if (mode === 'every_n') formData.append('n', n);
+    if (mode === 'by_size') formData.append('max_mb', maxMb);
 
     processAction('/api/pdf/split', 'Splitting PDF into a ZIP...', formData);
 };
@@ -1252,7 +1363,8 @@ if (watermarkOpacityInput) {
 document.getElementById('process-watermark-btn').onclick = () => {
     if (!selectedFile) { ffNotify('Please select a file first.'); return; }
     const text = document.getElementById('watermark-text').value.trim();
-    if (!text) { ffNotify('Please enter watermark text.'); return; }
+    const logo = document.getElementById('watermark-logo')?.files?.[0] || null;
+    if (!text && !logo) { ffNotify('Please enter watermark text or choose a logo image.'); return; }
     const position = document.getElementById('watermark-position').value;
     const opacity = document.getElementById('watermark-opacity').value;
 
@@ -1261,6 +1373,14 @@ document.getElementById('process-watermark-btn').onclick = () => {
     formData.append('text', text);
     formData.append('position', position);
     formData.append('opacity', opacity);
+    formData.append('color', document.getElementById('watermark-color')?.value || '#808080');
+    formData.append('font_size', document.getElementById('watermark-size')?.value || '0');
+    formData.append('layer', document.getElementById('watermark-layer')?.value || 'over');
+    formData.append('tile', document.getElementById('watermark-tile')?.checked ? 'true' : 'false');
+    if (logo) {
+        formData.append('logo', logo);
+        formData.append('logo_scale', document.getElementById('watermark-logo-scale')?.value || '0.4');
+    }
 
     processAction('/api/pdf/watermark', 'Adding watermark...', formData);
 };
@@ -1274,6 +1394,7 @@ document.getElementById('process-to-images-btn').onclick = () => {
     formData.append('file', selectedFile);
     formData.append('dpi', dpi);
     formData.append('fmt', fmt);
+    formData.append('mode', document.getElementById('to-images-mode')?.value || 'pages');
 
     processAction('/api/pdf/to-images', 'Rendering pages to images...', formData);
 };
@@ -1319,6 +1440,7 @@ async function processAction(url, text, formData = null) {
     const statusDisplay = document.getElementById('status-display');
     const statusText = document.getElementById('status-text');
     const resultDisplay = document.getElementById('result-display');
+    let abort = null;
     const passwordArea = document.getElementById('password-input-area');
 
     statusDisplay.classList.remove('hidden');
@@ -1335,7 +1457,11 @@ async function processAction(url, text, formData = null) {
         // Runs on-device when this tool has a local handler, otherwise posts to
         // the backend exactly as before — either way a Response comes back, so
         // everything below is unchanged. See static/local/ff-local.js.
-        const response = await ffProcess(url, formData);
+        abort = ffStartInflight();
+        const response = await ffProcess(url, formData, {
+            signal: abort && abort.signal,
+            onProgress: (done, total) => { statusText.textContent = `${text} (${done}/${total})`; },
+        });
 
         if (response.ok) {
             const data = await response.json();
@@ -1359,9 +1485,11 @@ async function processAction(url, text, formData = null) {
             }
         }
     } catch (error) {
-        ffNotify('Error: ' + error.message);
+        // Cancel already told the user; nothing else to report.
+        if (!ffIsAbort(error)) ffNotify('Error: ' + error.message);
     } finally {
         statusDisplay.classList.add('hidden');
+        ffSetCancelVisible(false);
     }
 
 }
@@ -1372,9 +1500,21 @@ function ffUpdatePdfCompressPreview() {
     const el = document.getElementById('pdf-compress-preview');
     if (!el) return;
     const level = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
+    const mode = document.querySelector('input[name="compress-mode"]:checked')?.value || 'structural';
+    // Structural compression is lossless and has no quality levels, so the
+    // picker only applies when pages are rasterised or photos are downsampled.
+    document.getElementById('pdf-compress-levels')?.classList.toggle('hidden', mode !== 'lossy' && mode !== 'images');
+    if (mode === 'structural') {
+        el.textContent = 'Structural mode preserves searchable text, links and vectors. Savings depend on how the PDF was originally encoded.';
+        return;
+    }
+    if (mode === 'images') {
+        el.textContent = 'Photos inside the PDF are downsampled in your browser; text, links and vectors stay sharp. Savings depend on how many photos the PDF contains.';
+        return;
+    }
     const range = FF_PDF_COMPRESS_HINT[level] || FF_PDF_COMPRESS_HINT.medium;
     if (!selectedFile) {
-        el.textContent = 'Typical reduction: Low ~10–20%, Medium ~30–50%, High ~50–70%. Select a file for an estimate.';
+        el.textContent = 'Raster mode estimate: Low ~10–20%, Medium ~30–50%, High ~50–70%. Text and links become page images.';
         return;
     }
     el.textContent = 'This ' + formatBytes(selectedFile.size) + ' file would typically become about '
@@ -1447,11 +1587,8 @@ function showResult(filename, message, token) {
     const resultMessage = document.getElementById('result-message');
     const downloadLink = document.getElementById('download-link');
 
-    // Clear any previous compress stats
-    const existingStats = resultDisplay.querySelector('.compress-stats');
-    if (existingStats) existingStats.remove();
-    const existingBadge = resultDisplay.querySelector('.reduction-badge');
-    if (existingBadge) existingBadge.remove();
+    // Clear any previous compress stats and notes
+    resultDisplay.querySelectorAll('.compress-stats, .reduction-badge, .compression-note').forEach(el => el.remove());
 
     resultDisplay.classList.remove('hidden');
     resultMessage.textContent = message + ': ' + filename;
@@ -1464,11 +1601,8 @@ function showCompressResult(data) {
     const resultMessage = document.getElementById('result-message');
     const downloadLink = document.getElementById('download-link');
 
-    // Clear any previous compress stats
-    const existingStats = resultDisplay.querySelector('.compress-stats');
-    if (existingStats) existingStats.remove();
-    const existingBadge = resultDisplay.querySelector('.reduction-badge');
-    if (existingBadge) existingBadge.remove();
+    // Clear any previous compress stats and notes
+    resultDisplay.querySelectorAll('.compress-stats, .reduction-badge, .compression-note').forEach(el => el.remove());
 
     resultDisplay.classList.remove('hidden');
     resultMessage.textContent = 'Compressed: ' + data.filename;
@@ -1477,7 +1611,7 @@ function showCompressResult(data) {
     // Build size stats display
     const badge = document.createElement('div');
     badge.className = 'reduction-badge';
-    badge.textContent = `↓ ${data.reduction_pct}% smaller`;
+    badge.textContent = Number(data.reduction_pct) > 0 ? `↓ ${data.reduction_pct}% smaller` : 'No safe size reduction';
 
     const stats = document.createElement('div');
     stats.className = 'compress-stats';
@@ -1496,6 +1630,12 @@ function showCompressResult(data) {
     // Insert after the message, before the download button
     resultMessage.insertAdjacentElement('afterend', stats);
     stats.insertAdjacentElement('afterend', badge);
+    if (data.compression_note) {
+        const note = document.createElement('p');
+        note.className = 'helper-text compression-note';
+        note.textContent = data.compression_note;
+        badge.insertAdjacentElement('afterend', note);
+    }
     ffUpdateStepTracker('pdf', 3);
 }
 
@@ -1522,6 +1662,10 @@ function resetUI() {
     document.getElementById('extract-text-area')?.classList.add('hidden');
     document.getElementById('ocr-pdf-area')?.classList.add('hidden');
     document.getElementById('organize-pdf-area')?.classList.add('hidden');
+    document.getElementById('remove-pages-area')?.classList.add('hidden');
+    document.getElementById('crop-pdf-area')?.classList.add('hidden');
+    // The previous document's thumbnails and page fields must not outlive it.
+    window.ffPageGrid?.unmountAll();
     document.getElementById('page-numbers-area')?.classList.add('hidden');
     document.getElementById('repair-pdf-area')?.classList.add('hidden');
     document.getElementById('create-pdf-area')?.classList.add('hidden');
@@ -1751,10 +1895,7 @@ async function initCropper() {
             formData.append('file', selectedImageFile);
             formData.append('quality', 80); // Faster preview
 
-            const response = await fetch(apiUrl('/api/image/heic-to-jpeg'), {
-                method: 'POST',
-                body: formData
-            });
+            const response = await ffProcess('/api/image/heic-to-jpeg', formData);
 
             if (!response.ok) {
                 const err = await response.json();
@@ -1778,7 +1919,8 @@ async function initCropper() {
                     scalable: false,
                 });
             };
-            image.src = apiUrl(`/api/download/${encodeURIComponent(data.download_token)}`);
+            const localPreview = window.ffLocal && window.ffLocal.resolve(data.download_token);
+            image.src = localPreview ? localPreview.url : apiUrl(`/api/download/${encodeURIComponent(data.download_token)}`);
 
         } catch (e) {
             console.error(e);
@@ -1980,46 +2122,76 @@ function initWorkflowBuilder() {
 
     // Step palette drag start
     stepItems.forEach(item => {
+        const ioMeta = wfStepMeta(item.dataset.stepType);
+        if (ioMeta && !item.querySelector('small')) {
+            const io = document.createElement('small');
+            io.className = 'step-io';
+            io.textContent = wfIoText(ioMeta);
+            item.appendChild(io);
+        }
         item.ondragstart = (e) => {
             e.dataTransfer.setData('step-type', item.dataset.stepType);
             e.dataTransfer.setData('step-label', item.dataset.stepLabel);
             e.dataTransfer.setData('step-icon', item.dataset.stepIcon);
+            e.dataTransfer.effectAllowed = 'copy';
+            wfDrag = { kind: 'new', type: item.dataset.stepType, label: item.dataset.stepLabel, icon: item.dataset.stepIcon };
             item.style.opacity = '0.5';
+            wfSetDragging(true);
         };
         item.ondragend = () => {
             item.style.opacity = '1';
+            wfDrag = null;
+            wfSetDragging(false);
         };
 
         // A11y: Click to add step
         item.onclick = () => {
             addStepToWorkflow(item.dataset.stepType, item.dataset.stepLabel, item.dataset.stepIcon);
         };
+        item.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                item.click();
+            }
+        };
     });
 
-    // Canvas drop handling
+    const stepSearch = document.getElementById('workflow-step-search');
+    if (stepSearch) {
+        stepSearch.oninput = () => {
+            const q = stepSearch.value.trim().toLowerCase();
+            stepItems.forEach(item => {
+                item.hidden = !!q && !(item.dataset.stepLabel || '').toLowerCase().includes(q);
+            });
+        };
+    }
+
+    // Canvas drop handling. Drops on a slot between nodes are handled by the
+    // slot (see wfMakeSlot); a drop anywhere else on the canvas appends.
     canvas.ondragover = (e) => {
+        if (e.target.closest && e.target.closest('.dnd-slot')) return;
         e.preventDefault();
         canvas.classList.add('drag-over');
     };
 
-    canvas.ondragleave = () => canvas.classList.remove('drag-over');
+    canvas.ondragleave = (e) => {
+        if (!e.relatedTarget || !canvas.contains(e.relatedTarget)) canvas.classList.remove('drag-over');
+    };
 
     canvas.ondrop = (e) => {
         e.preventDefault();
         canvas.classList.remove('drag-over');
-
-        const stepType = e.dataTransfer.getData('step-type');
-        const stepLabel = e.dataTransfer.getData('step-label');
-        const stepIcon = e.dataTransfer.getData('step-icon');
-
-        if (stepType) {
-            addStepToWorkflow(stepType, stepLabel, stepIcon);
-        }
+        wfDropAt(e, workflowSteps.length);
     };
+
+    renderWorkflowSteps();
 }
 
 function handleWorkflowFile(file) {
     workflowFile = file;
+    ffUpdateStepTracker('workflow', 2);
+    wfAlert = null;
+    renderWorkflowSteps();
     document.getElementById('workflow-filename-display').textContent = file.name;
     document.getElementById('workflow-file-info').classList.remove('hidden');
 
@@ -2028,7 +2200,7 @@ function handleWorkflowFile(file) {
     document.getElementById('workflow-result-display').classList.add('hidden');
 }
 
-function addStepToWorkflow(type, label, icon) {
+function addStepToWorkflow(type, label, icon, atIndex) {
     const step = {
         id: Date.now(),
         type: type,
@@ -2096,21 +2268,29 @@ function addStepToWorkflow(type, label, icon) {
         step.config.password = '';
     }
 
-    workflowSteps.push(step);
+    const at = (atIndex === undefined || atIndex < 0 || atIndex > workflowSteps.length) ? workflowSteps.length : atIndex;
+    const next = workflowSteps.slice();
+    next.splice(at, 0, step);
+    if (!wfCheckChain(next)) return false;
+    workflowSteps = next;
+    wfAlert = null;
     renderWorkflowSteps();
 
     // If step needs config, open modal — keep this in sync with needsConfig().
     if (needsConfig(type)) {
-        openConfigModal(workflowSteps.length - 1);
+        openConfigModal(at);
     }
+    return true;
 }
 
 function renderWorkflowSteps() {
     const container = document.getElementById('workflow-steps-container');
     const placeholder = document.querySelector('.canvas-placeholder');
+    wfRenderHints();
 
     if (workflowSteps.length === 0) {
         container.classList.add('hidden');
+        container.innerHTML = '';
         placeholder.style.display = 'flex';
         return;
     }
@@ -2119,29 +2299,51 @@ function renderWorkflowSteps() {
     container.classList.remove('hidden');
     container.innerHTML = '';
 
+    container.appendChild(wfMakeSlot(0, false));
     workflowSteps.forEach((step, index) => {
-        // Add arrow before step (except first)
-        if (index > 0) {
-            const arrow = document.createElement('span');
-            arrow.className = 'step-arrow';
-            arrow.dataset.arrowIndex = index - 1; // Arrow between step[index-1] and step[index]
-            arrow.innerHTML = '<i class="fas fa-arrow-right"></i>';
-            container.appendChild(arrow);
-        }
+        // Slot between steps; doubles as the connector (arrow index = step[index-1] -> step[index])
+        if (index > 0) container.appendChild(wfMakeSlot(index, true));
 
+        const meta = wfStepMeta(step.type);
+        const ioText = meta ? wfIoText(meta) : '';
         const stepCard = document.createElement('div');
-        stepCard.className = 'workflow-step-card';
+        stepCard.className = 'workflow-step-card ff-node dnd-node';
         stepCard.dataset.stepIndex = index;
+        stepCard.draggable = true;
         stepCard.innerHTML = `
-            <i class="fas ${step.icon}"></i>
-            <span class="step-label">${step.label}</span>
-            ${needsConfig(step.type) ? `<button class="config-btn" onclick="openConfigModal(${index})"><i class="fas fa-cog"></i></button>` : ''}
+            <span class="no" aria-hidden="true">${index + 1}</span>
+            <span class="hd" aria-hidden="true" title="Drag to reorder"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
+            <i class="fas ${step.icon} step-ic" aria-hidden="true"></i>
+            <span class="grow"><span class="step-label">${step.label}</span>${ioText ? `<small class="step-io">${ioText}</small>` : ''}</span>
+            ${needsConfig(step.type) ? `<button type="button" class="config-btn" onclick="openConfigModal(${index})" aria-label="Configure ${escapeAttr(step.label)}"><i class="fas fa-cog" aria-hidden="true"></i></button>` : ''}
             <button type="button" class="move-step" onclick="moveStep(${index}, -1)" aria-label="Move step up" ${index === 0 ? 'disabled' : ''}>&uarr;</button>
             <button type="button" class="move-step" onclick="moveStep(${index}, 1)" aria-label="Move step down" ${index === workflowSteps.length - 1 ? 'disabled' : ''}>&darr;</button>
-            <button class="remove-step" onclick="removeStep(${index})"><i class="fas fa-times"></i></button>
+            <button type="button" class="remove-step" onclick="removeStep(${index})" aria-label="Remove ${escapeAttr(step.label)}"><i class="fas fa-times" aria-hidden="true"></i></button>
         `;
+        stepCard.addEventListener('dragstart', (e) => {
+            if (e.target !== stepCard) return;
+            e.dataTransfer.setData('text/plain', 'workflow-node');
+            e.dataTransfer.setData('step-index', String(index));
+            e.dataTransfer.effectAllowed = 'move';
+            wfDrag = { kind: 'node', from: index };
+            stepCard.classList.add('dragging');
+            wfSetDragging(true);
+        });
+        stepCard.addEventListener('dragend', () => {
+            stepCard.classList.remove('dragging');
+            wfDrag = null;
+            wfSetDragging(false);
+        });
         container.appendChild(stepCard);
     });
+    container.appendChild(wfMakeSlot(workflowSteps.length, false));
+
+    const out = document.createElement('div');
+    out.className = 'dnd-out';
+    const outCls = wfTailClass(workflowSteps);
+    out.innerHTML = `<span>Output</span><b>${outCls ? wfTypeLabel(outCls) : 'varies by step'}</b>`;
+    container.appendChild(out);
+
     if (workflowUndo) {
         const undo = document.createElement('button');
         undo.type = 'button';
@@ -2150,6 +2352,165 @@ function renderWorkflowSteps() {
         undo.addEventListener('click', undoRemoveStep);
         container.appendChild(undo);
     }
+}
+
+// === Workflow drag-and-drop and type chain (design system) ===
+// Step input/output types come from window.ffLocal.workflow.STEP_TYPES (ops-workflow.js),
+// the same table the run-time preflight uses. If it is unavailable nothing is type
+// checked here and the server remains the judge.
+let wfDrag = null;
+let wfAlert = null;
+const WF_TYPE_LABELS = {
+    pdf: ['PDF', 'PDF'], csv: ['CSV', 'CSV'], xlsx: ['Excel (XLSX)', 'XLSX'], xls: ['Excel (XLS)', 'XLS'],
+    docx: ['Word (DOCX)', 'DOCX'], doc: ['Word (DOC)', 'DOC'], pptx: ['PowerPoint (PPTX)', 'PPTX'],
+    ppt: ['PowerPoint (PPT)', 'PPT'], txt: ['text', 'TXT'], epub: ['EPUB', 'EPUB'],
+    heic: ['HEIC image', 'HEIC'], image: ['image', 'Image'],
+};
+
+function wfTypeLabel(cls, short) {
+    if (!cls) return short ? 'Files' : 'varies';
+    const l = WF_TYPE_LABELS[cls];
+    return l ? l[short ? 1 : 0] : cls;
+}
+
+function wfIoText(meta) {
+    return wfTypeLabel(meta.in[0], true) + (meta.in.length > 1 ? '+' : '') + ' → ' + wfTypeLabel(meta.out, true);
+}
+
+function wfStepMeta(type) {
+    const m = window.ffLocal && window.ffLocal.workflow;
+    return (m && m.STEP_TYPES && m.STEP_TYPES[type]) || null;
+}
+
+function wfStartClass() {
+    const m = window.ffLocal && window.ffLocal.workflow;
+    return (m && m.classOf && workflowFile) ? m.classOf(workflowFile.name) : null;
+}
+
+// First place where a step is handed a file class it does not accept, or null.
+function wfFindProblem(list) {
+    let cls = wfStartClass();
+    for (let i = 0; i < list.length; i++) {
+        const meta = wfStepMeta(list[i].type);
+        if (!meta) { cls = null; continue; }
+        if (cls && meta.in.indexOf(cls) < 0) return { index: i, step: list[i], need: meta.in, have: cls };
+        cls = meta.out;
+    }
+    return null;
+}
+
+function wfTailClass(list) {
+    let cls = wfStartClass();
+    for (const s of list) {
+        const meta = wfStepMeta(s.type);
+        cls = meta ? meta.out : null;
+    }
+    return cls;
+}
+
+function wfProblemText(p) {
+    const need = p.need.map(c => wfTypeLabel(c)).join(' or ');
+    return `${p.step.label} needs ${need}, but the file at that point is ${wfTypeLabel(p.have)}.`;
+}
+
+// True if the list is a valid chain; otherwise shows the inline alert and returns false.
+function wfCheckChain(list) {
+    const p = wfFindProblem(list);
+    if (!p) return true;
+    wfAlert = { title: "That step can't go there", text: wfProblemText(p) };
+    wfRenderAlert();
+    return false;
+}
+
+function wfRenderAlert() {
+    const host = document.getElementById('workflow-chain-alert');
+    if (!host) return;
+    let a = wfAlert;
+    if (!a) {
+        const p = wfFindProblem(workflowSteps);
+        if (p) a = { title: 'Check the order of your steps', text: wfProblemText(p) };
+    }
+    host.innerHTML = '';
+    if (!a) return;
+    const el = document.createElement('div');
+    el.className = 'ff-alert danger';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = '<span class="ff-alert-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><div><h4></h4><p></p></div>';
+    el.querySelector('h4').textContent = a.title;
+    el.querySelector('p').textContent = a.text;
+    host.appendChild(el);
+}
+
+// Palette hints: dim steps that cannot follow the current end of the pipeline.
+function wfRenderHints() {
+    wfRenderAlert();
+    const tail = wfTailClass(workflowSteps);
+    document.querySelectorAll('#workflow-page .step-item').forEach(item => {
+        const meta = wfStepMeta(item.dataset.stepType);
+        item.classList.toggle('dim', !!(tail && meta && meta.in.indexOf(tail) < 0));
+    });
+}
+
+function wfSetDragging(on) {
+    const c = document.getElementById('workflow-steps-container');
+    if (c) c.classList.toggle('is-dragging', !!on);
+    if (!on) document.querySelectorAll('#workflow-page .dnd-slot.on').forEach(el => el.classList.remove('on'));
+}
+
+function wfMakeSlot(index, isConnector) {
+    const slot = document.createElement('div');
+    slot.className = 'dnd-slot' + (isConnector ? ' step-arrow ff-conn' : '');
+    slot.dataset.slotIndex = index;
+    if (isConnector) slot.dataset.arrowIndex = index - 1;
+    slot.innerHTML = '<span>Drop here</span>';
+    slot.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = (wfDrag && wfDrag.kind === 'node') ? 'move' : 'copy';
+        slot.classList.add('on');
+    });
+    slot.addEventListener('dragleave', (e) => {
+        if (!e.relatedTarget || !slot.contains(e.relatedTarget)) slot.classList.remove('on');
+    });
+    slot.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        slot.classList.remove('on');
+        const cv = document.getElementById('workflow-canvas');
+        if (cv) cv.classList.remove('drag-over');
+        wfDropAt(e, index);
+    });
+    return slot;
+}
+
+// Handle a drop of a palette step or an existing node at slot index `slot`.
+function wfDropAt(e, slot) {
+    let drag = wfDrag;
+    if (!drag && e.dataTransfer) {
+        const t = e.dataTransfer.getData('step-type');
+        const n = e.dataTransfer.getData('step-index');
+        if (t) drag = { kind: 'new', type: t, label: e.dataTransfer.getData('step-label'), icon: e.dataTransfer.getData('step-icon') };
+        else if (n !== '') drag = { kind: 'node', from: Number(n) };
+    }
+    wfDrag = null;
+    wfSetDragging(false);
+    if (!drag) return;
+    if (drag.kind === 'new') {
+        addStepToWorkflow(drag.type, drag.label, drag.icon, slot);
+    } else if (drag.kind === 'node') {
+        reorderStep(drag.from, slot > drag.from ? slot - 1 : slot);
+    }
+}
+
+function reorderStep(from, to) {
+    if (from === to || from < 0 || from >= workflowSteps.length || to < 0 || to >= workflowSteps.length) return false;
+    const next = workflowSteps.slice();
+    const moved = next.splice(from, 1)[0];
+    next.splice(to, 0, moved);
+    if (!wfCheckChain(next)) return false;
+    workflowSteps = next;
+    wfAlert = null;
+    renderWorkflowSteps();
+    return true;
 }
 
 function needsConfig(type) {
@@ -2167,6 +2528,7 @@ let workflowUndo = null;
 function removeStep(index) {
     workflowUndo = { index: index, step: workflowSteps[index] };
     workflowSteps.splice(index, 1);
+    wfAlert = null;
     renderWorkflowSteps();
 }
 
@@ -2181,10 +2543,14 @@ function undoRemoveStep() {
 function moveStep(index, dir) {
     const j = index + dir;
     if (j < 0 || j >= workflowSteps.length) return;
-    const tmp = workflowSteps[index];
-    workflowSteps[index] = workflowSteps[j];
-    workflowSteps[j] = tmp;
-    renderWorkflowSteps();
+    if (!reorderStep(index, j)) return;
+    // Rendering rebuilt the buttons; keep keyboard focus on the same control.
+    const card = document.querySelector(`.workflow-step-card[data-step-index="${j}"]`);
+    const btns = card ? card.querySelectorAll('.move-step') : [];
+    if (btns.length === 2) {
+        const want = dir < 0 ? btns[0] : btns[1];
+        (want.disabled ? (dir < 0 ? btns[1] : btns[0]) : want).focus();
+    }
 }
 window.moveStep = moveStep;
 window.undoRemoveStep = undoRemoveStep;
@@ -2614,9 +2980,7 @@ async function runWorkflow() {
     };
 
     try {
-        const response = await fetch(apiUrl('/api/workflow/execute'), {
-            method: 'POST',
-            body: formData,
+        const response = await ffProcess('/api/workflow/execute', formData, {
             signal: abort && abort.signal,
         });
 
@@ -2705,6 +3069,7 @@ function handleWorkflowEvent(data, statusDisplay, resultDisplay) {
         case 'complete':
             statusDisplay.classList.add('hidden');
             resultDisplay.classList.remove('hidden');
+            ffUpdateStepTracker('workflow', 3);
             document.getElementById('workflow-result-message').textContent = `${data.message}: ${data.filename}`;
             updateDownloadLink(document.getElementById('workflow-download-link'), data.download_token);
             // Keep completed states visible for a moment
@@ -2727,6 +3092,7 @@ function setAllStepsPending() {
         card.classList.remove('processing', 'completed');
         card.classList.add('pending');
     });
+    wfRenderRun();
 
     arrows.forEach(arrow => {
         arrow.classList.remove('processing', 'completed');
@@ -2739,6 +3105,7 @@ function setStepProcessing(index) {
         card.classList.remove('pending', 'completed');
         card.classList.add('processing');
     }
+    wfMarkRun(index, 'running');
 
     // Highlight arrow leading to this step
     if (index > 0) {
@@ -2755,6 +3122,7 @@ function setStepCompleted(index) {
         card.classList.remove('pending', 'processing');
         card.classList.add('completed');
     }
+    wfMarkRun(index, 'success');
 
     // Mark arrow as completed
     if (index > 0) {
@@ -2764,6 +3132,28 @@ function setStepCompleted(index) {
             arrow.classList.add('completed');
         }
     }
+}
+
+// Run status list (.ff-run) shown inside the status panel while the workflow runs.
+function wfRenderRun() {
+    const list = document.getElementById('workflow-run-list');
+    if (!list) return;
+    list.innerHTML = '';
+    workflowSteps.forEach((step, i) => {
+        const li = document.createElement('li');
+        li.dataset.runIndex = i;
+        li.innerHTML = '<span class="mk" aria-hidden="true"></span><span class="run-label"></span><small>Waiting</small>';
+        li.querySelector('.run-label').textContent = step.label;
+        list.appendChild(li);
+    });
+}
+
+function wfMarkRun(index, state) {
+    const li = document.querySelector(`#workflow-run-list li[data-run-index="${index}"]`);
+    if (!li) return;
+    li.className = state;
+    li.querySelector('.mk').innerHTML = state === 'success' ? '<i class="fas fa-check"></i>' : '<i class="fas fa-circle-notch fa-spin"></i>';
+    li.querySelector('small').textContent = state === 'success' ? 'Done' : 'Running';
 }
 
 function clearStepStates() {
@@ -2800,6 +3190,7 @@ function resetWorkflowUI() {
     renderWorkflowSteps();
     document.getElementById('workflow-status-display')?.classList.add('hidden');
     document.getElementById('workflow-result-display')?.classList.add('hidden');
+    ffUpdateStepTracker('workflow', 1);
 }
 
 // Extend resetUI to include workflow reset
@@ -3038,7 +3429,7 @@ async function processExcelAction(url, text, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffProcess(url, formData);
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
@@ -3184,7 +3575,7 @@ async function processPptAction(url, text, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffServerFetch(url, { method: 'POST', body: formData });
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
@@ -3309,6 +3700,38 @@ document.getElementById('process-organize-pdf-btn')?.addEventListener('click', (
     processAction('/api/pdf/organize', 'Organizing pages...', fd);
 });
 
+// --- Crop PDF ---
+document.getElementById('crop-pdf-btn')?.addEventListener('click', () => {
+    showPdfOptionPanel('crop-pdf-area');
+});
+document.getElementById('process-crop-pdf-btn')?.addEventListener('click', () => {
+    if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    ['top', 'bottom', 'left', 'right'].forEach((edge) => {
+        fd.append(edge, document.getElementById('crop-pdf-' + edge).value || '0');
+    });
+    const pages = document.getElementById('crop-pdf-pages').value.trim();
+    if (pages) fd.append('pages', pages);
+    processAction('/api/pdf/crop', 'Cropping PDF...', fd);
+});
+
+// --- Remove Pages (organize with the picked pages left out) ---
+document.getElementById('remove-pages-btn')?.addEventListener('click', () => {
+    showPdfOptionPanel('remove-pages-area');
+});
+document.getElementById('process-remove-pages-btn')?.addEventListener('click', async () => {
+    if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
+    const raw = document.getElementById('remove-pages-input').value.trim();
+    if (!raw) { ffNotify('Please choose the pages to remove (e.g. 2,4-6).'); return; }
+    // Validation and the "keep everything else" maths happen in the organize
+    // operation itself (on-device, or on the server after consent).
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('remove_pages', raw);
+    processAction('/api/pdf/organize', 'Removing pages...', fd);
+});
+
 // --- Add Page Numbers ---
 document.getElementById('page-numbers-btn')?.addEventListener('click', () => {
     showPdfOptionPanel('page-numbers-area');
@@ -3329,6 +3752,8 @@ document.getElementById('process-page-numbers-btn')?.addEventListener('click', (
     fd.append('fmt', format);
     fd.append('start_number', start);
     fd.append('skip_first', skip);
+    fd.append('template', document.getElementById('page-numbers-template')?.value || '{n}');
+    fd.append('end_page', document.getElementById('page-numbers-end')?.value || '0');
     processAction('/api/pdf/add-page-numbers', 'Adding page numbers...', fd);
 });
 
@@ -3390,21 +3815,23 @@ document.getElementById('annotate-pdf-btn')?.addEventListener('click', () => {
 document.getElementById('process-annotate-pdf-btn')?.addEventListener('click', () => {
     if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
     const annotType = document.getElementById('annot-type').value;
-    const page = parseInt(document.getElementById('annot-page').value, 10) || 1;
-    const x0 = parseFloat(document.getElementById('annot-x0').value) || 50;
-    const y0 = parseFloat(document.getElementById('annot-y0').value) || 700;
-    const x1 = parseFloat(document.getElementById('annot-x1').value) || 300;
-    const y1 = parseFloat(document.getElementById('annot-y1').value) || 730;
+    const page = document.getElementById('annot-page').value;
+    const x0 = document.getElementById('annot-x0').value;
+    const y0 = document.getElementById('annot-y0').value;
+    const x1 = document.getElementById('annot-x1').value;
+    const y1 = document.getElementById('annot-y1').value;
     const content = document.getElementById('annot-content').value;
-    const annotObj = {
+    // The endpoint takes a JSON array of annotations (it used to be sent the
+    // fields individually, which the server rejected with HTTP 422).
+    const annotation = {
         type: annotType,
-        page: page,
-        rect: [x0, y0, x1, y1]
+        page: parseInt(page, 10) || 1,
+        rect: [x0, y0, x1, y1].map(Number),
     };
-    if (content) annotObj.content = content;
+    if (content) annotation.content = content;
     const fd = new FormData();
     fd.append('file', selectedFile);
-    fd.append('annotations', JSON.stringify([annotObj]));
+    fd.append('annotations', JSON.stringify([annotation]));
     processAction('/api/pdf/annotate', 'Adding annotation...', fd);
 });
 
@@ -3467,6 +3894,9 @@ document.getElementById('process-pdf-to-epub-btn')?.addEventListener('click', ()
 // === Word Tools Page ===
 
 let selectedWordFile = null;
+// Read by static/local/office-entry.js to hand the chosen file to the on-device
+// Office page. Returns null until a file has been accepted.
+window.ffOfficeSelectedFile = (kind) => ({ word: selectedWordFile, excel: selectedExcelFile, ppt: selectedPptFile })[kind] || null;
 
 const wordDropZone = document.getElementById('word-drop-zone');
 const wordFileInput = document.getElementById('word-file-input');
@@ -3506,7 +3936,7 @@ async function processWordAction(url, statusText, formData) {
     resultDisplay.classList.add('hidden');
 
     try {
-        const response = await fetch(apiUrl(url), { method: 'POST', body: formData });
+        const response = await ffServerFetch(url, { method: 'POST', body: formData });
         if (response.ok) {
             const data = await response.json();
             resultDisplay.classList.remove('hidden');
@@ -3637,7 +4067,18 @@ const DEEP_LINK_OPS = {
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
+
+// Tools reachable from the home grid that have no SEO landing page, so they are
+// not in DEEP_LINK_OPS (whose keys mirror the SEO slugs). Same resolution rule:
+// the op is only ever looked up here, never used as an element id.
+const DEEP_LINK_EXTRA_OPS = Object.fromEntries([
+    ['repair-pdf', 'repair-pdf-btn'],
+    ['create-pdf', 'create-pdf-btn'],
+    ['annotate-pdf', 'annotate-pdf-btn'],
+    ['edit-pdf-metadata', 'pdf-metadata-btn'],
+    ['word-to-powerpoint', 'word-to-pptx-btn'],
+].map(([op, card]) => [op, { card }]));
 
 // The action card a deep link asked for, held until the visitor picks a file.
 // Most card handlers ffNotify("Please select a file first.") when clicked with no
@@ -3699,8 +4140,14 @@ const FF_CATEGORY_INPUTS = {
 
     // `op` is only ever resolved through DEEP_LINK_OPS — never used to look up
     // an element id directly, so an arbitrary ?op= value can't reach the DOM.
-    const op = DEEP_LINK_OPS[params.get('op')];
-    if (!op) return;
+    const opKey = params.get('op');
+    const op = DEEP_LINK_OPS[opKey] || DEEP_LINK_EXTRA_OPS[opKey];
+    // A file handed over from the home page or an SEO landing page is claimed
+    // with or without an `op`. Without one (home page "choose file") the visitor
+    // gets the whole category with the file loaded and picks the tool themselves,
+    // instead of being dropped into whichever tool we guessed.
+    const claimHandoff = () => { if (params.get('handoff') === '1') ffClaimHandoff(requestedTool); };
+    if (!op) { claimHandoff(); return; }
 
     // No tool_open for the specific op here on purpose: it's fired by the
     // delegated action-card listener when the card is actually opened (below
@@ -3724,9 +4171,7 @@ const FF_CATEGORY_INPUTS = {
     // feed it to this category's file input exactly as if it had been chosen
     // here, so landing → upload → result is one motion with no second file
     // picker. Any failure just leaves the normal empty upload box in place.
-    if (params.get('handoff') === '1') {
-        ffClaimHandoff(requestedTool);
-    }
+    claimHandoff();
 })();
 
 function ffClaimHandoff(tool) {
@@ -3855,3 +4300,8 @@ setInterval(() => {
     } catch (e) {}
 }, 60000);
 
+
+document.getElementById('watermark-logo-scale')?.addEventListener('input', (e) => {
+    const out = document.getElementById('watermark-logo-scale-value');
+    if (out) out.textContent = Math.round(parseFloat(e.target.value) * 100) + '%';
+});

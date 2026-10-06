@@ -26,6 +26,11 @@ def test_read_index(auth_client):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
 
+def test_read_index_head(auth_client):
+    response = auth_client.head("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
 def test_api_remove_password(locked_pdf, mock_dirs, auth_client):
     file_path = locked_pdf["path"]
     password = locked_pdf["password"]

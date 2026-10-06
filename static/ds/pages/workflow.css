@@ -1,0 +1,108 @@
+/* workflow tool page: page-specific styles for the design-system migration. Scoped under #workflow-page.ffp. */
+
+/* layout: single column, sections stacked as panels */
+#workflow-page .workflow-builder{display:flex;flex-direction:column;gap:24px;max-width:none;margin:0;padding:0;background:none;border:0;box-shadow:none}
+#workflow-page .workflow-layout{display:flex;flex-direction:column;gap:24px;grid-template-columns:none}
+#workflow-page .workflow-builder h3{margin:0 0 10px;font:500 12px/1 var(--font-mono);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+#workflow-page .workflow-drop{min-height:200px}
+#workflow-page .wf-dnd{display:grid;grid-template-columns:280px minmax(0,1fr);gap:24px;align-items:start}
+#workflow-page .wf-main{display:flex;flex-direction:column;gap:24px;min-width:0}
+#workflow-page .workflow-palette-section{position:sticky;top:16px}
+
+/* step picker (.ff-pick) */
+#workflow-page .workflow-palette-section{background:var(--bg-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);padding:16px}
+#workflow-page .ff-pick-q{display:flex;align-items:center;height:44px;padding:0 var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);margin-bottom:10px}
+#workflow-page .ff-pick-q:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-ring)}
+#workflow-page .ff-pick-q input{flex:1;border:0;background:transparent;font:400 var(--text-sm) var(--font-sans);color:var(--text-primary);outline:none;min-width:0;padding:0}
+#workflow-page .step-palette{display:flex;flex-direction:column;gap:4px;max-height:520px;overflow:auto;padding:0;background:none;border:0}
+#workflow-page .step-item{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:var(--space-3);row-gap:0;align-items:center;min-height:48px;padding:var(--space-2) var(--space-3);border:0;border-radius:var(--radius-md);background:transparent;color:var(--text-primary);box-shadow:none;transform:none;cursor:pointer;text-align:left}
+#workflow-page .step-item[hidden]{display:none}
+#workflow-page .step-item:hover{border-color:var(--accent);background:var(--bg-subtle);transform:none;box-shadow:none}
+#workflow-page .step-item:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#workflow-page .step-item i{width:28px;height:28px;border-radius:var(--radius-sm);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;flex:none;font-size:13px;color:var(--text-secondary);margin:0;grid-row:1/span 2}
+#workflow-page .step-item span{font-size:var(--text-sm);font-weight:500;color:var(--text-primary);grid-column:2}
+#workflow-page .step-item small{grid-column:2;font:400 11px var(--font-mono);color:var(--text-secondary)}
+#workflow-page .step-item.dim{opacity:.5}
+#workflow-page .step-item{border:1px solid var(--border-default);border-radius:var(--radius-md)}
+
+/* pipeline canvas */
+#workflow-page .workflow-canvas-section{background:var(--bg-subtle);border:1px solid var(--border-subtle);border-radius:var(--radius-xl);padding:20px}
+#workflow-page .workflow-canvas{min-height:120px;background:none;border:0;padding:0;box-shadow:none}
+#workflow-page .workflow-canvas.drag-over{outline:1.5px dashed var(--accent);outline-offset:4px;background:var(--accent-soft);border-radius:var(--radius-lg)}
+#workflow-page .canvas-placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:36px 16px;border:1.5px dashed var(--border-strong);border-radius:var(--radius-xl);background:var(--bg-panel);color:var(--text-secondary)}
+#workflow-page .canvas-placeholder i{color:var(--text-muted)}
+#workflow-page .canvas-placeholder p{margin:0;font-size:var(--text-sm)}
+#workflow-page .workflow-steps{display:flex;flex-direction:column;align-items:stretch;gap:0;overflow:visible;padding:0;flex-wrap:nowrap}
+#workflow-page .workflow-steps.hidden{display:none}
+#workflow-page .workflow-step-card.ff-node{max-width:none;width:100%;min-width:0;flex-wrap:nowrap;margin:0;transform:none;position:relative}
+#workflow-page .workflow-step-card.ff-node>.step-ic{width:32px;height:32px;border-radius:var(--radius-md);background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;flex:none;font-size:14px;color:var(--text-secondary);margin:0}
+#workflow-page .workflow-step-card .step-label{flex:1;min-width:0;font-size:var(--text-sm);font-weight:500;color:var(--text-primary)}
+#workflow-page .workflow-step-card .config-btn,#workflow-page .workflow-step-card .move-step,#workflow-page .workflow-step-card .remove-step{position:static;opacity:1;width:28px;height:28px;padding:0;border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-panel);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+#workflow-page .workflow-step-card .config-btn:hover,#workflow-page .workflow-step-card .move-step:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:var(--bg-panel)}
+#workflow-page .workflow-step-card .remove-step:hover{border-color:var(--danger);color:var(--danger);background:var(--bg-panel)}
+#workflow-page .workflow-step-card .move-step:disabled{opacity:.35;cursor:not-allowed}
+#workflow-page .workflow-step-card.processing{border-color:var(--accent);background:var(--accent-soft)}
+#workflow-page .workflow-step-card.completed{border-color:var(--success);background:var(--bg-panel)}
+#workflow-page .workflow-step-card.completed>.step-ic{background:var(--success);color:#fff}
+#workflow-page .workflow-step-card.pending{opacity:.7}
+#workflow-page .workflow-step-card.processing>.step-ic{color:var(--accent)}
+
+/* drop slots between nodes (.dnd-slot, also the .ff-conn connector) */
+#workflow-page .dnd-slot{height:14px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md);border:1.5px dashed transparent;transition:height .15s var(--ease-standard),background .15s,border-color .15s;position:relative;width:100%;max-width:none;margin:0;background:none;transform:none}
+#workflow-page .dnd-slot:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border-strong)}
+#workflow-page .dnd-slot span{display:none;font:500 12px var(--font-sans);color:var(--accent);position:relative;background:var(--accent-soft);padding:0 8px;pointer-events:none}
+#workflow-page .dnd-slot i{display:none}
+#workflow-page .workflow-steps.is-dragging .dnd-slot{height:26px}
+#workflow-page .workflow-steps.is-dragging .dnd-slot.on,#workflow-page .dnd-slot.on{height:52px;border-color:var(--accent);background:var(--accent-soft)}
+#workflow-page .dnd-slot.on span{display:block}
+#workflow-page .dnd-slot.on:before{display:none}
+#workflow-page .dnd-slot.processing:before{background:var(--accent)}
+#workflow-page .dnd-slot.completed:before{background:var(--success)}
+#workflow-page .workflow-step-card.dnd-node{cursor:grab;transition:opacity .15s,border-color .15s}
+#workflow-page .workflow-step-card.dnd-node:active{cursor:grabbing}
+#workflow-page .workflow-step-card.dragging{opacity:.35}
+#workflow-page .workflow-step-card .no{font:600 11px var(--font-mono);color:var(--text-secondary);width:18px;text-align:center;flex:none}
+#workflow-page .workflow-step-card .hd{color:var(--text-muted);display:flex;flex:none}
+#workflow-page .workflow-step-card .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#workflow-page .workflow-step-card .grow .step-label{flex:none}
+#workflow-page .step-io{font:400 11px var(--font-mono);color:var(--text-secondary)}
+#workflow-page .dnd-out{display:flex;align-items:center;gap:8px;margin-top:6px;padding:10px 14px;border:1px solid var(--border-default);border-radius:var(--radius-lg);background:var(--bg-panel);font-size:var(--text-sm);color:var(--text-secondary)}
+#workflow-page .dnd-out b{color:var(--text-primary);font-family:var(--font-mono);font-weight:600}
+#workflow-chain-alert:empty{display:none}
+#workflow-page #workflow-chain-alert{margin-bottom:12px}
+#workflow-page .undo-step{align-self:flex-start;margin-top:12px}
+
+/* run row */
+#workflow-page .workflow-run-section{display:flex;flex-direction:column;gap:10px}
+#workflow-page .workflow-run-section .primary-btn{width:100%}
+#workflow-page .workflow-run-section .secondary-btn{width:100%;height:36px;border:0;background:transparent;color:var(--text-secondary);font:500 var(--text-sm) var(--font-sans);cursor:pointer;border-radius:var(--radius-md)}
+#workflow-page .workflow-run-section .secondary-btn:hover{background:var(--bg-subtle);color:var(--text-primary)}
+#workflow-page .workflow-step-progress{display:block;margin-top:2px;font:400 var(--text-xs) var(--font-mono);color:var(--text-secondary)}
+
+/* config modal */
+#workflow-page .step-config-modal .modal-content{background:var(--bg-panel);color:var(--text-primary);border:1px solid var(--border-subtle);border-radius:var(--radius-xl);box-shadow:var(--shadow-2)}
+#workflow-page .step-config-modal .secondary-btn{height:44px;padding:0 var(--space-5);border-radius:var(--radius-md);border:1px solid var(--border-default);background:var(--bg-panel);color:var(--text-primary);cursor:pointer}
+#workflow-page .step-config-modal .primary-btn{width:auto}
+
+#workflow-page .status-display .ff-run{width:100%;margin-top:12px;text-align:left}
+#workflow-page .ff-run .mk i{font-size:11px}
+#workflow-page .ff-run .success small{color:var(--success)}
+@media (max-width:900px){
+#workflow-page .wf-dnd{grid-template-columns:1fr}
+#workflow-page .workflow-palette-section{position:static}
+#workflow-page .step-palette{max-height:260px}
+}
+@media (max-width:640px){
+#workflow-page .workflow-canvas-section{padding:12px}
+#workflow-page .workflow-step-card.ff-node{gap:var(--space-2);padding:var(--space-2) var(--space-3)}
+}
+#workflow-page .workflow-step-card .config-btn i,#workflow-page .workflow-step-card .remove-step i{color:inherit;font-size:12px;margin:0}
+#workflow-page .workflow-canvas-section,#workflow-page .workflow-run-section,#workflow-page .workflow-input-section,#workflow-page .workflow-palette-section{margin:0}
+#workflow-page .workflow-run-section{padding:0;margin:0}
+#workflow-page .workflow-run-section .secondary-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+#workflow-page .workflow-builder .result-display h3{margin:0;font:600 var(--text-xl)/1.2 var(--font-sans);text-transform:none;letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+#workflow-page .result-display{align-items:center}
+#workflow-page .ff-alert-ic{display:flex;color:var(--danger);flex:none}
+#workflow-page .workflow-step-card.processing,#workflow-page .workflow-step-card.processing i{animation:none}
+#workflow-page .workflow-step-card.pending{filter:none}
+#workflow-page .workflow-step-card.completed .config-btn i,#workflow-page .workflow-step-card.completed .remove-step i,#workflow-page .workflow-step-card.processing .remove-step i,#workflow-page .workflow-step-card.processing .config-btn i{color:inherit}

@@ -1,0 +1,83 @@
+/* Tool pages in the design-system layout. The legacy DOM and ids stay (script.js drives them); this maps
+   the legacy classes onto the design's single-column tool page. Scoped to .ffp so other pages are untouched. */
+.ffp{width:min(100% - 32px,720px);margin:0 auto;padding:24px 0 64px;gap:24px;background:transparent}
+body:has(.ffp.active){background:#FAFAFA}
+[data-theme="dark"] body:has(.ffp.active){background:#111111}
+.ffp .ff-bc{margin:0}
+.ffp .ff-bc a{cursor:pointer}
+.ffp-head h2{font-size:var(--text-3xl);font-weight:600;letter-spacing:var(--tracking-h2);line-height:var(--leading-tight);margin:0;color:var(--text-primary)}
+.ffp-head p{margin:8px 0 0;color:var(--text-secondary);font-size:var(--text-base)}
+.ffp .ff-steps{width:100%}
+.ffp .ff-step.active i{background:var(--accent);border-color:var(--accent);color:#fff}
+.ffp .ff-step.active{color:var(--text-primary);font-weight:600}
+.ffp .ff-step.completed{color:var(--text-primary)}
+.ffp .ff-step.completed i{background:var(--success);border-color:var(--success);color:#fff}
+.ffp .ff-step.completed.active i{background:var(--success);border-color:var(--success)}
+
+/* single column: file, options, result, then the other tools */
+.ffp .drill-down-content{display:flex;flex-direction:column;gap:24px;grid-template-columns:none}
+.ffp .actions-panel{display:contents}
+.ffp .file-selector-area{order:1;width:100%}
+.ffp .password-area{order:2}
+.ffp .result-panel{order:3;background:none;border:0;padding:0;box-shadow:none;min-height:0}
+.ffp .ffp-sub{order:4;margin:8px 0 -12px;font:500 12px/1 var(--font-mono);color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.ffp .action-buttons{order:5;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-height:none;overflow:visible;padding:0}
+.ffp .result-panel:not(:has(> :not(.hidden):not(.result-idle-placeholder))){display:none}
+.ffp .result-idle-placeholder{display:none}
+
+/* upload zone */
+.ffp .drop-zone.ff-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);text-align:center;min-height:260px;padding:var(--space-8);background:var(--bg-panel);border:1.5px dashed var(--border-strong);border-radius:var(--radius-xl);box-shadow:none;color:var(--text-primary);transform:none}
+.ffp .drop-zone.ff-drop:hover{border-color:var(--text-secondary);background:var(--bg-panel)}
+.ffp .drop-zone.ff-drop.drag-over{border-color:var(--accent);background:var(--accent-soft);transform:scale(1.01)}
+.ffp .drop-zone.ff-drop.drag-over .big{color:var(--accent)}
+.ffp .ff-drop .browse-text{color:var(--accent);text-decoration:underline}
+.ffp .file-info{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-3);padding:6px 12px;border-radius:var(--radius-md);background:var(--bg-subtle);border:1px solid var(--border-subtle);font:500 var(--text-sm) var(--font-mono);color:var(--text-primary)}
+.ffp .file-info.hidden{display:none}
+
+/* tool cards */
+.ffp .action-card.ff-tool{min-height:92px;padding:var(--space-4);border-radius:var(--radius-lg);background:var(--bg-panel);border:1px solid var(--border-subtle);box-shadow:var(--shadow-1);flex-direction:row;align-items:center;text-align:left;gap:var(--space-3);transform:none}
+.ffp .action-card.ff-tool:hover{box-shadow:var(--shadow-2);border-color:var(--border-default);transform:none;background:var(--bg-panel)}
+.ffp .action-card.ff-tool.selected,.ffp .action-card.ff-tool.deep-link-target{border-color:var(--accent);background:var(--accent-soft);box-shadow:none;outline:0}
+.ffp .action-card.ff-tool .action-text{display:block}
+.ffp .action-card.ff-tool h4{margin:0;font-size:var(--text-sm);font-weight:600;color:var(--text-primary)}
+.ffp .action-card.ff-tool p{display:-webkit-box;margin:2px 0 0;font-size:var(--text-xs);color:var(--text-secondary);line-height:1.4}
+
+/* option panels */
+.ffp .password-area{display:flex;flex-direction:column;gap:var(--space-4);padding:20px;background:var(--bg-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);margin:0}
+.ffp .password-area.hidden{display:none}
+.ffp .password-area label,.ffp .password-area .helper-text,.ffp .password-area p{margin:0;font-size:var(--text-sm);font-weight:500;color:var(--text-primary);text-align:left}
+.ffp .password-area label span{font:500 13px var(--font-mono);color:var(--accent)}
+.ffp .password-area input[type=text],.ffp .password-area input[type=number],.ffp .password-area input[type=password],.ffp .password-area select{height:44px;padding:0 var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-panel);color:var(--text-primary);font:400 var(--text-base)/1 var(--font-sans);width:100%;box-shadow:none}
+.ffp .password-area input:hover,.ffp .password-area select:hover{border-color:var(--border-strong)}
+.ffp .password-area input:focus,.ffp .password-area select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-ring)}
+.ffp .password-area input[type=range]{width:100%;accent-color:var(--accent);height:24px;padding:0;border:0;background:none}
+.ffp .resize-inputs{display:flex;gap:var(--space-2);align-items:center}
+.ffp .resize-inputs.hidden{display:none}
+.ffp .resize-inputs .separator{color:var(--text-muted)}
+.ffp .primary-btn,.ffp .download-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;height:44px;padding:0 var(--space-5);border-radius:var(--radius-md);border:1px solid transparent;background:var(--accent);color:#fff;font:500 var(--text-sm)/1 var(--font-sans);cursor:pointer;box-shadow:none;text-decoration:none;transform:none;transition:background var(--duration-fast) var(--ease-standard)}
+.ffp .result-display .download-btn{align-self:center}
+.ffp .primary-btn:hover,.ffp .download-btn:hover{background:var(--accent-hover);color:#fff;text-decoration:none;transform:none;box-shadow:none}
+.ffp .primary-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* progress and result */
+.ffp .status-display{display:flex;flex-direction:column;align-items:center;gap:var(--space-3);padding:var(--space-6);background:var(--bg-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);text-align:center;color:var(--text-primary);font-size:var(--text-sm)}
+.ffp .status-display.hidden,.ffp .result-display.hidden{display:none}
+.ffp .status-display .loader{width:24px;height:24px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:ffspin .7s linear infinite;margin:0}
+.ffp .status-display p{margin:0}
+.ffp .result-display{display:flex;flex-direction:column;align-items:center;gap:var(--space-3);padding:var(--space-6);background:var(--bg-panel);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-1);text-align:center}
+.ffp .result-display .success-icon{width:40px;height:40px;border-radius:50%;background:var(--success-soft);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:18px;margin:0}
+.ffp .result-display h3{margin:0;font-size:var(--text-xl);font-weight:600;letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.ffp .result-display p{margin:0;font-size:var(--text-sm);color:var(--text-secondary)}
+.ffp .file-deleted-notice{display:flex;align-items:center;gap:6px;font-size:var(--text-xs);font-weight:500;color:var(--text-secondary);background:none;border:0;padding:0;margin:0}
+.ffp .file-deleted-notice i{color:var(--success)}
+@media (max-width:640px){.ffp .action-buttons{grid-template-columns:1fr}.ffp .ff-steps{flex-wrap:wrap}}
+.ffp .ff-bc a{text-decoration:none}
+.ffp .ff-bc a:hover{text-decoration:underline}
+.ffp{padding-top:0}
+.ffp .drill-down-content{align-items:stretch}
+.ffp .action-buttons{width:100%}
+.ffp .password-area label,.ffp .password-area .helper-text{display:block;text-align:left}
+.ffp .password-area input[type=range]{-webkit-appearance:auto;appearance:auto;background:none;height:24px;border:0;padding:0}
+.ffp .password-area input[type=range]::-webkit-slider-thumb{-webkit-appearance:auto;appearance:auto;width:auto;height:auto;background:none;box-shadow:none;border:0}
+.ffp .compress-preview{display:flex;flex-direction:column;gap:var(--space-2);align-items:flex-start}
+.ffp .compress-preview img{max-width:100%;max-height:160px;border-radius:var(--radius-md);border:1px solid var(--border-subtle)}
