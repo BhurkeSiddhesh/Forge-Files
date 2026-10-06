@@ -277,7 +277,50 @@
             return groups;
         }
 
-        throw new L.Error('mode must be one of: each, every_n, ranges');
+        throw new L.Error('mode must be one of: each, every_n, ranges, by_size');
+    }
+
+    /** pdf_utils.py::_parse_split_max_mb */
+    function splitMaxBytes(raw) {
+        var value = Number(raw);
+        if (raw === null || raw === undefined || raw === '' || !isFinite(value)) {
+            throw new L.Error('max_mb must be a number between 0.1 and 500.');
+        }
+        if (value < 0.1 || value > 500) throw new L.Error('max_mb must be between 0.1 and 500.');
+        return Math.trunc(value * 1024 * 1024);
+    }
+
+    /** pdf_utils.py::_split_groups_by_size - binary search for the longest run that fits. */
+    async function splitGroupsBySize(total, maxBytes, partBytes, ctx) {
+        if (total > SPLIT_MAX_PAGES) {
+            throw new L.Error('PDF has too many pages to split at once (max ' + SPLIT_MAX_PAGES + ').');
+        }
+        var parts = [];
+        var start = 0;
+        while (start < total) {
+            var cache = {};
+            var attempt = async function (k) {
+                if (!cache[k]) {
+                    var idx = [];
+                    for (var i = start; i < start + k; i++) idx.push(i);
+                    cache[k] = await partBytes(idx);
+                    L.checkAbort(ctx && ctx.signal);
+                }
+                return cache[k];
+            };
+            var lo = 1, hi = total - start, best = 1;
+            while (lo <= hi) {
+                var mid = Math.floor((lo + hi) / 2);
+                if ((await attempt(mid)).length <= maxBytes) { best = mid; lo = mid + 1; }
+                else hi = mid - 1;
+            }
+            var indices = [];
+            for (var j = start; j < start + best; j++) indices.push(j);
+            parts.push([indices, await attempt(best)]);
+            start += best;
+            await L.tick();
+        }
+        return parts;
     }
 
     /**
@@ -314,9 +357,10 @@
         var ranges = L.str(fd, 'ranges', null);
         var n = L.int(fd, 'n', null);
         var modeKey = String(mode).trim().toLowerCase();
-        if (['each', 'every_n', 'ranges'].indexOf(modeKey) < 0) {
-            throw new L.Error('mode must be one of: each, every_n, ranges');
+        if (['each', 'every_n', 'ranges', 'by_size'].indexOf(modeKey) < 0) {
+            throw new L.Error('mode must be one of: each, every_n, ranges, by_size');
         }
+        var maxBytes = modeKey === 'by_size' ? splitMaxBytes(L.str(fd, 'max_mb', null)) : 0;
         if (modeKey === 'every_n' && !(n >= 1)) throw new L.Error('Split size must be at least 1 page.');
         if (modeKey === 'ranges' && (!ranges || !ranges.trim())) {
             throw new L.Error('Provide one or more page ranges to split.');
@@ -331,16 +375,23 @@
         var JSZip = await L.loadJsZip();
         var src = await loadDoc(PDFLib, file, null);
 
-        var groups = splitGroups(src.getPageCount(), mode, ranges, n);
+        async function build(indices) {
+            var part = await PDFLib.PDFDocument.create({ updateMetadata: false });
+            var copied = await part.copyPages(src, indices);
+            copied.forEach(function (page) { part.addPage(page); });
+            return part.save();
+        }
+
+        var sized = modeKey === 'by_size'
+            ? await splitGroupsBySize(src.getPageCount(), maxBytes, build, ctx)
+            : null;
+        var groups = sized ? sized.map(function (p) { return p[0]; }) : splitGroups(src.getPageCount(), mode, ranges, n);
         var names = uniqueMemberNames(groups);
         var zip = new JSZip();
 
         for (var g = 0; g < groups.length; g++) {
             L.checkAbort(ctx.signal);
-            var part = await PDFLib.PDFDocument.create({ updateMetadata: false });
-            var copied = await part.copyPages(src, groups[g]);
-            copied.forEach(function (page) { part.addPage(page); });
-            zip.file(names[g], await part.save());
+            zip.file(names[g], sized ? sized[g][1] : await build(groups[g]));
             if (ctx.onProgress) ctx.onProgress(g + 1, groups.length);
             await L.tick();
         }

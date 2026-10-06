@@ -273,7 +273,51 @@ def _split_pdf_groups(total_pages: int, mode: str, ranges: str = None, n: int = 
             raise ValueError("Provide one or more page ranges to split.")
         return groups
 
-    raise ValueError("mode must be one of: each, every_n, ranges")
+    raise ValueError("mode must be one of: each, every_n, ranges, by_size")
+
+
+def _parse_split_max_mb(max_mb) -> int:
+    """Validated byte limit for the by_size split mode."""
+    try:
+        value = float(max_mb)
+    except (TypeError, ValueError):
+        raise ValueError("max_mb must be a number between 0.1 and 500.")
+    if not 0.1 <= value <= 500:
+        raise ValueError("max_mb must be between 0.1 and 500.")
+    return int(value * 1024 * 1024)
+
+
+def _split_groups_by_size(total_pages: int, max_bytes: int, part_bytes) -> List[tuple]:
+    """Greedy page packing: each part is the longest run of pages that still fits.
+
+    ``part_bytes(indices)`` returns the serialised PDF for those pages. Resources
+    shared across pages mean size is not additive, so each run is found by
+    binary search over its length. A single page larger than the limit still
+    becomes its own part. Returns ``[(indices, pdf_bytes), ...]``.
+    """
+    if total_pages > MAX_PDF_RENDER_PAGES:
+        raise ValueError(f"PDF has too many pages to split at once (max {MAX_PDF_RENDER_PAGES}).")
+    parts = []
+    start = 0
+    while start < total_pages:
+        cache = {}
+
+        def attempt(k, start=start, cache=cache):
+            if k not in cache:
+                cache[k] = part_bytes(list(range(start, start + k)))
+            return cache[k]
+
+        lo, hi = 1, total_pages - start
+        best = 1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if len(attempt(mid)) <= max_bytes:
+                best, lo = mid, mid + 1
+            else:
+                hi = mid - 1
+        parts.append((list(range(start, start + best)), attempt(best)))
+        start += best
+    return parts
 
 
 def _split_pdf_member_name(indices: List[int]) -> str:
@@ -291,8 +335,12 @@ def split_pdf_to_zip(
     ranges: str = None,
     n: int = None,
     password: str = None,
+    max_mb: float = None,
 ) -> dict:
-    """Split a PDF into several PDFs and package them in a ZIP."""
+    """Split a PDF into several PDFs and package them in a ZIP.
+
+    mode ``by_size`` packs pages into parts of at most ``max_mb`` megabytes.
+    """
     import io
     import zipfile
 
@@ -302,15 +350,24 @@ def split_pdf_to_zip(
 
     try:
         with pikepdf.open(decrypted_path) as pdf:
-            groups = _split_pdf_groups(len(pdf.pages), mode, ranges, n)
+            def build(indices):
+                out_pdf = pikepdf.Pdf.new()
+                for idx in indices:
+                    out_pdf.pages.append(pdf.pages[idx])
+                buf = io.BytesIO()
+                out_pdf.save(buf)
+                return buf.getvalue()
+
+            if (mode or "").strip().lower() == "by_size":
+                parts = _split_groups_by_size(len(pdf.pages), _parse_split_max_mb(max_mb), build)
+                groups = [indices for indices, _ in parts]
+            else:
+                groups = _split_pdf_groups(len(pdf.pages), mode, ranges, n)
+                parts = None
             with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for indices in groups:
-                    out_pdf = pikepdf.Pdf.new()
-                    for idx in indices:
-                        out_pdf.pages.append(pdf.pages[idx])
-                    buf = io.BytesIO()
-                    out_pdf.save(buf)
-                    zf.writestr(_split_pdf_member_name(indices), buf.getvalue())
+                for i, indices in enumerate(groups):
+                    data = parts[i][1] if parts else build(indices)
+                    zf.writestr(_split_pdf_member_name(indices), data)
     finally:
         if needs_cleanup:
             Path(decrypted_path).unlink(missing_ok=True)

@@ -1958,6 +1958,7 @@ async def api_split_pdf(
     ranges: str = Form(None),
     n: Optional[int] = Form(None),
     password: str = Form(None),
+    max_mb: Optional[float] = Form(None),
 ):
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
@@ -1966,7 +1967,7 @@ async def api_split_pdf(
     try:
         result = await event_log.timed(
             "pdf_split",
-            run_in_threadpool(split_pdf_to_zip, str(temp_path), str(result_dir), mode, ranges, n, password),
+            run_in_threadpool(split_pdf_to_zip, str(temp_path), str(result_dir), mode, ranges, n, password, max_mb),
         )
         return {
             "status": "success",

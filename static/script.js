@@ -1247,12 +1247,18 @@ document.getElementById('process-split-btn').onclick = () => {
         ffNotify('Please enter a valid page count per split.');
         return;
     }
+    const maxMb = document.getElementById('split-pdf-max-mb')?.value;
+    if (mode === 'by_size' && (!maxMb || Number(maxMb) < 0.1 || Number(maxMb) > 500)) {
+        ffNotify('Please enter a maximum size between 0.1 and 500 MB.');
+        return;
+    }
 
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('mode', mode);
     if (mode === 'ranges') formData.append('ranges', ranges);
     if (mode === 'every_n') formData.append('n', n);
+    if (mode === 'by_size') formData.append('max_mb', maxMb);
 
     processAction('/api/pdf/split', 'Splitting PDF into a ZIP...', formData);
 };

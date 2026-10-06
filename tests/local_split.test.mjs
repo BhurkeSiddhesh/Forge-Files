@@ -150,7 +150,10 @@ test('member naming matches pdf_utils.py::_split_pdf_member_name', () => {
 
 test('validation errors use the server messages and upload nothing', async () => {
     const cases = [
-        [{ mode: 'bogus' }, 'mode must be one of: each, every_n, ranges'],
+        [{ mode: 'bogus' }, 'mode must be one of: each, every_n, ranges, by_size'],
+        [{ mode: 'by_size' }, 'max_mb must be a number between 0.1 and 500.'],
+        [{ mode: 'by_size', max_mb: 0 }, 'max_mb must be between 0.1 and 500.'],
+        [{ mode: 'by_size', max_mb: 501 }, 'max_mb must be between 0.1 and 500.'],
         [{ mode: 'every_n', n: 0 }, 'Split size must be at least 1 page.'],
         [{ mode: 'every_n' }, 'Split size must be at least 1 page.'],
         [{ mode: 'every_n', n: -3 }, 'Split size must be at least 1 page.'],
