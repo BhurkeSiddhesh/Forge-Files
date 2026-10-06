@@ -974,37 +974,19 @@
         </section>
 
         <!-- Word Tools Page -->
-        <section id="word-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="word-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload Word</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="word-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="word-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="word-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Documents</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Word tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Word tools</h2><p class="ffp-desc">Drop a Word document to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="word-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="word-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="word-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="word-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload Word file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your DOCX or <span class="browse-text">browse</span></p>
+                    <div id="word-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload Word file">
+                        <span class="big"><svg class="ff-icon-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a Word document here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">DOCX, DOC</span>
                         <input type="file" id="word-file-input" accept=".docx,.doc" hidden>
                         <div id="word-file-info" class="file-info hidden">
                             <i class="fas fa-file-word"></i>
@@ -1014,21 +996,10 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">Word tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="word-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>Word → PDF</h4>
-                                <p>Convert DOCX to a PDF document</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="word-to-pptx-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-powerpoint"></i>
-                            <div class="action-text">
-                                <h4>Word → PowerPoint</h4>
-                                <p>Convert pages to a presentation</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="word-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-word);--d:-1.1s"><svg class="ff-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span><span class="action-text"><h4>Word → PDF</h4><p>Convert a document to PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="word-to-pptx-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-word);--d:-2.2s"><svg class="ff-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></svg></span><span class="action-text"><h4>Word → PowerPoint</h4><p>Convert pages to a presentation.</p></span></div>
                     </div>
 
                     <div id="word-to-pdf-area" class="password-area hidden">
@@ -1064,7 +1035,7 @@
 
                     <div id="word-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="word-result-message"></p>
                         <a id="word-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
