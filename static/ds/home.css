@@ -55,3 +55,5 @@ body:has(.ffh-nav) .ffh-nav{align-self:stretch;width:100%}
 body:has(.ffh-nav) .app-container{padding:2.5rem 1rem 0}
 body:has(#home-page.active) .app-container{padding:0;max-width:none}
 body:has(#home-page.active) .site-footer{width:min(100% - 32px,var(--content-max));margin-inline:auto}
+/* The home hero already has a large search box, so the nav search button only appears on tool pages. */
+body:has(#home-page.active) #ffh-open-pal{display:none}
