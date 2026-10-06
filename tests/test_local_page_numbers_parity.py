@@ -164,3 +164,23 @@ def test_password_encrypted_corrupt_and_oversize_ask_first(tmp_path: Path) -> No
     result, _ = _local(tmp_path, big)
     assert result["status"] == 499
     assert result["asked"]["reason"] == "this file exceeds the safe limit for processing on this device"
+
+
+@pytest.mark.parametrize("kw", [{"template": "p{n}/{total}"}, {"template": "p{n}/{total}", "end_page": 2, "skip_first": 1}])
+def test_template_and_end_page_match_the_server(tmp_path: Path, kw: dict) -> None:
+    pdf = make_pdf(tmp_path / "in.pdf", sizes=SIZES)
+    result, out = _local(tmp_path, pdf, **kw)
+    assert result["status"] == 200, result
+    local, server = _numbers(out), _numbers(_server(tmp_path, pdf, **kw))
+    for page, (l, s) in enumerate(zip(local, server), 1):
+        assert (l or {}).get("text") == (s or {}).get("text"), (page, l, s)
+    if "end_page" not in kw:
+        assert local[0]["text"] == "p1/4"
+
+
+def test_template_without_n_is_rejected(tmp_path: Path) -> None:
+    pdf = make_pdf(tmp_path / "in.pdf", sizes=SIZES)
+    result, _ = _local(tmp_path, pdf, template="Page")
+    assert result["status"] == 400
+    with pytest.raises(ValueError):
+        _server(tmp_path, pdf, template="Page")

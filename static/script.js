@@ -3625,6 +3625,8 @@ document.getElementById('process-page-numbers-btn')?.addEventListener('click', (
     fd.append('fmt', format);
     fd.append('start_number', start);
     fd.append('skip_first', skip);
+    fd.append('template', document.getElementById('page-numbers-template')?.value || '{n}');
+    fd.append('end_page', document.getElementById('page-numbers-end')?.value || '0');
     processAction('/api/pdf/add-page-numbers', 'Adding page numbers...', fd);
 });
 

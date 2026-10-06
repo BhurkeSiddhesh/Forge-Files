@@ -422,6 +422,8 @@
                         </select>
                         <input type="number" id="page-numbers-start" value="1" min="1" placeholder="Start number">
                         <input type="number" id="page-numbers-skip" value="0" min="0" placeholder="Skip first N pages">
+                        <input type="number" id="page-numbers-end" value="0" min="0" placeholder="Last page to number (0 = all)" aria-label="Last page to number (0 = all)">
+                        <input type="text" id="page-numbers-template" value="{n}" maxlength="100" placeholder="Label, e.g. Page {n} of {total}" aria-label="Label template">
                         <button id="process-page-numbers-btn" class="primary-btn">Add Numbers</button>
                     </div>
 

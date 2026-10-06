@@ -2665,6 +2665,8 @@ def add_page_numbers(
     skip_first: int = 0,
     fmt: str = "decimal",
     password: str = None,
+    template: str = "{n}",
+    end_page: int = 0,
 ) -> str:
     """Insert page numbers on each page of a PDF.
 
@@ -2678,6 +2680,9 @@ def add_page_numbers(
         skip_first: Number of pages to skip from the beginning (e.g., cover page).
         fmt: 'decimal' (1,2,3), 'roman' (I,II,III), 'alpha' (A,B,C).
         password: PDF password if encrypted.
+        template: Label text; ``{n}`` is the formatted number and ``{total}``
+                  the document page count (e.g. ``"Page {n} of {total}"``).
+        end_page: Last page (1-based) to number; 0 means the final page.
 
     Returns:
         Path to the numbered PDF.
@@ -2694,6 +2699,13 @@ def add_page_numbers(
         raise ValueError("start_number must be >= 1.")
     if font_size < 4 or font_size > 72:
         raise ValueError("font_size must be between 4 and 72.")
+    template = template or "{n}"
+    if "{n}" not in template:
+        raise ValueError("template must contain {n}.")
+    if len(template) > 100 or not all(32 <= ord(c) < 127 for c in template):
+        raise ValueError("template must be printable ASCII, at most 100 characters.")
+    if end_page < 0:
+        raise ValueError("end_page must be >= 0.")
 
     def _to_roman(n: int) -> str:
         val = [(1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
@@ -2714,16 +2726,17 @@ def add_page_numbers(
     try:
         doc = fitz.open(decrypted_path)
         for i, page in enumerate(doc):
-            if i < skip_first:
+            if i < skip_first or (end_page and i >= end_page):
                 continue
 
             page_num = start_number + (i - skip_first)
             if fmt == "roman":
-                label = _to_roman(page_num)
+                number = _to_roman(page_num)
             elif fmt == "alpha":
-                label = chr(64 + page_num) if page_num <= 26 else str(page_num)
+                number = chr(64 + page_num) if page_num <= 26 else str(page_num)
             else:
-                label = str(page_num)
+                number = str(page_num)
+            label = template.replace("{n}", number).replace("{total}", str(len(doc)))
 
             rect = page.rect
             margin = 20

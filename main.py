@@ -3372,6 +3372,8 @@ async def api_add_page_numbers(
     skip_first: int = Form(0),
     fmt: str = Form("decimal"),
     password: str = Form(None),
+    template: str = Form("{n}"),
+    end_page: int = Form(0),
 ):
     """Insert page numbers onto each PDF page."""
     safe_filename = secure_filename(file.filename)
@@ -3382,7 +3384,8 @@ async def api_add_page_numbers(
             "pdf_add_page_numbers",
             run_in_threadpool(
                 add_page_numbers, str(temp_path), str(result_dir),
-                position, start_number, font_size, skip_first, fmt, password or None
+                position, start_number, font_size, skip_first, fmt, password or None,
+                template, end_page,
             ),
         )
         return {"status": "success", "message": "Page numbers added", **download_fields(output_path)}

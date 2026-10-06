@@ -489,6 +489,13 @@
         var fontSize = L.int(fd, 'font_size', 12);
         if (fontSize < 4 || fontSize > 72) throw new L.Error('font_size must be between 4 and 72.');
         var skipFirst = L.int(fd, 'skip_first', 0);
+        var template = L.str(fd, 'template', '{n}') || '{n}';
+        if (template.indexOf('{n}') < 0) throw new L.Error('template must contain {n}.');
+        if (template.length > 100 || !/^[ -~]*$/.test(template)) {
+            throw new L.Error('template must be printable ASCII, at most 100 characters.');
+        }
+        var endPage = L.int(fd, 'end_page', 0);
+        if (endPage < 0) throw new L.Error('end_page must be >= 0.');
 
         var file = only(fd);
         var PDFLib = await L.loadPdfLib();
@@ -505,8 +512,9 @@
         for (var i = 0; i < pages.length; i++) {
             L.checkAbort(ctx.signal);
             if (ctx.onProgress) ctx.onProgress(i + 1, pages.length);
-            if (i < skipFirst) continue;
-            var label = pageLabel(fmt, startNumber + (i - skipFirst));
+            if (i < skipFirst || (endPage && i >= endPage)) continue;
+            var label = template.split('{n}').join(pageLabel(fmt, startNumber + (i - skipFirst)))
+                .split('{total}').join(String(pages.length));
             // The visible page is the CropBox (the server's page.rect).
             var crop = pages[i].getCropBox();
             var margin = 20;
