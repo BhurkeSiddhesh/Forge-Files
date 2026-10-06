@@ -82,8 +82,7 @@
         return '<div class="ffh-tilt" style="animation-delay:' + (0.05 * (i % 12) + 0.1).toFixed(2) + 's">' +
             '<a class="ff-tool" href="' + href(t) + '">' +
             '<span class="ic" style="--ft:var(--file-' + t.ft + ');--d:' + ((t.title.length % 7) * -0.55) + 's">' + window.FFIcon(t.icon, 20) + '</span>' +
-            '<span><h4>' + esc(t.title) + '</h4><p>' + esc(t.desc) + '</p></span>' +
-            (window.ffLocalBadge && window.ffLocalBadge.slug(t.slug || t.cat) ? window.ffLocalBadge.html : '') + '</a></div>';
+            '<span><h4>' + esc(t.title) + '</h4><p>' + esc(t.desc) + '</p></span></a></div>';
     }
     function fill(el, list) { el.innerHTML = list.map(card).join(''); }
 
@@ -255,12 +254,15 @@
         }
         var trust = document.getElementById('ffh-trust');
         if (trust) {
-            trust.innerHTML = [['badge-check', 'Free', 'ok', 0], ['user-x', 'No signup', 'ac', 1], ['github', 'Open source', 'vi', 2], ['shield-check', 'Private by design', 'te', 3]].map(function (x) {
+            trust.innerHTML = [['badge-check', 'Free', 'ok', 0], ['user-x', 'No signup', 'ac', 1], ['github', 'Open source', 'vi', 2], ['shield-check', 'Local first', 'te', 3]].map(function (x) {
                 var inner = '<i class="ti ' + x[2] + '" style="--d:' + (x[3] * -1.1) + 's">' + window.FFIcon(x[0], 14) + '</i>' + x[1];
                 // Open source links to the public repo; the pulsing dot marks it as live.
                 if (x[1] === 'Open source') {
                     return '<span><a class="ffh-oss" href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener" aria-label="Open source: view Forge Files on GitHub">' +
                         inner + '<span class="dot" aria-hidden="true"></span></a></span>';
+                }
+                if (x[1] === 'Local first') {
+                    return '<span title="Files are processed in your browser whenever possible. If a file needs our server, we ask before uploading it.">' + inner + '</span>';
                 }
                 return '<span>' + inner + '</span>';
             }).join('');
@@ -270,7 +272,10 @@
         var pop = document.getElementById('ffh-popular'), all = document.getElementById('ffh-all'), chips = document.getElementById('ffh-chips');
         fill(pop, T.filter(function (t) { return t.popular; }));
         function showCat(c) {
-            fill(all, T.filter(function (t) { return c === 'All' || t.chip === c; }));
+            var list = T.filter(function (t) { return c === 'All' || t.chip === c; });
+            // The workflow builder is the one tool that chains the others, so it leads the list.
+            list = list.filter(function (t) { return t.cat === 'workflow'; }).concat(list.filter(function (t) { return t.cat !== 'workflow'; }));
+            fill(all, list);
             Array.prototype.forEach.call(chips.querySelectorAll('button'), function (b) {
                 var on = b.getAttribute('data-c') === c;
                 b.classList.toggle('on', on);

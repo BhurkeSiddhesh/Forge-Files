@@ -156,9 +156,3 @@
 .ff-tool:hover .ic{animation:ichover .6s var(--ease-standard)}
 @keyframes ichover{0%{transform:perspective(200px) rotateY(0)}50%{transform:perspective(200px) rotateY(180deg)}100%{transform:perspective(200px) rotateY(360deg)}}
 @media (prefers-reduced-motion:reduce){.ff-tool .ic,.ff-tool .ic svg>*{animation:none!important;stroke-dasharray:none!important}}
-
-/* "Local" tag: the tool runs on-device. Absolutely positioned, not inside the h4,
-   because toolpage.js copies the h4 text into the page title. */
-.ff-tool{position:relative}
-.ff-local-tag{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font:600 10px/1.4 var(--font-sans);letter-spacing:.02em;color:var(--success);background:var(--success-soft);border:1px solid color-mix(in srgb,var(--success) 30%,transparent);pointer-events:none}
-.ff-local-tag::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}

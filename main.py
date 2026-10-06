@@ -270,6 +270,15 @@ MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 MAX_UPLOAD_TOTAL_MB_ENV = os.environ.get("MAX_UPLOAD_TOTAL_MB", "").strip()
 DISABLE_AI = os.environ.get("DISABLE_AI", "0") == "1"
 FILE_TTL_SECONDS = int(os.environ.get("FILE_TTL_SECONDS", "3600"))
+# A finished result is deleted the moment it is downloaded; one that is never
+# downloaded is swept after this long. Shorter than FILE_TTL_SECONDS on purpose:
+# that value is the safety net for uploads and background jobs, where a long
+# conversion must not lose its input mid-run, whereas a finished result has no
+# reason to outlive the visitor's session.
+RESULT_TTL_SECONDS = int(os.environ.get("RESULT_TTL_SECONDS", "600"))
+# How often the sweeper wakes. Must stay well under RESULT_TTL_SECONDS or the
+# stated retention is off by up to one interval.
+SWEEP_INTERVAL_SECONDS = int(os.environ.get("SWEEP_INTERVAL_SECONDS", "60"))
 # Bounds how many steps a single /api/workflow/execute request can chain, so a
 # caller can't pair a huge step list with the heavy-tier rate limit to pin the
 # server on one "request".
@@ -620,9 +629,12 @@ def _delete_stale_files(directory: Path, ttl: int) -> None:
             pass
 
 async def cleanup_stale_files_loop():
+    sweeps = 0
     while True:
-        for d in (UPLOAD_DIR, OUTPUT_DIR):
-            await run_in_threadpool(_delete_stale_files, d, FILE_TTL_SECONDS)
+        # Uploads keep the long safety-net TTL (their handlers delete them when
+        # processing ends); results use the short one.
+        await run_in_threadpool(_delete_stale_files, UPLOAD_DIR, FILE_TTL_SECONDS)
+        await run_in_threadpool(_delete_stale_files, OUTPUT_DIR, RESULT_TTL_SECONDS)
         # Same cadence, same purpose: reclaim bookkeeping nobody can reach any
         # more. The limiter's map would otherwise grow one entry per distinct
         # client seen since boot.
@@ -633,8 +645,11 @@ async def cleanup_stale_files_loop():
         # without this it grows one entry per job for the life of the process.
         app.state.jobs.prune()
         # Enforce the 90-day retention policy on funnel_events and operation_events.
-        await run_in_threadpool(event_log.prune_expired_events)
-        await asyncio.sleep(900)
+        # That is a database pass, so it runs about every 15 minutes, not every sweep.
+        if sweeps % max(1, 900 // SWEEP_INTERVAL_SECONDS) == 0:
+            await run_in_threadpool(event_log.prune_expired_events)
+        sweeps += 1
+        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
 
 # --- Upload intake ---
 # Every endpoint that accepts an UploadFile goes through save_upload() or
@@ -1012,7 +1027,7 @@ class DownloadRegistry:
         path, owner, created = entry
         # Entries expire with the files themselves, so a token can never
         # outlive its result and point at a directory reused later.
-        if time.monotonic() - created > FILE_TTL_SECONDS:
+        if time.monotonic() - created > RESULT_TTL_SECONDS:
             with self._lock:
                 self._entries.pop(token, None)
             return None

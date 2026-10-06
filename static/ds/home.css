@@ -74,3 +74,14 @@ body:has(#home-page.active) #ffh-open-pal{display:none}
 .ffh-trust .ffh-oss:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .ffh-trust .ffh-oss .dot{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 var(--success);animation:ffh-ping 1.8s infinite}
 @media (prefers-reduced-motion:reduce){.ffh-trust .ffh-oss .dot{animation:none!important}}
+
+/* Popular is a compact one-row shortcut strip so the start of "All tools" is visible without scrolling,
+   which signals that the page continues. Descriptions are dropped here; they stay on the full cards below. */
+.ffh-sec{margin:20px 0 10px}
+.ffh-grid.ffh-pop{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;grid-auto-rows:auto}
+.ffh-pop .ffh-tilt>.ff-tool{min-height:0;padding:10px 12px;gap:10px}
+.ffh-pop .ff-tool .ic{width:34px;height:34px;border-radius:10px}
+.ffh-pop .ff-tool p{display:none}
+.ffh-pop .ff-tool h4{font-size:var(--text-sm);line-height:1.25}
+@media (max-width:1100px){.ffh-grid.ffh-pop{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.ffh-grid.ffh-pop{grid-template-columns:repeat(2,minmax(0,1fr))}.ffh-pop .ff-tool .ic{display:none}}
