@@ -252,8 +252,8 @@
         }
         var trust = document.getElementById('ffh-trust');
         if (trust) {
-            trust.innerHTML = [['badge-check', 'Free'], ['user-x', 'No signup'], ['github', 'Open source'], ['shield-check', 'Private by design']].map(function (x) {
-                return '<span>' + window.FFIcon(x[0], 16) + x[1] + '</span>';
+            trust.innerHTML = [['badge-check', 'Free', 'ok', 0], ['user-x', 'No signup', 'ac', 1], ['github', 'Open source', 'vi', 2], ['shield-check', 'Private by design', 'te', 3]].map(function (x) {
+                return '<span><i class="ti ' + x[2] + '" style="--d:' + (x[3] * -1.1) + 's">' + window.FFIcon(x[0], 14) + '</i>' + x[1] + '</span>';
             }).join('');
         }
         initSearch(document.getElementById('ffh-search'));

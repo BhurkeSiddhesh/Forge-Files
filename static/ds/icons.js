@@ -36,8 +36,10 @@
     // Returns an inline SVG string. `name` always comes from the built-in
     // catalogue, never from user input, and unknown names fall back to "file".
     window.FFIcon = function (name, size) {
-        var body = P[name] || P.file;
+        var key = P[name] ? name : 'file';
+        // pathLength=1 lets the stroke-draw animation in components.css work for every shape.
+        var body = P[key].replace(/<(path|line|circle|rect|polyline|polygon|ellipse)/g, '<$1 pathLength="1"');
         var s = size || 18;
-        return '<svg class="ff-icon-svg" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none">' + body + '</svg>';
+        return '<svg class="ff-icon-svg" data-icon="' + key + '" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none">' + body + '</svg>';
     };
 })();
