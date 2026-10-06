@@ -117,7 +117,7 @@
     <link rel="stylesheet" href="/static/ds/pages/excel.css?v=20261006">
     <link rel="stylesheet" href="/static/ds/pages/ppt.css?v=20261006">
     <link rel="stylesheet" href="/static/ds/pages/word.css?v=20261006">
-    <link rel="stylesheet" href="/static/ds/pages/workflow.css?v=20261006">
+    <link rel="stylesheet" href="/static/ds/pages/workflow.css?v=20261008">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Cropper.js (CSS + JS) is lazy-loaded by script.js only when the crop tool is opened, to protect LCP/INP. -->
     {{CF_ANALYTICS}}
@@ -999,6 +999,9 @@
                         </div>
                     </div>
 
+                </div>
+
+                <div class="wf-dnd">
                     <!-- Step Palette -->
                     <div class="workflow-palette-section">
                         <h3>2. Add steps</h3>
@@ -1146,15 +1149,16 @@
                             </div>
                         </div>
                     </div>
-                </div>
 
+                <div class="wf-main">
                 <!-- Workflow Canvas -->
                 <div class="workflow-canvas-section">
                     <h3>3. Your pipeline</h3>
+                    <div id="workflow-chain-alert" aria-live="polite"></div>
                     <div id="workflow-canvas" class="workflow-canvas">
                         <div class="canvas-placeholder">
                             <i class="fas fa-arrow-down"></i>
-                            <p>Pick a step above to build your workflow</p>
+                            <p>Drag a step here, or click one to add it</p>
                         </div>
                         <div id="workflow-steps-container" class="workflow-steps hidden"></div>
                     </div>
@@ -1186,6 +1190,7 @@
                 <div id="workflow-status-display" class="status-display hidden">
                     <div class="loader"></div>
                     <p id="workflow-status-text">Processing workflow...</p>
+                    <ol id="workflow-run-list" class="ff-run" aria-label="Step progress"></ol>
                 </div>
 
                 <div id="workflow-result-display" class="result-display hidden">
@@ -1195,6 +1200,8 @@
                     <a id="workflow-download-link" href="#" class="primary-btn download-btn">
                         <i class="fas fa-download"></i> Download Result
                     </a>
+                </div>
+                </div>
                 </div>
             </div>
         </section>
@@ -1290,11 +1297,11 @@
     <script src="/static/local/ops-pdf-compress.js?v=20261006"></script>
     <script src="/static/local/ops-heic.js?v=20261006"></script>
     <script src="/static/local/ops-excel.js?v=20261006"></script>
-    <script src="/static/local/ops-workflow.js?v=20261006"></script>
+    <script src="/static/local/ops-workflow.js?v=20261008"></script>
     <script src="/static/ds/icons.js?v=20261006"></script>
     <script src="/static/ds/home.js?v=20261006"></script>
     <script src="/static/ds/toolpage.js?v=20261006"></script>
-    <script src="/static/script.js?v=20261006"></script>
+    <script src="/static/script.js?v=20261008"></script>
     {{CONSENT_BANNER}}
 </body>
 
