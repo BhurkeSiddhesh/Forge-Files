@@ -219,7 +219,7 @@
             }
             var bitmap;
             try { bitmap = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' }), { imageOrientation: 'none' }); }
-            catch (err) { continue; }
+            catch (err) { unsupported++; continue; } // decoder unavailable or refused: let the server try
             var scale = Math.min(1, cfg.maxDim / Math.max(bitmap.width, bitmap.height));
             var w = Math.max(1, Math.round(bitmap.width * scale));
             var h = Math.max(1, Math.round(bitmap.height * scale));

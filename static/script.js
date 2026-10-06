@@ -1598,6 +1598,10 @@ function resetUI() {
     document.getElementById('extract-text-area')?.classList.add('hidden');
     document.getElementById('ocr-pdf-area')?.classList.add('hidden');
     document.getElementById('organize-pdf-area')?.classList.add('hidden');
+    document.getElementById('remove-pages-area')?.classList.add('hidden');
+    document.getElementById('crop-pdf-area')?.classList.add('hidden');
+    // The previous document's thumbnails and page fields must not outlive it.
+    window.ffPageGrid?.unmountAll();
     document.getElementById('page-numbers-area')?.classList.add('hidden');
     document.getElementById('repair-pdf-area')?.classList.add('hidden');
     document.getElementById('create-pdf-area')?.classList.add('hidden');

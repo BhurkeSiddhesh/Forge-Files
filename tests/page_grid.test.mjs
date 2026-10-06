@@ -54,3 +54,11 @@ test('index.html loads the grid and defines every panel it targets', () => {
         assert.ok(html.includes('id="' + id + '"'), id);
     }
 });
+
+test('resetUI closes the Remove Pages and Crop panels and unmounts the grids', () => {
+    const js = readFileSync(join(STATIC, 'script.js'), 'utf8');
+    const reset = js.slice(js.indexOf('function resetUI()'));
+    const body = reset.slice(0, reset.search(/\r?\n\}/));
+    for (const id of ['remove-pages-area', 'crop-pdf-area']) assert.ok(body.includes(id), id);
+    assert.ok(body.includes('ffPageGrid'));
+});

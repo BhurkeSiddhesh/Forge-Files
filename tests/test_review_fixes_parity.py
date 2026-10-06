@@ -158,3 +158,32 @@ def test_remove_pages_message_matches_between_engines(tmp_path: Path) -> None:
     pdf = make_pdf(tmp_path / "in.pdf", pages=3)
     result, _ = run_local(tmp_path, "/api/pdf/organize", [_file(pdf)], {"remove_pages": "2"})
     assert result["message"] == "Pages removed"
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+@pytest.mark.parametrize("position", ["center", "top"])
+def test_logo_is_placed_on_the_displayed_page_for_rotated_pages(tmp_path: Path, rotation: int, position: str) -> None:
+    from PIL import Image
+
+    logo = tmp_path / "logo.png"
+    Image.new("RGB", (200, 100), (255, 0, 0)).save(logo)
+    pdf = make_pdf(tmp_path / "in.pdf", pages=1, rotations={0: rotation})
+    out = Path(add_watermark(str(pdf), str(tmp_path), "", position=position, opacity=1.0,
+                             logo_bytes=logo.read_bytes(), logo_scale=0.3))
+    page = fitz.open(str(out))[0]
+    pix = page.get_pixmap(dpi=36)
+    xs, ys = [], []
+    for y in range(pix.height):
+        for x in range(pix.width):
+            r, g, b = pix.pixel(x, y)[:3]
+            if r > 200 and g < 80 and b < 80:
+                xs.append(x)
+                ys.append(y)
+    assert xs, "logo not visible"
+    w, h = max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+    assert abs(w / h - 2) < 0.15, (w, h)  # upright 2:1 on screen, not turned or squashed
+    cx = (min(xs) + max(xs)) / 2 * 2          # back to points (36 dpi = half scale)
+    cy = (min(ys) + max(ys)) / 2 * 2
+    assert abs(cx - page.rect.width / 2) < 4, (cx, page.rect.width)
+    expected_cy = page.rect.height * (0.5 if position == "center" else 0.1)
+    assert abs(cy - max(expected_cy, h)) < 8 or position == "top" and cy < page.rect.height * 0.25, (cy, expected_cy)

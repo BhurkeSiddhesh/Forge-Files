@@ -377,8 +377,14 @@
         Object.keys(mounts).forEach(function (id) {
             mounts[id].state.token = null;
             mounts[id].root.remove();
+            var cfg = TOOLS[id];
+            var field = cfg && document.getElementById(cfg.input);
+            if (field) field.value = '';
             delete mounts[id];
         });
+        var preview = document.getElementById('crop-pdf-preview');
+        if (preview) preview.textContent = '';
+        cropMounts.file = null;
     }
 
     window.ffPageGrid = {

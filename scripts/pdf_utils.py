@@ -1171,9 +1171,14 @@ def add_watermark(
                         cy = rect.height / 2 if rotated else rect.height * {"top": 0.1, "center": 0.5, "bottom": 0.9}[position]
                         centres = [(rect.width / 2, min(max(cy, bh / 2), rect.height - bh / 2))]
                     for cx, cy in centres:
+                        shown = fitz.Rect(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2)
+                        # Coordinates above are on the page as displayed; insert_image works in
+                        # the unrotated page space, so map the box back and turn the picture
+                        # against the page rotation to keep it upright on screen.
+                        target = shown * page.derotation_matrix
+                        target.normalize()
                         page.insert_image(
-                            fitz.Rect(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2),
-                            stream=logo_png, overlay=overlay,
+                            target, stream=logo_png, overlay=overlay, rotate=(-page.rotation) % 360,
                         )
                 elif tile:
                     for pt, morph_angle in _watermark_tile_points(

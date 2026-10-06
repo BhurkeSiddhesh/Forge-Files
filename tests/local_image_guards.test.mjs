@@ -97,9 +97,10 @@ test('a JPEG with an EXIF rotation is never decoded (the PDF matrix would not ma
     assert.equal(r.status, 499);
 });
 
-test('a plain JPEG within the limits reaches the decoder', async () => {
+test('a plain JPEG within the limits reaches the decoder; a decoder failure offers the server', async () => {
     const r = await compress([jpeg(800, 600)]);
     assert.equal(r.decoded, 1);
+    assert.equal(r.status, 499, 'decode refused -> nothing recompressed -> server offered, not a fake success');
 });
 
 test('cancelling embedded-image extraction is not turned into a download', async () => {
