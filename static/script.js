@@ -820,6 +820,19 @@ function hidePdfActionAreas() {
     ffClearActionSelection(document.getElementById('pdf-page'));
 }
 
+// Picking another tool starts a new step for the same file: the previous
+// tool's result and green "Result" step no longer apply. Runs after the card's
+// own handler (bubble phase) so it sees the final file state, e.g. merge having
+// seeded or dropped the selection.
+document.addEventListener('click', (e) => {
+    const card = e.target.closest && e.target.closest('#pdf-page .action-card');
+    if (!card) return;
+    document.getElementById('result-display')?.classList.add('hidden');
+    document.getElementById('status-display')?.classList.add('hidden');
+    const hasFile = !!selectedFile || selectedFiles.length > 0;
+    ffUpdateStepTracker('pdf', hasFile ? 2 : 1);
+});
+
 // Move the selected PDF option panel after its card. The action grid gives
 // panels a full-width row, keeping the controls close to the chosen action.
 const PDF_AREA_CARD = {
@@ -870,17 +883,39 @@ function openPdfArea(areaId) {
     }
 }
 
+function ffShowSelectedFiles() {
+    const files = fileInput.multiple && selectedFiles.length ? selectedFiles : (selectedFile ? [selectedFile] : []);
+    if (!files.length) {
+        filenameDisplay.textContent = 'No file selected';
+        fileInfo.classList.add('hidden');
+        return;
+    }
+    filenameDisplay.textContent = files.length === 1
+        ? files[0].name
+        : `${files.length} files: ${files.map(f => f.name).join(', ')}`;
+    fileInfo.classList.remove('hidden');
+}
+
+// The chosen PDF stays selected while the visitor moves between tools, so one
+// upload can go through Word, then Compress, then anything else. Merge is the
+// only tool that needs several files: it starts from the current file and adds
+// the ones picked next. Leaving merge keeps a lone file, but drops a multi-file
+// pick, since "which of these?" has no answer for a single-file tool.
 function setMergeMode(on) {
     // Leaving merge mode must also close its panel and highlight. Most card
     // handlers bail out with "select a file first" right after calling this, so
     // without it Merge stayed open and selected under a different tool's title.
     if (!on && fileInput.multiple) hidePdfActionAreas();
+    const wasMerge = fileInput.multiple;
     fileInput.multiple = !!on;
-    if (!on) {
+    if (on) {
+        if (!wasMerge) selectedFiles = selectedFile ? [selectedFile] : [];
+    } else if (wasMerge) {
+        if (selectedFiles.length > 1) selectedFile = null;
+        else if (selectedFiles.length === 1) selectedFile = selectedFiles[0];
         selectedFiles = [];
-    } else {
-        selectedFile = null;
     }
+    ffShowSelectedFiles();
 }
 
 function handleFiles(files) {
@@ -892,18 +927,17 @@ function handleFiles(files) {
         selectedFiles = [];
         selectedFile = null;
         fileInput.value = '';
-        filenameDisplay.textContent = 'No file selected';
-        fileInfo.classList.add('hidden');
+        ffShowSelectedFiles();
         ffNotify('Please select PDF files.');
         return;
     }
     if (!ffCheckUploadSize(pdfs)) return;
-    selectedFiles = pdfs;
-    selectedFile = pdfs[0];
-    filenameDisplay.textContent = pdfs.length === 1
-        ? pdfs[0].name
-        : `${pdfs.length} files: ${pdfs.map(f => f.name).join(', ')}`;
-    fileInfo.classList.remove('hidden');
+    // Picks add to what merge already holds (the current file included).
+    const key = f => `${f.name}|${f.size}|${f.lastModified}`;
+    const have = new Set(selectedFiles.map(key));
+    selectedFiles = selectedFiles.concat(pdfs.filter(f => !have.has(key(f))));
+    selectedFile = selectedFiles[0];
+    ffShowSelectedFiles();
     document.getElementById('status-display').classList.add('hidden');
     ffUpdateStepTracker('pdf', 2);
     ffConsumePendingOp();
