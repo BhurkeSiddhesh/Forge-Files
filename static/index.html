@@ -323,6 +323,10 @@
                     <!-- PDF to Images Options -->
                     <div id="to-images-area" class="password-area hidden">
                         <p class="helper-text">Render every page to an image:</p>
+                        <select id="to-images-mode" aria-label="Mode">
+                            <option value="pages" selected>Render each page</option>
+                            <option value="embedded">Extract embedded images</option>
+                        </select>
                         <select id="to-images-dpi" aria-label="DPI">
                             <option value="72">72 DPI (small)</option>
                             <option value="150" selected>150 DPI (balanced)</option>

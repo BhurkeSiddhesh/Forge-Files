@@ -131,7 +131,7 @@
         var PDFLib = await L.loadPdfLib();
         var doc;
         try {
-            doc = await PDFLib.PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false });
+            doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false });
         } catch (err) {
             throw new L.Unsupported('PDF cannot be parsed for image recompression.', 'unsupported_structure');
         }

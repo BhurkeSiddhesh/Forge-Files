@@ -1299,6 +1299,7 @@ document.getElementById('process-to-images-btn').onclick = () => {
     formData.append('file', selectedFile);
     formData.append('dpi', dpi);
     formData.append('fmt', fmt);
+    formData.append('mode', document.getElementById('to-images-mode')?.value || 'pages');
 
     processAction('/api/pdf/to-images', 'Rendering pages to images...', formData);
 };

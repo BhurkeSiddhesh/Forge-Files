@@ -1018,10 +1018,17 @@ def pdf_to_images_zip(
     dpi: int = 150,
     fmt: str = "jpg",
     password: str = None,
+    mode: str = "pages",
 ) -> dict:
-    """Render every PDF page to an image and return a zip."""
+    """Render every PDF page to an image (mode="pages") or extract the images
+    embedded in the PDF without re-encoding them (mode="embedded"), as a zip."""
     import zipfile
     import fitz
+
+    if mode not in ("pages", "embedded"):
+        raise ValueError("mode must be 'pages' or 'embedded'.")
+    if mode == "embedded":
+        return _pdf_extract_embedded_images_zip(input_path, output_dir, password)
 
     try:
         dpi = int(dpi)
@@ -1062,6 +1069,46 @@ def pdf_to_images_zip(
             Path(decrypted_path).unlink(missing_ok=True)
 
     return {"output_path": str(output_file), "page_count": page_count}
+
+
+MAX_EMBEDDED_IMAGES = 500
+MAX_EMBEDDED_BYTES = 200 * 1024 * 1024
+
+
+def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password: str = None) -> dict:
+    """Zip every image XObject referenced by a page, in object-number order."""
+    import zipfile
+    import fitz
+
+    input_file = Path(input_path)
+    output_file = Path(output_dir) / branded_filename(input_file, "zip")
+    decrypted_path, needs_cleanup = _get_decrypted_pdf_path(input_path, password)
+    try:
+        doc = fitz.open(decrypted_path)
+        try:
+            xrefs = sorted({img[0] for page in doc for img in page.get_images(full=True)})
+            if not xrefs:
+                raise ValueError("No embedded images were found in this PDF.")
+            if len(xrefs) > MAX_EMBEDDED_IMAGES:
+                raise ValueError(f"PDF has too many embedded images (max {MAX_EMBEDDED_IMAGES}).")
+            total = 0
+            with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for n, xref in enumerate(xrefs, start=1):
+                    info = doc.extract_image(xref)
+                    if not info:
+                        continue
+                    total += len(info["image"])
+                    if total > MAX_EMBEDDED_BYTES:
+                        raise ValueError("Embedded images exceed the extraction size limit.")
+                    ext = "jpg" if info["ext"] in ("jpeg", "jpg") else info["ext"]
+                    zf.writestr(f"{original_stem(input_file)}_img_{n:03d}.{ext}", info["image"])
+            count = len(xrefs)
+        finally:
+            doc.close()
+    finally:
+        if needs_cleanup:
+            Path(decrypted_path).unlink(missing_ok=True)
+    return {"output_path": str(output_file), "page_count": count}
 
 
 def sign_pdf(

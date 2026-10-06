@@ -33,7 +33,7 @@ sandbox.self = sandbox;
 sandbox.window.apiUrl = (p) => p;
 vm.createContext(sandbox);
 for (const f of ['vendor/pdf-lib.min.js', 'vendor/jszip.min.js', 'local/ff-server-gate.js', 'local/ff-local.js',
-    'local/ops-image.js', 'local/ops-pdf.js']) {
+    'local/ops-image.js', 'local/ops-pdf.js', 'local/ops-pdf-render.js']) {
     vm.runInContext(readFileSync(join(STATIC, f), 'utf8'), sandbox, { filename: f });
 }
 let asked = null;

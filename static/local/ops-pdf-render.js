@@ -69,6 +69,49 @@
         });
     }
 
+    // Lossless extraction of plain JPEG (DCTDecode) image XObjects, ordered by
+    // object number to match pdf_utils.py::_pdf_extract_embedded_images_zip.
+    // Any other encoding needs a real decoder, so the server takes over.
+    async function extractEmbedded(file) {
+        var budget = L.constrained() ? BUDGET.mobile : BUDGET.desktop;
+        if (file.size > budget.bytes) {
+            throw new L.Unsupported('input exceeds the on-device render budget', 'resource_budget_exceeded');
+        }
+        var PDFLib = await L.loadPdfLib();
+        var doc;
+        try { doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false }); }
+        catch (e) { throw new L.Unsupported('PDF cannot be parsed on-device', 'unsupported_structure'); }
+        var N = PDFLib.PDFName.of;
+        var all = doc.context.enumerateIndirectObjects().filter(function (e) {
+            return e[1] instanceof PDFLib.PDFRawStream && e[1].dict.get(N('Subtype')) === N('Image');
+        });
+        var masks = {};
+        all.forEach(function (e) {
+            var m = e[1].dict.get(N('SMask')) || e[1].dict.get(N('Mask'));
+            if (m && m.objectNumber !== undefined) masks[m.objectNumber] = true;
+        });
+        var found = all.filter(function (e) { return !masks[e[0].objectNumber]; })
+            .sort(function (a, b) { return a[0].objectNumber - b[0].objectNumber; });
+        if (!found.length) throw new L.Error('No embedded images were found in this PDF.');
+        if (found.length > 500) throw new L.Error('PDF has too many embedded images (max 500).');
+        var JSZip = await L.loadJsZip();
+        var zip = new JSZip();
+        var base = L.stem(file.name);
+        for (var i = 0; i < found.length; i++) {
+            var st = found[i][1];
+            if (st.dict.get(N('Filter')) !== N('DCTDecode')) {
+                throw new L.Unsupported('embedded image needs a decoder', 'unsupported_structure');
+            }
+            zip.file(base + '_img_' + pad3(i + 1) + '.jpg', st.getContents());
+        }
+        return {
+            blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }),
+            filename: L.brandedName(file.name, 'zip'),
+            message: 'Extracted ' + found.length + ' embedded image(s)',
+            extra: { page_count: found.length },
+        };
+    }
+
     L.register('/api/pdf/to-images', async function (fd, ctx) {
         ctx = ctx || {};
         var files = L.files(fd, 'file');
@@ -78,6 +121,9 @@
         if (L.str(fd, 'password', null)) {
             throw new L.Unsupported('password-protected PDFs need the server', 'encrypted');
         }
+        var mode = L.str(fd, 'mode', 'pages');
+        if (mode !== 'pages' && mode !== 'embedded') throw new L.Error("mode must be 'pages' or 'embedded'.");
+        if (mode === 'embedded') return extractEmbedded(file);
         var dpi = parseDpi(fd);
         var ext = parseFormat(fd);
 

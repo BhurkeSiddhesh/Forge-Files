@@ -2132,8 +2132,9 @@ async def api_pdf_to_images(
     dpi: int = Form(150),
     fmt: str = Form("jpg"),
     password: str = Form(None),
+    mode: str = Form("pages"),
 ):
-    """Render every page to an image and return a zip."""
+    """Render every page to an image, or extract embedded images, and return a zip."""
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
     result_dir = new_result_dir()
@@ -2141,12 +2142,13 @@ async def api_pdf_to_images(
         result = await event_log.timed(
             "pdf_to_images",
             run_in_threadpool(
-                pdf_to_images_zip, str(temp_path), str(result_dir), dpi, fmt, password or None
+                pdf_to_images_zip, str(temp_path), str(result_dir), dpi, fmt, password or None, mode
             ),
         )
         return {
             "status": "success",
-            "message": f"Rendered {result['page_count']} page(s) to images",
+            "message": (f"Extracted {result['page_count']} embedded image(s)" if mode == "embedded"
+                        else f"Rendered {result['page_count']} page(s) to images"),
             **download_fields(result["output_path"]),
             "page_count": result["page_count"],
         }
