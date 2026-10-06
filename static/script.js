@@ -833,6 +833,23 @@ document.addEventListener('click', (e) => {
     ffUpdateStepTracker('pdf', hasFile ? 2 : 1);
 });
 
+// Once a result has been downloaded the job is finished: clear the file, panels
+// and step tracker so the next conversion starts from an empty upload box. Runs
+// after the link's own handler (bubble phase) and skips downloads it cancelled
+// (e.g. the result had expired). The short delay lets the browser start saving.
+document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('a.download-btn');
+    if (!link || e.defaultPrevented) return;
+    setTimeout(() => {
+        const tool = currentTool;
+        const op = currentOp;
+        resetUI();
+        ffClearActionSelection(document);
+        currentTool = tool;
+        currentOp = op;
+    }, 800);
+});
+
 // Move the selected PDF option panel after its card. The action grid gives
 // panels a full-width row, keeping the controls close to the chosen action.
 const PDF_AREA_CARD = {
@@ -4125,7 +4142,12 @@ const FF_CATEGORY_INPUTS = {
     // an element id directly, so an arbitrary ?op= value can't reach the DOM.
     const opKey = params.get('op');
     const op = DEEP_LINK_OPS[opKey] || DEEP_LINK_EXTRA_OPS[opKey];
-    if (!op) return;
+    // A file handed over from the home page or an SEO landing page is claimed
+    // with or without an `op`. Without one (home page "choose file") the visitor
+    // gets the whole category with the file loaded and picks the tool themselves,
+    // instead of being dropped into whichever tool we guessed.
+    const claimHandoff = () => { if (params.get('handoff') === '1') ffClaimHandoff(requestedTool); };
+    if (!op) { claimHandoff(); return; }
 
     // No tool_open for the specific op here on purpose: it's fired by the
     // delegated action-card listener when the card is actually opened (below
@@ -4149,9 +4171,7 @@ const FF_CATEGORY_INPUTS = {
     // feed it to this category's file input exactly as if it had been chosen
     // here, so landing → upload → result is one motion with no second file
     // picker. Any failure just leaves the normal empty upload box in place.
-    if (params.get('handoff') === '1') {
-        ffClaimHandoff(requestedTool);
-    }
+    claimHandoff();
 })();
 
 function ffClaimHandoff(tool) {

@@ -82,7 +82,8 @@
         return '<div class="ffh-tilt" style="animation-delay:' + (0.05 * (i % 12) + 0.1).toFixed(2) + 's">' +
             '<a class="ff-tool" href="' + href(t) + '">' +
             '<span class="ic" style="--ft:var(--file-' + t.ft + ');--d:' + ((t.title.length % 7) * -0.55) + 's">' + window.FFIcon(t.icon, 20) + '</span>' +
-            '<span><h4>' + esc(t.title) + '</h4><p>' + esc(t.desc) + '</p></span></a></div>';
+            '<span><h4>' + esc(t.title) + '</h4><p>' + esc(t.desc) + '</p></span>' +
+            (window.ffLocalBadge && window.ffLocalBadge.slug(t.slug || t.cat) ? window.ffLocalBadge.html : '') + '</a></div>';
     }
     function fill(el, list) { el.innerHTML = list.map(card).join(''); }
 
@@ -124,24 +125,26 @@
             };
         });
     }
-    // Picks the most common tool for a dropped file; the visitor can switch tools on the next screen.
-    function toolForFile(f) {
+    // A dropped file goes to the page for its type with every tool for that type
+    // available, and no tool pre-selected: the visitor picks what to do with it.
+    function categoryForFile(f) {
         var ext = (f.name.split('.').pop() || '').toLowerCase();
-        var slug = {
-            pdf: 'compress-pdf', heic: 'heic-to-jpeg', heif: 'heic-to-jpeg', jpg: 'resize-image', jpeg: 'resize-image', png: 'resize-image', webp: 'resize-image',
-            xlsx: 'excel-to-pdf', xls: 'excel-to-pdf', csv: 'csv-to-xlsx', pptx: 'powerpoint-to-pdf', docx: 'word-to-pdf', doc: 'word-to-pdf'
-        }[ext];
-        return T.filter(function (t) { return t.slug === slug; })[0] || null;
+        return {
+            pdf: 'pdf',
+            heic: 'image', heif: 'image', jpg: 'image', jpeg: 'image', png: 'image', webp: 'image', gif: 'image', bmp: 'image',
+            xlsx: 'excel', xls: 'excel', csv: 'excel', pptx: 'ppt', docx: 'word', doc: 'word'
+        }[ext] || null;
     }
     function acceptFiles(fileList) {
         var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
         if (!files.length) return;
-        var t = toolForFile(files[0]);
-        if (!t) {
+        var cat = categoryForFile(files[0]);
+        if (!cat) {
             if (typeof ffNotify === 'function') ffNotify('That file type is not supported. Search for a tool instead.');
             return;
         }
-        stash(files).then(function () { window.location.href = href(t) + '&handoff=1'; }, function () { go(t); });
+        var url = '/?tool=' + cat;
+        stash(files).then(function () { window.location.href = url + '&handoff=1'; }, function () { window.location.href = url; });
     }
 
     // ---- Tool search ------------------------------------------------------
