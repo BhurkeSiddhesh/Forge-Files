@@ -871,6 +871,10 @@ function openPdfArea(areaId) {
 }
 
 function setMergeMode(on) {
+    // Leaving merge mode must also close its panel and highlight. Most card
+    // handlers bail out with "select a file first" right after calling this, so
+    // without it Merge stayed open and selected under a different tool's title.
+    if (!on && fileInput.multiple) hidePdfActionAreas();
     fileInput.multiple = !!on;
     if (!on) {
         selectedFiles = [];
