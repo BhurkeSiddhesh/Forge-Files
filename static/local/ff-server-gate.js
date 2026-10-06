@@ -181,7 +181,7 @@
         [
             ['A complete result. ', 'The server engine handles the cases your device cannot, so the output reflects your whole file.'],
             ['Used only for this task. ', 'Your file is uploaded for this conversion and nothing else.'],
-            ['Temporary by design. ', 'Copies are removed after processing under our retention policy.']
+            ['Temporary by design. ', 'Your upload is deleted once processing finishes. The result is deleted after you download it, or within an hour.']
         ].forEach(function (pt) {
             var li = doc.createElement('li');
             var span = doc.createElement('span');

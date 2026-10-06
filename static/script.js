@@ -3934,7 +3934,18 @@ const DEEP_LINK_OPS = {
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
+
+// Tools reachable from the home grid that have no SEO landing page, so they are
+// not in DEEP_LINK_OPS (whose keys mirror the SEO slugs). Same resolution rule:
+// the op is only ever looked up here, never used as an element id.
+const DEEP_LINK_EXTRA_OPS = Object.fromEntries([
+    ['repair-pdf', 'repair-pdf-btn'],
+    ['create-pdf', 'create-pdf-btn'],
+    ['annotate-pdf', 'annotate-pdf-btn'],
+    ['edit-pdf-metadata', 'pdf-metadata-btn'],
+    ['word-to-powerpoint', 'word-to-pptx-btn'],
+].map(([op, card]) => [op, { card }]));
 
 // The action card a deep link asked for, held until the visitor picks a file.
 // Most card handlers ffNotify("Please select a file first.") when clicked with no
@@ -3996,7 +4007,8 @@ const FF_CATEGORY_INPUTS = {
 
     // `op` is only ever resolved through DEEP_LINK_OPS — never used to look up
     // an element id directly, so an arbitrary ?op= value can't reach the DOM.
-    const op = DEEP_LINK_OPS[params.get('op')];
+    const opKey = params.get('op');
+    const op = DEEP_LINK_OPS[opKey] || DEEP_LINK_EXTRA_OPS[opKey];
     if (!op) return;
 
     // No tool_open for the specific op here on purpose: it's fired by the

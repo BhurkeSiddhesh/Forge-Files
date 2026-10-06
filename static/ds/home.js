@@ -18,10 +18,10 @@
         ['sign-pdf', 'pdf', 'PDF', 'Sign PDF', 'pen-line', 'pdf', 'Stamp a signature image onto a page.', 'signature'],
         ['watermark-pdf', 'pdf', 'PDF', 'Watermark PDF', 'file-text', 'pdf', 'Stamp text across every page.', 'stamp text'],
         ['ocr-pdf', 'pdf', 'PDF', 'OCR PDF', 'scan-text', 'pdf', 'Add a searchable text layer.', 'scan searchable text recognition'],
-        ['', 'pdf', 'PDF', 'Edit Metadata', 'info', 'pdf', 'Change title, author and keywords.', 'title author keywords properties'],
-        ['', 'pdf', 'PDF', 'Annotate PDF', 'pen-line', 'pdf', 'Highlight, underline and add notes.', 'highlight underline note redact comment'],
-        ['', 'pdf', 'PDF', 'Create PDF', 'plus', 'pdf', 'Generate a PDF from text or blank pages.', 'new blank text generate'],
-        ['', 'pdf', 'PDF', 'Repair PDF', 'refresh-cw', 'pdf', 'Fix corrupted or damaged PDFs.', 'fix corrupted damaged broken'],
+        ['edit-pdf-metadata', 'pdf', 'PDF', 'Edit Metadata', 'info', 'pdf', 'Change title, author and keywords.', 'title author keywords properties'],
+        ['annotate-pdf', 'pdf', 'PDF', 'Annotate PDF', 'pen-line', 'pdf', 'Highlight, underline and add notes.', 'highlight underline note redact comment'],
+        ['create-pdf', 'pdf', 'PDF', 'Create PDF', 'plus', 'pdf', 'Generate a PDF from text or blank pages.', 'new blank text generate'],
+        ['repair-pdf', 'pdf', 'PDF', 'Repair PDF', 'refresh-cw', 'pdf', 'Fix corrupted or damaged PDFs.', 'fix corrupted damaged broken'],
         ['pdf-to-word', 'pdf', 'PDF', 'PDF → Word', 'file-type', 'word', 'Convert a PDF to an editable DOCX.', 'pdf docx doc convert editable', 1],
         ['pdf-to-text', 'pdf', 'PDF', 'PDF → Text', 'file-text', 'pdf', 'Export all text to a .txt file.', 'txt extract text'],
         ['pdf-to-jpg', 'pdf', 'PDF', 'PDF → JPG', 'image', 'image', 'Render each page as an image (zip).', 'images pages png'],
@@ -29,7 +29,7 @@
         ['pdf-to-powerpoint', 'pdf', 'PDF', 'PDF → PowerPoint', 'presentation', 'ppt', 'Convert pages to a presentation.', 'pptx slides'],
         ['pdf-to-epub', 'pdf', 'PDF', 'PDF → EPUB', 'file-text', 'pdf', 'Turn a PDF into a reflowable ebook.', 'ebook reader'],
         ['word-to-pdf', 'word', 'Documents', 'Word → PDF', 'file-text', 'word', 'Convert a document to PDF.', 'docx doc document'],
-        ['', 'word', 'Documents', 'Word → PowerPoint', 'presentation', 'word', 'Convert pages to a presentation.', 'docx pptx slides'],
+        ['word-to-powerpoint', 'word', 'Documents', 'Word → PowerPoint', 'presentation', 'word', 'Convert pages to a presentation.', 'docx pptx slides'],
         ['excel-to-pdf', 'excel', 'Spreadsheets', 'Excel → PDF', 'table-2', 'excel', 'Convert a spreadsheet to PDF.', 'xlsx spreadsheet'],
         ['powerpoint-to-pdf', 'ppt', 'Presentations', 'PowerPoint → PDF', 'presentation', 'ppt', 'Convert slides to PDF.', 'pptx slides deck'],
         ['image-to-pdf', 'image', 'Images', 'Image → PDF', 'file-image', 'image', 'Turn images into a single PDF.', 'jpg png photo to pdf', 1],
@@ -129,7 +129,7 @@
         var ext = (f.name.split('.').pop() || '').toLowerCase();
         var slug = {
             pdf: 'compress-pdf', heic: 'heic-to-jpeg', heif: 'heic-to-jpeg', jpg: 'resize-image', jpeg: 'resize-image', png: 'resize-image', webp: 'resize-image',
-            xlsx: 'excel-to-pdf', csv: 'csv-to-xlsx', pptx: 'powerpoint-to-pdf', docx: 'word-to-pdf'
+            xlsx: 'excel-to-pdf', xls: 'excel-to-pdf', csv: 'csv-to-xlsx', pptx: 'powerpoint-to-pdf', docx: 'word-to-pdf', doc: 'word-to-pdf'
         }[ext];
         return T.filter(function (t) { return t.slug === slug; })[0] || null;
     }
@@ -212,8 +212,13 @@
         function mark() {
             Array.prototype.forEach.call(ul.querySelectorAll('li[data-i]'), function (li, n) { li.classList.toggle('on', n === idx); });
         }
-        function open() { bg.hidden = false; input.value = ''; draw(); input.focus(); }
-        function close() { bg.hidden = true; }
+        var opener = null;
+        function open() { opener = document.activeElement; bg.hidden = false; input.value = ''; draw(); input.focus(); }
+        function close() {
+            bg.hidden = true;
+            if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus();
+            opener = null;
+        }
         input.addEventListener('input', draw);
         input.addEventListener('keydown', function (e) {
             if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, res.length - 1); mark(); }

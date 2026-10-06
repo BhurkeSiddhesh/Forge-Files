@@ -143,3 +143,7 @@ body.ffc .upload-cta .upload-cta-secondary a.cta:hover{color:var(--text-primary)
 /* Numbered lists hold inline links and emphasis, so lay them out as block text with an absolutely placed counter (flex would split each inline node into its own column). */
 .ff-art .sec ol li,.ffc-steps li{display:block;position:relative;padding-left:calc(var(--space-4) + 22px + var(--space-3))}
 .ff-art .sec ol li::before,.ffc-steps li::before{position:absolute;left:var(--space-4);top:var(--space-3)}
+/* Reserved ad height (carried over from style.css) keeps layout shift near zero when an async ad loads. */
+.ad-slot{display:block;min-height:280px;max-width:100%;overflow:hidden;text-align:center}
+.ad-slot ins{display:block;min-height:280px}
+@media (max-width:600px){.ad-slot,.ad-slot ins{min-height:250px}}
