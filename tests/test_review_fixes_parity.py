@@ -1,0 +1,108 @@
+"""Regression tests for review findings on the PDF feature-gap PR."""
+
+from __future__ import annotations
+
+import io
+import os
+import struct
+import zipfile
+from pathlib import Path
+
+import fitz
+import pikepdf
+import pytest
+
+from conftest_parity import NODE, make_pdf, run_local
+from scripts.pdf_utils import add_watermark, organize_pdf, pdf_to_images_zip
+
+pytestmark = pytest.mark.skipif(NODE is None, reason="node not available")
+
+
+def _file(pdf: Path, name="d.pdf", field="file", type_="application/pdf"):
+    return {"field": field, "path": str(pdf), "name": name, "type": type_}
+
+
+def _texts(path: Path) -> list[str]:
+    return [p.get_text().strip() for p in fitz.open(str(path))]
+
+
+# ---- Remove Pages: complement is computed inside the organize operation ----
+
+def test_remove_pages_matches_the_server(tmp_path: Path) -> None:
+    pdf = make_pdf(tmp_path / "in.pdf", pages=6)
+    result, out = run_local(tmp_path, "/api/pdf/organize", [_file(pdf)], {"remove_pages": "2,4-5"})
+    assert result["status"] == 200, result
+    srv = Path(organize_pdf(str(pdf), str(tmp_path), [], remove_pages="2,4-5"))
+    assert _texts(out) == _texts(srv) == ["Page 1", "Page 3", "Page 6"]
+
+
+@pytest.mark.parametrize("spec", ["1-3", "9", "x"])
+def test_remove_pages_errors_match(tmp_path: Path, spec: str) -> None:
+    pdf = make_pdf(tmp_path / "in.pdf", pages=3)
+    result, _ = run_local(tmp_path, "/api/pdf/organize", [_file(pdf)], {"remove_pages": spec})
+    assert result["status"] == 400, (spec, result)
+    with pytest.raises(ValueError):
+        organize_pdf(str(pdf), str(tmp_path), [], remove_pages=spec)
+
+
+# ---- Watermark resource bounds ----
+
+def _png_header(width: int, height: int) -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", width, height) + b"\x08\x06\x00\x00\x00" + b"\0\0\0\0"
+
+
+def test_oversized_logo_dimensions_are_rejected_before_decoding(tmp_path: Path) -> None:
+    from PIL import Image
+
+    big = tmp_path / "wide.png"
+    Image.new("L", (9000, 2)).save(big)  # tiny on disk, side > 8000
+    pdf = make_pdf(tmp_path / "in.pdf", pages=1)
+    with pytest.raises(ValueError, match="too large"):
+        add_watermark(str(pdf), str(tmp_path), "", logo_bytes=big.read_bytes())
+    local = run_local(
+        tmp_path, "/api/pdf/watermark", [_file(pdf), _file(big, "wide.png", "logo", "image/png")], {"position": "center"},
+    )[0]
+    assert local["status"] == 400, local
+
+
+def test_a_huge_page_with_tiling_fails_fast(tmp_path: Path) -> None:
+    pdf = tmp_path / "huge.pdf"
+    doc = pikepdf.new()
+    doc.add_blank_page(page_size=(100, 100))
+    doc.pages[0].MediaBox = [0, 0, 5_000_000, 5_000_000]
+    doc.save(pdf)
+    with pytest.raises(ValueError, match="tiled too many times"):
+        add_watermark(str(pdf), str(tmp_path), "X", tile=True, font_size=8)
+
+
+# ---- Embedded images: only those a page references ----
+
+def test_orphaned_images_are_not_extracted(tmp_path: Path) -> None:
+    doc = fitz.open()
+    for color in [(255, 0, 0), (0, 255, 0)]:
+        pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80), False)
+        pix.set_rect(pix.irect, color)
+        doc.new_page().insert_image(fitz.Rect(10, 10, 110, 110), stream=pix.tobytes("jpeg"))
+    doc.delete_page(1)
+    pdf = tmp_path / "orphan.pdf"
+    doc.save(str(pdf), garbage=0)  # the deleted page's image object stays in the file
+    result, out = run_local(tmp_path, "/api/pdf/to-images", [_file(pdf)], {"mode": "embedded"})
+    assert result["status"] == 200, result
+    assert result["message"] == "Extracted 1 embedded image(s)"
+    srv = pdf_to_images_zip(str(pdf), str(tmp_path), mode="embedded")
+    assert srv["page_count"] == 1
+    assert len(zipfile.ZipFile(io.BytesIO(out.read_bytes())).namelist()) == 1
+
+
+# ---- Compress: unsupported encodings offer the server instead of a false "no saving" ----
+
+def test_flate_only_images_hand_over_to_the_server(tmp_path: Path) -> None:
+    doc = fitz.open()
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 120, 120), False)
+    pix.samples_mv[:] = os.urandom(len(pix.samples_mv))  # incompressible, > 20 KB, stored as Flate
+    doc.new_page().insert_image(fitz.Rect(10, 10, 200, 200), stream=pix.tobytes("png"))
+    pdf = tmp_path / "flate.pdf"
+    doc.save(str(pdf))
+    result, _ = run_local(tmp_path, "/api/pdf/compress", [_file(pdf)], {"mode": "images"})
+    assert result["status"] == 499, result  # consent to upload was asked (and declined by the harness)
+    assert result["asked"]["tool"]

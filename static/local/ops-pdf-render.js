@@ -82,16 +82,29 @@
         try { doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false }); }
         catch (e) { throw new L.Unsupported('PDF cannot be parsed on-device', 'unsupported_structure'); }
         var N = PDFLib.PDFName.of;
-        var all = doc.context.enumerateIndirectObjects().filter(function (e) {
-            return e[1] instanceof PDFLib.PDFRawStream && e[1].dict.get(N('Subtype')) === N('Image');
+        // Only images referenced by a page's own resources, like the server's
+        // page.get_images(); orphaned or deleted-page objects are not exposed.
+        var seen = {};
+        var found = [];
+        doc.getPages().forEach(function (page) {
+            var res = page.node.Resources();
+            var xo = res && res.lookupMaybe(N('XObject'), PDFLib.PDFDict);
+            if (!xo) return;
+            xo.entries().forEach(function (pair) {
+                var ref = pair[1];
+                var obj = doc.context.lookup(ref);
+                var sub = obj && obj.dict && obj.dict.get(N('Subtype'));
+                if (sub === N('Form')) {
+                    // Images nested in forms are resolved by the server instead.
+                    throw new L.Unsupported('page uses form XObjects', 'unsupported_structure');
+                }
+                if (obj instanceof PDFLib.PDFRawStream && sub === N('Image') && ref.objectNumber !== undefined && !seen[ref.objectNumber]) {
+                    seen[ref.objectNumber] = true;
+                    found.push([ref, obj]);
+                }
+            });
         });
-        var masks = {};
-        all.forEach(function (e) {
-            var m = e[1].dict.get(N('SMask')) || e[1].dict.get(N('Mask'));
-            if (m && m.objectNumber !== undefined) masks[m.objectNumber] = true;
-        });
-        var found = all.filter(function (e) { return !masks[e[0].objectNumber]; })
-            .sort(function (a, b) { return a[0].objectNumber - b[0].objectNumber; });
+        found.sort(function (a, b) { return a[0].objectNumber - b[0].objectNumber; });
         if (!found.length) throw new L.Error('No embedded images were found in this PDF.');
         if (found.length > 500) throw new L.Error('PDF has too many embedded images (max 500).');
         var JSZip = await L.loadJsZip();

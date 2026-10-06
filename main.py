@@ -3376,10 +3376,13 @@ async def api_ocr_pdf(
 @app.post("/api/pdf/organize")
 async def api_organize_pdf(
     file: UploadFile = File(...),
-    page_order: str = Form(...),
+    page_order: str = Form(""),
     password: str = Form(None),
+    remove_pages: str = Form(None),
 ):
-    """Reorder, delete, or duplicate PDF pages. page_order is comma-separated 1-based page numbers."""
+    """Reorder, delete, or duplicate PDF pages. page_order is comma-separated 1-based page numbers.
+
+    remove_pages (e.g. "2,4-6") keeps every other page in order instead."""
     import json as _json
     safe_filename = secure_filename(file.filename)
     temp_path = await save_upload(file, PDF_EXTENSIONS)
@@ -3387,15 +3390,21 @@ async def api_organize_pdf(
     try:
         # Parse page_order: accepts "1,3,2" or "[1,3,2]"
         raw = page_order.strip()
-        if raw.startswith("["):
+        if remove_pages and remove_pages.strip():
+            order = []
+        elif raw.startswith("["):
             order = _json.loads(raw)
         else:
             order = [int(x.strip()) for x in raw.split(",") if x.strip()]
 
         output_path = await event_log.timed(
             "pdf_organize",
-            run_in_threadpool(organize_pdf, str(temp_path), str(result_dir), order, password or None),
+            run_in_threadpool(
+                organize_pdf, str(temp_path), str(result_dir), order, password or None, remove_pages or None
+            ),
         )
+        if remove_pages and remove_pages.strip():
+            return {"status": "success", "message": "Pages removed", **download_fields(output_path)}
         return {"status": "success", "message": f"PDF organized ({len(order)} pages in output)", **download_fields(output_path)}
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))

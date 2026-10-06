@@ -495,8 +495,11 @@
     L.register('/api/pdf/organize', async function (fd, ctx) {
         ctx = ctx || {};
         var raw = String(L.str(fd, 'page_order', '') || '').trim();
+        var removeSpec = String(L.str(fd, 'remove_pages', '') || '').trim();
         var order;
-        if (raw.charAt(0) === '[') {
+        if (removeSpec) {
+            order = [];
+        } else if (raw.charAt(0) === '[') {
             try {
                 order = JSON.parse(raw);
             } catch (e) {
@@ -511,12 +514,19 @@
                     return parseInt(s, 10);
                 });
         }
-        if (!order || !order.length) throw new L.Error('page_order cannot be empty.');
+        if (!removeSpec && (!order || !order.length)) throw new L.Error('page_order cannot be empty.');
 
         var file = only(fd);
         var PDFLib = await L.loadPdfLib();
         var src = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
         var total = src.getPageCount();
+
+        if (removeSpec) {
+            var gone = {};
+            parsePageSelection(removeSpec, total).forEach(function (i) { gone[i] = true; });
+            for (var pi = 0; pi < total; pi++) if (!gone[pi]) order.push(pi + 1);
+            if (!order.length) throw new L.Error('You cannot remove every page.');
+        }
 
         order.forEach(function (pnum) {
             if (typeof pnum !== 'number' || !Number.isInteger(pnum) || pnum < 1 || pnum > total) {
@@ -710,8 +720,17 @@
             var isPng = lb.length > 8 && lb[0] === 0x89 && lb[1] === 0x50 && lb[2] === 0x4e && lb[3] === 0x47;
             var isJpg = lb.length > 3 && lb[0] === 0xff && lb[1] === 0xd8;
             if (!isPng && !isJpg) throw new L.Error('Logo must be a PNG or JPEG image.');
+            if (isPng && lb.length >= 24) {
+                // IHDR width/height, read before anything is decoded.
+                var pw = ((lb[16] << 24) | (lb[17] << 16) | (lb[18] << 8) | lb[19]) >>> 0;
+                var ph = ((lb[20] << 24) | (lb[21] << 16) | (lb[22] << 8) | lb[23]) >>> 0;
+                if (pw * ph > 25000000 || Math.max(pw, ph) > 8000) throw new L.Error('Logo image dimensions are too large.');
+            }
             try { logo = isPng ? await doc.embedPng(lb) : await doc.embedJpg(lb); }
             catch (err) { throw new L.Unsupported('logo image could not be embedded on-device', 'unsupported_structure'); }
+            if (logo.width * logo.height > 25000000 || Math.max(logo.width, logo.height) > 8000) {
+                throw new L.Error('Logo image dimensions are too large.');
+            }
         }
 
         for (var n = 0; n < pages.length; n++) {
@@ -734,6 +753,9 @@
                 if (tile) {
                     var su = lw * 1.4, sv = lh * 1.6;
                     var rch = Math.hypot(crop.width, crop.height) / 2 + su;
+                    if ((2 * rch / su + 1) * (2 * rch / sv + 1) > 400000) {
+                        throw new L.Error('Watermark would be tiled too many times; make it larger.');
+                    }
                     var cu = rot ? Math.SQRT1_2 : 1, cs = rot ? Math.SQRT1_2 : 0;
                     for (var gv = -rch; gv <= rch; gv += sv) {
                         for (var gu = -rch; gu <= rch; gu += su) {
@@ -767,6 +789,9 @@
                 var reach = Math.hypot(crop.width, crop.height) / 2 + stepU;
                 var cc = rotated ? Math.SQRT1_2 : 1, ss = rotated ? Math.SQRT1_2 : 0;
                 var count = 0;
+                if ((2 * reach / stepU + 1) * (2 * reach / stepV + 1) > 400000) {
+                    throw new L.Error('Watermark would be tiled too many times; use a larger font size.');
+                }
                 for (var v = -reach; v <= reach; v += stepV) {
                     for (var u = -reach; u <= reach; u += stepU) {
                         var tx = crop.width / 2 + u * cc + v * ss;

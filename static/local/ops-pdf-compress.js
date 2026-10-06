@@ -141,18 +141,24 @@
             return obj instanceof PDFLib.PDFRawStream && obj.dict.get(N('Subtype')) === N('Image');
         });
         var replaced = 0;
+        var unsupported = 0;
         for (var i = 0; i < entries.length; i++) {
             L.checkAbort(signal);
             var ref = entries[i][0], stream = entries[i][1], dict = stream.dict;
             var filter = dict.get(N('Filter'));
             var cs = dict.get(N('ColorSpace'));
             var bpc = dict.get(N('BitsPerComponent'));
-            // Only plain 8-bit RGB/Gray JPEGs without masks or decode arrays.
-            if (filter !== N('DCTDecode') || (cs !== N('DeviceRGB') && cs !== N('DeviceGray'))) continue;
-            if (bpc && bpc.asNumber && bpc.asNumber() !== 8) continue;
-            if (dict.get(N('Decode')) || dict.get(N('Mask')) || dict.get(N('ImageMask'))) continue;
             var raw = stream.getContents();
             if (raw.length < MIN_IMAGE_BYTES) continue;
+            // Only plain 8-bit RGB/Gray JPEGs without masks or decode arrays. Any other
+            // sizeable image (Flate, JPX, indexed, masked...) is counted so the server,
+            // which can decode those, is offered when nothing else was recompressed.
+            if (filter !== N('DCTDecode') || (cs !== N('DeviceRGB') && cs !== N('DeviceGray'))
+                || (bpc && bpc.asNumber && bpc.asNumber() !== 8)
+                || dict.get(N('Decode')) || dict.get(N('Mask')) || dict.get(N('ImageMask')) || dict.get(N('SMask'))) {
+                unsupported++;
+                continue;
+            }
             var bitmap;
             try { bitmap = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' })); }
             catch (err) { continue; }
@@ -182,6 +188,9 @@
             replaced++;
             if (onProgress) onProgress({ completed: i + 1, total: entries.length, phase: 'compress' });
             await L.tick();
+        }
+        if (!replaced && unsupported) {
+            throw new L.Unsupported('embedded images use encodings the on-device engine cannot recompress', 'unsupported_structure');
         }
         if (!replaced) return { bytes: new Uint8Array(await file.arrayBuffer()), imagesRecompressed: 0, noSaving: false, passthrough: true };
         var saved = await doc.save({ useObjectStreams: false, updateFieldAppearances: false });

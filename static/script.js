@@ -854,6 +854,9 @@ function openPdfArea(areaId) {
     // Visual page picker for the page-based tools; the text input stays the source of truth.
     if (window.ffPageGrid && window.ffPageGrid.supports(areaId) && selectedFile) {
         window.ffPageGrid.mount(areaId, selectedFile);
+        // Announce the newly shown panel to keyboard and screen-reader users.
+        area.setAttribute('tabindex', '-1');
+        area.focus({ preventScroll: true });
     }
 }
 
@@ -3653,23 +3656,11 @@ document.getElementById('process-remove-pages-btn')?.addEventListener('click', a
     if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
     const raw = document.getElementById('remove-pages-input').value.trim();
     if (!raw) { ffNotify('Please choose the pages to remove (e.g. 2,4-6).'); return; }
-    let total;
-    try {
-        const doc = await window.ffLocal.openPdfJs(selectedFile);
-        total = doc.numPages;
-        try { await doc.destroy(); } catch (e) { /* already released */ }
-    } catch (e) {
-        ffNotify('Could not read this PDF to count its pages. It may be password protected.');
-        return;
-    }
-    const removed = window.ffPageGrid.parseRanges(raw, total);
-    if (!removed || !removed.length) { ffNotify('Enter page numbers between 1 and ' + total + ', e.g. 2,4-6.'); return; }
-    const keep = [];
-    for (let p = 1; p <= total; p++) if (removed.indexOf(p) < 0) keep.push(p);
-    if (!keep.length) { ffNotify('You cannot remove every page.'); return; }
+    // Validation and the "keep everything else" maths happen in the organize
+    // operation itself (on-device, or on the server after consent).
     const fd = new FormData();
     fd.append('file', selectedFile);
-    fd.append('page_order', keep.join(','));
+    fd.append('remove_pages', raw);
     processAction('/api/pdf/organize', 'Removing pages...', fd);
 });
 

@@ -17,9 +17,9 @@
 
     var TOOLS = {
         'extract-pages-area': { input: 'extract-pages-input', mode: 'select' },
-        'rotate-pdf-area': { input: 'rotate-pdf-pages', mode: 'select' },
+        'rotate-pdf-area': { input: 'rotate-pdf-pages', mode: 'select', blankMeansAll: true },
         'remove-pages-area': { input: 'remove-pages-input', mode: 'select' },
-        'crop-pdf-area': { input: 'crop-pdf-pages', mode: 'select' },
+        'crop-pdf-area': { input: 'crop-pdf-pages', mode: 'select', blankMeansAll: true },
         'organize-pdf-area': { input: 'organize-page-order', mode: 'order' },
     };
 
@@ -83,10 +83,13 @@
         if (!L || !L.openPdfJs) throw new Error('Page previews are unavailable.');
         var doc = await L.openPdfJs(file);
         try {
-            state.total = Math.min(doc.numPages, MAX_THUMBS);
+            // The real page count drives selection and order state; only the number of
+            // thumbnails drawn is capped, so pages past the cap are never dropped.
+            state.total = doc.numPages;
+            state.limit = Math.min(doc.numPages, MAX_THUMBS);
             state.truncated = doc.numPages > MAX_THUMBS;
             state.onTotal(state.total);
-            for (var i = 1; i <= state.total; i++) {
+            for (var i = 1; i <= state.limit; i++) {
                 if (state.token !== token) return;
                 var page = await doc.getPage(i);
                 var base = page.getViewport({ scale: 1 });
@@ -182,11 +185,13 @@
         var selected = [];        // select mode
         var order = [];           // order mode
         var token = {};
-        var state = { token: token, total: 0, truncated: false, onTotal: function () {} };
+        var state = { token: token, total: 0, limit: 0, truncated: false, onTotal: function () {} };
         mounts[areaId] = { file: file, root: root, state: state };
 
         function writeInput() {
-            input.value = cfg.mode === 'order' ? order.join(',') : compressRanges(selected);
+            if (cfg.mode === 'order') input.value = order.join(',');
+            else if (cfg.blankMeansAll && selected.length === state.total) input.value = '';
+            else input.value = compressRanges(selected);
             input.dispatchEvent(new Event('input', { bubbles: true }));
         }
 
@@ -213,6 +218,9 @@
                 btn.setAttribute('aria-label', 'Page ' + p);
                 btn.addEventListener('click', function () {
                     var at = selected.indexOf(p);
+                    // These tools treat an empty field as "all pages", so the last selected
+                    // page cannot be unselected (the grid would say none while all change).
+                    if (at >= 0 && cfg.blankMeansAll && selected.length === 1) return;
                     if (at >= 0) selected.splice(at, 1); else selected.push(p);
                     writeInput();
                     draw();
@@ -280,7 +288,7 @@
                 selected = Array.from({ length: state.total }, function (_, i) { return i + 1; });
                 writeInput(); draw();
             });
-            addBarButton('Clear', function () { selected = []; writeInput(); draw(); });
+            if (!cfg.blankMeansAll) addBarButton('Clear', function () { selected = []; writeInput(); draw(); });
         } else {
             addBarButton('Reset order', function () {
                 order = Array.from({ length: state.total }, function (_, i) { return i + 1; });
@@ -299,7 +307,7 @@
                 var o = parseOrder(input.value, state.total);
                 if (o) { order = o; draw(); }
             } else {
-                var s = /^\s*all\s*$/i.test(input.value)
+                var s = (/^\s*all\s*$/i.test(input.value) || (cfg.blankMeansAll && !input.value.trim()))
                     ? Array.from({ length: state.total }, function (_, i) { return i + 1; })
                     : parseRanges(input.value, state.total);
                 if (s) { selected = s; draw(); }
@@ -312,16 +320,18 @@
                 order = typed && typed.length ? typed : Array.from({ length: total }, function (_, i) { return i + 1; });
                 if (!typed || !typed.length) writeInput();
             } else {
-                selected = parseRanges(input.value, total) || [];
+                var typedPages = input.value.trim() ? parseRanges(input.value, total) : null;
+                selected = typedPages || (cfg.blankMeansAll
+                    ? Array.from({ length: total }, function (_, i) { return i + 1; }) : []);
             }
             draw();
         };
 
         renderThumbnails(file, token, state, function (p, src, w, h) {
             thumbs[p] = { src: src, w: w, h: h };
-            status.textContent = 'Page previews: ' + p + ' of ' + state.total + (state.truncated ? ' (first ' + MAX_THUMBS + ' shown)' : '');
+            status.textContent = 'Page previews: ' + p + ' of ' + state.limit + (state.truncated ? ' (first ' + MAX_THUMBS + ' of ' + state.total + ' pages shown; the rest are kept)' : '');
             draw();
-            if (p === state.total) status.textContent = cfg.mode === 'order'
+            if (p === state.limit) status.textContent = cfg.mode === 'order'
                 ? 'Drag pages, or use the arrows, to reorder. × removes a page.'
                 : 'Click pages to select them.';
         }).catch(function () {

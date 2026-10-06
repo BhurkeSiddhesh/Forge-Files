@@ -992,6 +992,9 @@ def merge_pdfs(input_paths: List[str], output_dir: str, passwords: List[str] = N
 
 
 MAX_WATERMARK_TILES = 2000
+MAX_WATERMARK_GRID_STEPS = 400_000  # loop iterations, before the on-page filter
+MAX_WATERMARK_LOGO_PIXELS = 25_000_000
+MAX_WATERMARK_LOGO_SIDE = 8000
 
 
 def parse_hex_color(value: str) -> tuple:
@@ -1016,6 +1019,8 @@ def _tile_grid(width: float, height: float, step_u: float, step_v: float, rotate
 
     cx, cy = width / 2, height / 2
     reach = math.hypot(width, height) / 2 + step_u
+    if step_u <= 0 or step_v <= 0 or (2 * reach / step_u + 1) * (2 * reach / step_v + 1) > MAX_WATERMARK_GRID_STEPS:
+        raise ValueError("Watermark would be tiled too many times; make it larger.")
     c = math.sqrt(0.5) if rotated else 1.0
     s = math.sqrt(0.5) if rotated else 0.0
     du, dv = (c, -s), (s, c)  # u runs along the text; v runs perpendicular, down the page
@@ -1027,11 +1032,11 @@ def _tile_grid(width: float, height: float, step_u: float, step_v: float, rotate
             x = cx + u * du[0] + v * dv[0]
             y = cy + u * du[1] + v * dv[1]
             if -margin_u <= x <= width + margin_u and -margin_v <= y <= height + margin_v:
+                if len(points) >= MAX_WATERMARK_TILES:
+                    raise ValueError("Watermark would be tiled too many times; make it larger.")
                 points.append((x, y))
             u += step_u
         v += step_v
-    if len(points) > MAX_WATERMARK_TILES:
-        raise ValueError("Watermark would be tiled too many times; make it larger.")
     return points
 
 
@@ -1056,11 +1061,17 @@ def _prepare_watermark_logo(data: bytes, opacity: float, rotated: bool):
     try:
         with Image.open(io.BytesIO(data)) as im:
             fmt = im.format
+            width, height = im.size  # header only; nothing is decoded yet
+            if fmt not in ("PNG", "JPEG"):
+                raise ValueError("Logo must be a PNG or JPEG image.")
+            if (width * height > MAX_WATERMARK_LOGO_PIXELS
+                    or max(width, height) > MAX_WATERMARK_LOGO_SIDE):
+                raise ValueError("Logo image dimensions are too large.")
             im.load()
             rgba = im.convert("RGBA")
+    except ValueError:
+        raise
     except Exception:
-        raise ValueError("Logo must be a PNG or JPEG image.")
-    if fmt not in ("PNG", "JPEG"):
         raise ValueError("Logo must be a PNG or JPEG image.")
     size = rgba.size
     rgba.putalpha(rgba.getchannel("A").point(lambda a: int(a * opacity)))
@@ -2928,8 +2939,12 @@ def organize_pdf(
     output_dir: str,
     page_order: List[int],
     password: str = None,
+    remove_pages: str = None,
 ) -> str:
     """Reorder, delete, or duplicate PDF pages.
+
+    ``remove_pages`` (e.g. ``"2,4-6"``) instead keeps every page except those,
+    in their original order; ``page_order`` is then ignored.
 
     Args:
         input_path: Path to input PDF.
@@ -2942,7 +2957,7 @@ def organize_pdf(
     Returns:
         Path to the reorganized PDF.
     """
-    if not page_order:
+    if not page_order and not (remove_pages and remove_pages.strip()):
         raise ValueError("page_order cannot be empty.")
 
     input_file = Path(input_path)
@@ -2953,6 +2968,11 @@ def organize_pdf(
     try:
         with pikepdf.open(decrypted_path) as pdf:
             total = len(pdf.pages)
+            if remove_pages and remove_pages.strip():
+                removed = set(_parse_page_selection(remove_pages, total))
+                page_order = [i + 1 for i in range(total) if i not in removed]
+                if not page_order:
+                    raise ValueError("You cannot remove every page.")
             # Validate all page numbers
             for pnum in page_order:
                 if not isinstance(pnum, int) or pnum < 1 or pnum > total:
