@@ -29,6 +29,7 @@
         '/api/pdf/ocr': ['OCR PDF', 'text recognition could not run on your device'],
         '/api/pdf/merge': ['Merge PDF', 'these PDFs could not be merged on your device'],
         '/api/pdf/rotate': ['Rotate PDF', 'this PDF could not be processed on your device'],
+        '/api/pdf/crop': ['Crop PDF', 'this PDF could not be processed on your device'],
         '/api/pdf/protect': ['Protect PDF', 'this PDF could not be encrypted on your device'],
         '/api/pdf/watermark': ['Watermark PDF', 'this PDF could not be processed on your device'],
         '/api/pdf/to-images': ['PDF to JPG', 'this PDF could not be rendered on your device'],
