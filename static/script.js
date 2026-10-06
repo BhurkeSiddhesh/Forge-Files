@@ -1409,6 +1409,10 @@ function ffUpdatePdfCompressPreview() {
         el.textContent = 'Structural mode preserves searchable text, links and vectors. Savings depend on how the PDF was originally encoded.';
         return;
     }
+    if (mode === 'images') {
+        el.textContent = 'Photos inside the PDF are downsampled in your browser; text, links and vectors stay sharp. Savings depend on how many photos the PDF contains.';
+        return;
+    }
     const range = FF_PDF_COMPRESS_HINT[level] || FF_PDF_COMPRESS_HINT.medium;
     if (!selectedFile) {
         el.textContent = 'Raster mode estimate: Low ~10–20%, Medium ~30–50%, High ~50–70%. Text and links become page images.';

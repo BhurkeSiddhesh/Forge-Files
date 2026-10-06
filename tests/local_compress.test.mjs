@@ -60,3 +60,27 @@ test('WP20 UI makes rasterisation an explicit warning-bearing choice', () => {
     assert.match(html, /name="compress-mode" value="lossy"/);
     assert.match(html, /Text selection, search, links and accessibility structure will be lost/);
 });
+
+test('images mode is offered in the UI and keeps text sharp', () => {
+    const html = readFileSync(join(STATIC, 'index.html'), 'utf8');
+    assert.match(html, /name="compress-mode" value="images"/);
+    const src = readFileSync(join(STATIC, 'local/ops-pdf-compress.js'), 'utf8');
+    assert.match(src, /mode === 'images'/);
+    assert.match(src, /bytes\.length >= raw\.length \* 0\.95/); // non-inflation guard
+});
+
+test('images mode falls back to the original bytes when nothing can be saved', async () => {
+    const s = context();
+    s.createImageBitmap = async () => { throw new Error('no decode'); };
+    s.ffLocal.loadPdfLib = async () => ({
+        PDFName: { of: n => n }, PDFRawStream: class {}, PDFNumber: { of: n => n },
+        PDFDocument: { load: async () => ({ context: { enumerateIndirectObjects: () => [] } }) },
+    });
+    const fd = new FormData();
+    fd.append('file', new File([new Uint8Array(100)], 'photos.pdf', { type: 'application/pdf' }));
+    fd.append('mode', 'images');
+    const res = await s.ffProcess('/api/pdf/compress', fd);
+    const body = await res.json();
+    assert.equal(body.compression_mode, 'images');
+    assert.ok(body.compressed_size <= 100);
+});

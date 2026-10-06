@@ -116,6 +116,89 @@
         return { bytes: bytes, dpi: settings.dpi, quality: settings.quality };
     }
 
+    // Vector-preserving mode: re-encode embedded DCT (JPEG) image XObjects in
+    // place, leaving page content streams (text, links, vectors) untouched, then
+    // run the structural pass. Mirrors pdf_utils.py::compress_pdf on the server.
+    var IMAGE_SETTINGS = {
+        low: { maxDim: 2400, quality: 0.85 },
+        medium: { maxDim: 1600, quality: 0.70 },
+        high: { maxDim: 1000, quality: 0.50 },
+    };
+    var MIN_IMAGE_BYTES = 20 * 1024;
+
+    async function downsampleImages(file, level, signal, onProgress) {
+        var cfg = IMAGE_SETTINGS[level] || IMAGE_SETTINGS.medium;
+        var PDFLib = await L.loadPdfLib();
+        var doc;
+        try {
+            doc = await PDFLib.PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false });
+        } catch (err) {
+            throw new L.Unsupported('PDF cannot be parsed for image recompression.', 'unsupported_structure');
+        }
+        var N = PDFLib.PDFName.of;
+        var entries = doc.context.enumerateIndirectObjects().filter(function (e) {
+            var obj = e[1];
+            return obj instanceof PDFLib.PDFRawStream && obj.dict.get(N('Subtype')) === N('Image');
+        });
+        var replaced = 0;
+        for (var i = 0; i < entries.length; i++) {
+            L.checkAbort(signal);
+            var ref = entries[i][0], stream = entries[i][1], dict = stream.dict;
+            var filter = dict.get(N('Filter'));
+            var cs = dict.get(N('ColorSpace'));
+            var bpc = dict.get(N('BitsPerComponent'));
+            // Only plain 8-bit RGB/Gray JPEGs without masks or decode arrays.
+            if (filter !== N('DCTDecode') || (cs !== N('DeviceRGB') && cs !== N('DeviceGray'))) continue;
+            if (bpc && bpc.asNumber && bpc.asNumber() !== 8) continue;
+            if (dict.get(N('Decode')) || dict.get(N('Mask')) || dict.get(N('ImageMask'))) continue;
+            var raw = stream.getContents();
+            if (raw.length < MIN_IMAGE_BYTES) continue;
+            var bitmap;
+            try { bitmap = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' })); }
+            catch (err) { continue; }
+            var scale = Math.min(1, cfg.maxDim / Math.max(bitmap.width, bitmap.height));
+            var w = Math.max(1, Math.round(bitmap.width * scale));
+            var h = Math.max(1, Math.round(bitmap.height * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d', { alpha: false });
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(bitmap, 0, 0, w, h);
+            if (bitmap.close) bitmap.close();
+            var blob = await canvasJpeg(canvas, cfg.quality);
+            canvas.width = canvas.height = 1;
+            var bytes = new Uint8Array(await blob.arrayBuffer());
+            // Never inflate: keep the original stream unless we actually saved.
+            if (bytes.length >= raw.length * 0.95) continue;
+            var nd = dict.clone();
+            nd.set(N('Width'), PDFLib.PDFNumber.of(w));
+            nd.set(N('Height'), PDFLib.PDFNumber.of(h));
+            nd.set(N('ColorSpace'), N('DeviceRGB'));
+            nd.set(N('BitsPerComponent'), PDFLib.PDFNumber.of(8));
+            nd.set(N('Length'), PDFLib.PDFNumber.of(bytes.length));
+            nd.delete(N('DecodeParms'));
+            doc.context.assign(ref, PDFLib.PDFRawStream.of(nd, bytes));
+            replaced++;
+            if (onProgress) onProgress({ completed: i + 1, total: entries.length, phase: 'compress' });
+            await L.tick();
+        }
+        if (!replaced) return { bytes: new Uint8Array(await file.arrayBuffer()), imagesRecompressed: 0, noSaving: false, passthrough: true };
+        var saved = await doc.save({ useObjectStreams: false, updateFieldAppearances: false });
+        return { bytes: saved, imagesRecompressed: replaced };
+    }
+
+    async function images(file, level, signal, onProgress) {
+        var step = await downsampleImages(file, level, signal, onProgress);
+        var inter = new File([step.bytes], file.name, { type: 'application/pdf' });
+        var result;
+        try { result = await structural(inter, signal); }
+        catch (err) { result = { bytes: step.bytes }; }
+        var chosen = result.bytes.length < file.size ? result.bytes : null;
+        if (!chosen) return { bytes: new Uint8Array(await file.arrayBuffer()), noSaving: true, imagesRecompressed: step.imagesRecompressed };
+        return { bytes: chosen, imagesRecompressed: step.imagesRecompressed };
+    }
+
     L.register('/api/pdf/compress', async function (fd, ctx) {
         var file = ensureFile(fd);
         var level = L.str(fd, 'level', 'medium');
@@ -124,6 +207,7 @@
         var mode = L.str(fd, 'mode', 'structural');
         var result;
         if (mode === 'lossy') result = await lossy(file, level, ctx.signal, ctx.onProgress);
+        else if (mode === 'images') result = await images(file, level, ctx.signal, ctx.onProgress);
         else if (mode === 'structural') result = await structural(file, ctx.signal);
         else throw new L.Error('Invalid compression mode.');
         var size = result.bytes.length;
@@ -132,7 +216,9 @@
             ? 'No safe size reduction was available; the original PDF bytes were preserved.'
             : (mode === 'lossy'
                 ? 'Pages were rasterised; text selection, links and accessibility structure are not preserved.'
-                : 'Searchable text, links and vectors were preserved.');
+                : (mode === 'images'
+                    ? (result.imagesRecompressed || 0) + ' embedded image(s) were downsampled; text, links and vectors were preserved.'
+                    : 'Searchable text, links and vectors were preserved.'));
         return {
             blob: new Blob([result.bytes], { type: 'application/pdf' }),
             filename: L.brandedName(file.name, 'pdf'),
@@ -145,6 +231,7 @@
                 rasterized: mode === 'lossy',
                 dpi: result.dpi || null,
                 compression_note: note,
+                images_recompressed: result.imagesRecompressed == null ? null : result.imagesRecompressed,
             },
         };
     });
