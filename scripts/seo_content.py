@@ -95,21 +95,103 @@ def _upload_box(slug: str, page: dict) -> str:
     target = f"/?tool={tool}&amp;op={slug}"
     cta = html.escape(page["cta"])
     if tool not in _CATEGORY_ACCEPT:
-        return f'        <p><a class="cta" href="{target}">{cta}</a></p>'
+        return f'        <p class="ffc-cta-row"><a class="cta" href="{target}">{cta}</a></p>'
     accept = _CATEGORY_ACCEPT[tool]
     is_multi = slug in _MULTI_FILE_SLUGS
     multiple_attr = " multiple" if is_multi else ""
     drop_hint = "or drop files here" if is_multi else "or drop a file here"
-    return f"""        <div class="upload-cta" data-ff-upload data-ff-target="/?tool={tool}&amp;op={slug}">
+    return f"""        <div class="upload-cta ff-drop" data-ff-upload data-ff-target="/?tool={tool}&amp;op={slug}">
             <label class="upload-cta-label">
                 <input class="upload-cta-input" type="file" aria-label="{cta}" accept="{accept}"{multiple_attr}>
-                <span class="cta">{cta}</span>
+                <span class="ff-btn primary">{cta}</span>
             </label>
             <p class="upload-cta-hint">{drop_hint} &middot; free, no signup,
                 files deleted automatically</p>
             <p class="upload-cta-secondary"><a class="cta" href="{target}">Open the tool before choosing a file</a></p>
         </div>"""
 
+
+# --- design-system shell for server-rendered content pages -------------------
+# Shared by tool landing pages, the 404, the blog index and guides. Static info
+# pages in static/pages/ carry the same markup literally.
+DS_V = "20261006"
+DS_HEAD = (
+    '<link rel="stylesheet" href="/static/ds/design-system.css?v=' + DS_V + '">\n'
+    '    <link rel="stylesheet" href="/static/ds/pages/content.css?v=' + DS_V + '">\n'
+    '    <script>(function(){try{var t=localStorage.getItem("theme");'
+    'if(t!=="dark"&&t!=="light"){var n=new Date(),m=n.getHours()*60+n.getMinutes();'
+    't=(m>=1110||m<390)?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>'
+)
+_ICON = ('<svg class="{c}" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+         'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{d}</svg>')
+DS_NAV = (
+    '<header class="ff-nav ffc-nav">\n'
+    '        <a class="brand" href="/" aria-label="Forge Files home"><img src="/static/forge-files-logo-animation.gif" alt="" width="32" height="32">Forge <span class="fi">Files</span></a>\n'
+    '        <a class="l" href="/">All tools</a><a class="l" href="/blog">Guides</a><a class="l" href="/about">About</a>\n'
+    '        <span class="sp"></span>\n'
+    '        <button type="button" class="ff-iconbtn" id="theme-toggle-btn" aria-label="Toggle dark mode">'
+    + _ICON.format(c="ffc-moon", d='<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>')
+    + _ICON.format(c="ffc-sun", d='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-2.93 1.41-1.41M17.66 6.34l1.41-1.41M2 12h2M20 12h2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41"/>')
+    + '</button>\n'
+    '    </header>'
+)
+DS_THEME_JS = (
+    '<script>(function(){var b=document.getElementById("theme-toggle-btn");if(!b)return;'
+    'b.addEventListener("click",function(){var r=document.documentElement,'
+    'n=r.getAttribute("data-theme")==="dark"?"light":"dark";r.setAttribute("data-theme",n);'
+    'try{localStorage.setItem("theme",n);}catch(e){}});})();</script>'
+)
+DS_FOOT = f"""<footer class="ff-foot ffc-foot">
+        <div class="ffc-wrap">
+            <div class="cols">
+                <div class="col">
+                    <h4>Popular tools</h4>
+                    <a href="/merge-pdf">Merge PDF</a>
+                    <a href="/compress-pdf">Compress PDF</a>
+                    <a href="/pdf-to-word">PDF to Word</a>
+                    <a href="/unlock-pdf">Unlock PDF</a>
+                    <a href="/heic-to-jpeg">HEIC to JPG</a>
+                    <a href="/image-to-pdf">Image to PDF</a>
+                </div>
+                <div class="col">
+                    <h4>Forge Files</h4>
+                    <a href="/about">About</a>
+                    <a href="/faq">FAQ</a>
+                    <a href="/blog">Guides &amp; practice files</a>
+                    <a href="/contact">Contact</a>
+                    <a href="{GITHUB}" target="_blank" rel="noopener">GitHub</a>
+                </div>
+                <div class="col">
+                    <h4>Legal</h4>
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/terms">Terms of Use</a>
+                </div>
+            </div>
+            <p class="note">&copy; 2026 Forge Files. Public toolbox: AGPLv3, with commercial licensing available.
+                Some supported files process on your device; others upload to the server. Keep originals and download results promptly.
+                Processing and upload limits apply. <a href="/privacy">File handling and retention</a>.</p>
+        </div>
+    </footer>"""
+DS_CHEV = ('<svg class="ffc-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>')
+
+
+def ds_breadcrumb(*trail: Tuple[str, str]) -> str:
+    """Breadcrumb bar: ``trail`` is (label, href) pairs; the last has no link."""
+    parts = ['<a href="/">Home</a>']
+    for label, href in trail:
+        parts.append('<span aria-hidden="true">/</span>')
+        parts.append(f'<a href="{href}">{label}</a>' if href else f'<span aria-current="page">{label}</span>')
+    return '<nav class="ff-bc" aria-label="Breadcrumb">' + "".join(parts) + "</nav>"
+
+
+def ds_faq(faqs: List[Tuple[str, str]]) -> str:
+    """Accordion for (question, answer-html) pairs."""
+    items = "\n".join(
+        "            <details><summary><span>" + _plain(q) + "</span>" + DS_CHEV + "</summary><p>" + a + "</p></details>"
+        for q, a in faqs
+    )
+    return '        <div class="ff-faq">\n' + items + "\n        </div>"
 
 # category -> (deep-link tool param, human label)
 CATEGORIES = {
@@ -722,7 +804,7 @@ def _breadcrumb_schema(slug: str, page: dict) -> dict:
     }
 
 
-def _related_html(related: List[str]) -> str:
+def _related_html(related: List[str], sep: str = " · ") -> str:
     links = []
     for r in related:
         r = CANONICAL_ALIASES.get(r, r)
@@ -731,7 +813,7 @@ def _related_html(related: List[str]) -> str:
             link = '<a href="/' + r + '">' + target["app"] + "</a>"
             if link not in links:
                 links.append(link)
-    return " · ".join(links)
+    return sep.join(links)
 
 
 def _security_section(page: dict) -> str:
@@ -741,7 +823,7 @@ def _security_section(page: dict) -> str:
     handling = ("Supported files are processed on your device. Unsupported cases may be uploaded to the server as a fallback."
                 if mode == "local_or_server" else
                 "This operation uploads your file over HTTPS for automated server processing.")
-    return (f'<aside class="processing-note"><h2>File handling</h2><p>{handling} '
+    return (f'<aside class="processing-note ffc-note"><h2>File handling</h2><p>{handling} '
             'Server files are temporary; download results promptly and keep your originals. '
             '<a href="/privacy">Processing, retention and analytics details</a>.</p></aside>')
 
@@ -768,10 +850,7 @@ def render_tool_page(slug: str) -> str:
     og_desc = page["meta"]
 
     steps_html = "\n".join("            <li>" + s + "</li>" for s in page["steps"])
-    faq_html = "\n".join(
-        "        <h3>" + _plain(q) + "</h3>\n        <p>" + a + "</p>"
-        for q, a in page["faqs"]
-    )
+    faq_html = ds_faq(page["faqs"])
 
     schema_blocks = "\n".join([
         _jsonld(_faq_schema(page["faqs"])),
@@ -808,7 +887,7 @@ def render_tool_page(slug: str) -> str:
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="{BASE}/static/apple-touch-icon.png">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="stylesheet" href="/static/style.css?v={ASSET_V}">
+    {DS_HEAD}
     {ADS_HEAD}
     {CF_ANALYTICS}
     {GA_ANALYTICS}
@@ -816,23 +895,19 @@ def render_tool_page(slug: str) -> str:
 {schema_blocks}
 </head>
 
-<body class="seo-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
+<body class="ff-ds ffc">
     <a class="skip-content" href="#main-content">Skip to content</a>
-    <main class="page-wrap" id="main-content">
-        <nav class="page-nav" aria-label="Main navigation"><a href="/" class="brand-nav-link"><img src="{BASE}/static/apple-touch-icon.png" alt="{SITE}" class="brand-nav-icon" width="22" height="22"><span>Forge <span class="accent">Files</span></span></a><a href="/">&larr; All tools</a><a href="/blog">Guides &amp; examples</a><a href="/about">About</a></nav>
-
-        <h1>{page['h1']}</h1>
-        <p class="lede">{page['lede']}</p>
-        <p class="content-meta">Output: <strong>{output_format}</strong> · Free tool · Upload and processing limits apply</p>
+    {DS_NAV}
+    <main class="ffc-wrap ffc-main" id="main-content">
+        {ds_breadcrumb((page['app'], ''))}
+        <h1 class="ffc-h1">{page['h1']}</h1>
+        <p class="ffc-lede">{page['lede']}</p>
+        <p class="ffc-meta content-meta">Output: <strong>{output_format}</strong> · Free tool · Upload and processing limits apply</p>
 
 {_upload_box(slug, page)}
 
-        <h2>{page['how']}</h2>
-        <ol>
+        <h2 class="ffc-section-h">{page['how']}</h2>
+        <ol class="ffc-steps">
 {steps_html}
         </ol>
 
@@ -840,27 +915,23 @@ def render_tool_page(slug: str) -> str:
 
 {example_html}
 
-        <h2>Frequently asked questions</h2>
+        <h2 class="ffc-section-h">Frequently asked questions</h2>
 {faq_html}
 
 {_security_section(page)}
 
-        <p class="content-meta">Guidance updated <time datetime="{CONTENT_REVIEWED}">{CONTENT_REVIEWED}</time>.
+        <p class="ffc-meta content-meta">Guidance updated <time datetime="{CONTENT_REVIEWED}">{CONTENT_REVIEWED}</time>.
             <a href="/contact">Report an incorrect instruction or conversion problem</a>.</p>
 
         {ADS_SLOT}
 
-        <h2>More free tools</h2>
-        <p>{_related_html(page['related'])}</p>
-
-        <footer class="page-footer">
-            <a href="/">Home</a> · <a href="/blog">Guides</a> · <a href="/about">About</a> · <a href="/faq">FAQ</a> · <a href="/contact">Contact</a>
-            · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a
-                href="{GITHUB}" target="_blank" rel="noopener">GitHub</a>
-        </footer>
+        <h2 class="ffc-section-h">More free tools</h2>
+        <div class="ffc-related">{_related_html(page['related'], sep='')}</div>
     </main>
+    {DS_FOOT}
     {CONSENT_BANNER}
     {FUNNEL_BEACON}
+    {DS_THEME_JS}
     <script src="/static/seo-upload.js?v={ASSET_V}" defer></script>
 </body>
 
@@ -873,7 +944,7 @@ def render_404_page() -> str:
     popular = ["merge-pdf", "compress-pdf", "pdf-to-word", "unlock-pdf",
                "heic-to-jpeg", "image-to-pdf", "excel-to-pdf", "word-to-pdf"]
     links = "\n".join(
-        '            <li><a href="/' + s + '">' + TOOL_PAGES[s]["app"] + "</a></li>"
+        '            <a href="/' + s + '">' + TOOL_PAGES[s]["app"] + "</a>"
         for s in popular if s in TOOL_PAGES
     )
     return f"""<!DOCTYPE html>
@@ -886,31 +957,25 @@ def render_404_page() -> str:
     <meta name="robots" content="noindex">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="{BASE}/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/style.css?v={ASSET_V}">
+    {DS_HEAD}
     {GA_ANALYTICS}
     {DATAFAST_ANALYTICS}
 </head>
 
-<body class="seo-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-    <main class="page-wrap">
-        <nav class="page-nav"><a href="/">&larr; {SITE}: all tools</a></nav>
-        <h1>404: Page not found</h1>
-        <p class="lede">That page doesn't exist (or moved). All {SITE} tools are free, with no signup and files
+<body class="ff-ds ffc">
+    {DS_NAV}
+    <main class="ffc-wrap ffc-main ffc-404" id="main-content">
+        {ds_breadcrumb(("404", ""))}
+        <h1 class="ffc-h1">404: Page not found</h1>
+        <p class="ffc-lede">That page doesn't exist (or moved). All {SITE} tools are free, with no signup and files
             deleted automatically. Try one of these popular tools:</p>
-        <ul>
+        <div class="ffc-related">
 {links}
-        </ul>
-        <p><a class="cta" href="/">Go to all Forge Files tools</a></p>
-        <footer class="page-footer">
-            <a href="/">Home</a> · <a href="/about">About</a> · <a href="/faq">FAQ</a> · <a href="/contact">Contact</a>
-            · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a
-                href="{GITHUB}" target="_blank" rel="noopener">GitHub</a>
-        </footer>
+        </div>
+        <p class="ffc-cta-row"><a class="ff-btn primary" href="/">Go to all Forge Files tools</a></p>
     </main>
+    {DS_FOOT}
+    {DS_THEME_JS}
 </body>
 
 </html>

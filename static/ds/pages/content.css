@@ -1,0 +1,149 @@
+/* Content pages (about, contact, faq, privacy, terms, blog, guides, SEO tool landing pages, 404).
+   Page-level layout for pages that do not load legacy style.css. Prefixed ffc- so nothing collides.
+   Components (.ff-nav, .ff-bc, .ff-prose, .ff-art, .ff-gcard, .ff-faq, .ff-foot, .ff-drop, .ff-btn) come from components.css. */
+body.ffc{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg-page);color:var(--text-primary);font-family:var(--font-sans);font-size:var(--text-base);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-wrap:anywhere}
+body.ffc a{color:var(--accent);text-decoration:none}
+body.ffc a:hover{text-decoration:underline}
+body.ffc .ff-nav a,body.ffc .ff-foot a,body.ffc .ff-bc a,body.ffc a.ff-btn,body.ffc a.ff-gcard{text-decoration:none}
+body.ffc .ff-nav .brand{color:var(--text-primary)}
+body.ffc .ff-nav a.l{color:var(--text-secondary)}
+body.ffc .ff-nav a.l:hover{color:var(--text-primary)}
+body.ffc .ff-bc a{color:var(--text-secondary)}
+body.ffc .ff-foot .col a{color:var(--text-secondary)}
+body.ffc .ff-foot .col a:hover{color:var(--text-primary)}
+.skip-content{position:fixed;top:-100px;left:16px;padding:12px 16px;background:var(--bg-panel);color:var(--text-primary);border:1px solid var(--border-default);border-radius:var(--radius-md);z-index:10000}
+.skip-content:focus{top:8px}
+.ffc-nav{position:sticky;top:0;z-index:30}
+.ffc-nav .brand{text-decoration:none}
+.ffc-nav .ff-iconbtn .ffc-moon{display:block}
+.ffc-nav .ff-iconbtn .ffc-sun{display:none}
+[data-theme="dark"] .ffc-nav .ff-iconbtn .ffc-sun{display:block}
+[data-theme="dark"] .ffc-nav .ff-iconbtn .ffc-moon{display:none}
+.ffc-wrap{width:min(100% - 32px,var(--content-max,1120px));margin-inline:auto}
+main.ffc-wrap{flex:1 0 auto;padding:var(--space-6) 0 0;width:min(100% - 32px,880px)}
+main.ffc-wide{width:min(100% - 32px,1040px)}
+main.ffc-narrow{width:min(100% - 32px,760px)}
+.ffc-wrap .ff-bc{margin-bottom:var(--space-5)}
+.ffc-wrap .ff-bc span[aria-hidden]{color:var(--text-muted)}
+.ffc-h1{font-size:clamp(1.9rem,4.2vw,2.6rem);font-weight:600;letter-spacing:var(--tracking-h1);line-height:1.15;margin:0 0 var(--space-3);color:var(--text-primary);text-wrap:balance}
+.ffc-lede{font-size:var(--text-lg);color:var(--text-secondary);margin:0 0 var(--space-5);max-width:62ch;line-height:1.55}
+.ffc-meta{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-4) 0}
+.ffc-meta a{color:var(--text-secondary);text-decoration:underline}
+.ff-prose{max-width:70ch}
+.ff-prose a{text-decoration:underline;text-underline-offset:2px}
+.ff-prose p,.ff-prose li{line-height:1.7}
+.ff-prose li{margin-bottom:var(--space-2)}
+.ff-prose h2{color:var(--text-primary)}
+.ff-prose strong{color:var(--text-primary);font-weight:600}
+.ff-prose .ffc-lede{max-width:none}
+.ff-prose h3{font-size:var(--text-lg);margin:var(--space-6) 0 var(--space-2);letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.ff-prose .meta{margin:var(--space-6) 0 var(--space-3)}
+
+/* FAQ */
+.ff-faq{max-width:72ch;margin:var(--space-6) 0}
+.ff-faq summary{gap:var(--space-4);padding:var(--space-3) 0;font-size:var(--text-base);color:var(--text-primary)}
+.ff-faq .ffc-chev{flex:none;color:var(--text-muted);transition:transform .15s ease}
+.ff-faq details[open] summary .ffc-chev{transform:rotate(180deg)}
+.ff-faq p{font-size:var(--text-base);line-height:1.65}
+.ff-faq p a{text-decoration:underline}
+
+/* Blog index */
+.ffc-gridwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-4);list-style:none;padding:0;margin:var(--space-6) 0}
+.ffc-gridwrap li{display:flex}
+.ffc-gridwrap .ff-gcard{width:100%;color:inherit}
+.ffc-gridwrap .ff-gcard h4{color:var(--text-primary)}
+.ffc-gridwrap .ff-gcard .m{color:var(--text-muted);font-size:var(--text-xs)}
+.ffc-gridwrap .ff-gcard:hover{text-decoration:none}
+
+/* Guide article */
+.ff-art .ffc-artbody{min-width:0}
+.ff-art .ffc-artbody>.cta{margin-top:0}
+.ff-art .sec>div{min-width:0}
+.ff-art .sec h2{color:var(--text-primary)}
+.ff-art .sec a{text-decoration:underline;text-underline-offset:2px}
+.ff-art .ffc-h3{font-size:var(--text-lg);margin:var(--space-5) 0 var(--space-2);letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.ff-art .toc a{text-decoration:none;color:var(--text-secondary)}
+.ffc-note{display:block;padding:var(--space-4) var(--space-5);border-radius:var(--radius-lg);background:var(--bg-subtle);border:1px solid var(--border-subtle);margin:var(--space-6) 0;font-size:var(--text-sm);color:var(--text-secondary)}
+.ffc-note h2{font-size:var(--text-base);margin:0 0 var(--space-2);color:var(--text-primary);letter-spacing:var(--tracking-h3)}
+.ffc-note p{margin:0;font-size:var(--text-sm);max-width:68ch}
+.ffc-note a{text-decoration:underline}
+.ffc-section-h{font-size:var(--text-xl);margin:var(--space-8) 0 var(--space-3);letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.ffc-related{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+body.ffc .ffc-related a{display:inline-flex;align-items:center;min-height:36px;padding:0 var(--space-3);border:1px solid var(--border-default);border-radius:99px;background:var(--bg-panel);color:var(--text-primary);font-size:var(--text-sm);text-decoration:none}
+body.ffc .ffc-related a:hover{border-color:var(--text-secondary);text-decoration:none}
+
+/* SEO tool landing pages */
+.ffc-steps{list-style:none;counter-reset:s;padding:0;margin:var(--space-3) 0 var(--space-5);display:flex;flex-direction:column;gap:var(--space-2);max-width:68ch}
+.ffc-steps li{counter-increment:s;display:flex;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-panel);line-height:1.55;color:var(--text-secondary);font-size:var(--text-base)}
+.ffc-steps li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:50%;background:var(--text-primary);color:var(--text-inverse);font:600 11px/22px var(--font-mono);text-align:center}
+.upload-cta{position:relative;margin:var(--space-5) 0 var(--space-6)}
+.upload-cta.ff-drop{min-height:220px;cursor:pointer}
+.upload-cta.is-dragover{border-color:var(--accent);background:var(--accent-soft)}
+.upload-cta.is-busy{opacity:.6;pointer-events:none}
+.upload-cta .upload-cta-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1}
+.upload-cta .upload-cta-label{display:contents}
+.upload-cta .upload-cta-label .ff-btn{pointer-events:none}
+.upload-cta:has(.upload-cta-input:focus-visible){box-shadow:0 0 0 3px var(--focus-ring)}
+.upload-cta .upload-cta-hint{margin:0;font-size:var(--text-sm);color:var(--text-secondary)}
+.upload-cta .upload-cta-secondary{margin:var(--space-1) 0 0;position:relative;z-index:2}
+body.ffc .upload-cta .upload-cta-secondary a{font-size:var(--text-sm);color:var(--text-secondary);text-decoration:underline}
+.ffc-cta-row{margin:var(--space-5) 0}
+
+/* Worked examples, tables and misc content blocks (moved off legacy style.css for these pages) */
+.ffc-main img{max-width:100%;height:auto;display:block;border:1px solid var(--border-default);border-radius:var(--radius-md)}
+.ffc-main figure{margin:var(--space-5) 0}
+.ffc-main figcaption{font-size:var(--text-sm);color:var(--text-secondary);padding-top:var(--space-2)}
+.example-figures{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
+.example-preview{max-width:360px}
+.worked-example{margin:var(--space-8) 0;padding:var(--space-6);background:var(--bg-panel);border:1px solid var(--border-default);border-radius:var(--radius-xl);box-shadow:var(--shadow-1)}
+.worked-example h2{margin:var(--space-2) 0 var(--space-3);font-size:var(--text-xl);letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.worked-example p,.worked-example li{color:var(--text-secondary);line-height:1.65}
+.worked-example a{text-decoration:underline;text-underline-offset:2px}
+.worked-example .eyebrow{font:500 11px/1 var(--font-mono);letter-spacing:.08em;color:var(--text-muted);margin:0}
+.file-size{font-size:var(--text-xs);white-space:nowrap;color:var(--text-muted)}
+.table-scroll{max-width:100%;overflow-x:auto;margin:var(--space-4) 0}
+.table-scroll table{min-width:430px}
+.table-hint{font-size:var(--text-xs);color:var(--text-muted)}
+@media (min-width:600px){.table-hint{display:none}}
+.ffc-main table{width:100%;border-collapse:collapse;font-size:var(--text-sm)}
+.ffc-main th,.ffc-main td{text-align:left;vertical-align:top;padding:var(--space-3) var(--space-2);border-bottom:1px solid var(--border-subtle)}
+.ffc-main th{color:var(--text-primary);font-weight:600}
+.ffc-main th[scope="row"]{white-space:nowrap}
+.ffc-main caption{text-align:left;padding-bottom:var(--space-3);color:var(--text-secondary)}
+.ffc-main details{margin-top:var(--space-4)}
+.ffc-main summary{cursor:pointer;font-weight:600;padding:var(--space-2) 0}
+.ffc-main code{background:var(--bg-muted);padding:1px 6px;border-radius:4px;font-size:.9em}
+.ffc-main .ad-slot{margin:var(--space-6) 0}
+.ffc-404{padding:var(--space-8) 0 var(--space-4)}
+.ffc-404 .code{font:600 var(--text-sm)/1 var(--font-mono);color:var(--accent);margin:0 0 var(--space-3)}
+.ffc-foot{margin-top:var(--space-16)}
+
+@media (max-width:600px){
+  main.ffc-wrap{padding-top:var(--space-4)}
+  .example-figures{grid-template-columns:1fr}
+  .worked-example{padding:var(--space-4)}
+  .ffc-main th,.ffc-main td{padding:var(--space-2) var(--space-1);font-size:var(--text-xs)}
+  .ffc-gridwrap{grid-template-columns:1fr}
+  .ff-art .cta{padding:var(--space-4)}
+  .ff-art .cta a.ff-btn{width:100%}
+}
+@media (prefers-reduced-motion:reduce){.ff-faq *{transition:none!important}.ff-gcard:hover{transform:none}}
+/* Plain-link CTAs kept as a.cta (pinned by tests); styled like ff-btn primary, except the quiet link under the upload box. */
+body.ffc a.cta{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 var(--space-5);border-radius:var(--radius-md);background:var(--accent);color:#fff;font:500 var(--text-sm)/1 var(--font-sans);text-decoration:none}
+body.ffc a.cta:hover{background:var(--accent-hover);text-decoration:none}
+body.ffc .upload-cta .upload-cta-secondary a.cta{height:auto;padding:var(--space-1);background:transparent;color:var(--text-secondary);text-decoration:underline;font-weight:400}
+body.ffc .upload-cta .upload-cta-secondary a.cta:hover{color:var(--text-primary)}
+.ffc-main h2.ffc-section-h,.ffc-main>h2{font-size:var(--text-xl);margin:var(--space-8) 0 var(--space-3);letter-spacing:var(--tracking-h3);color:var(--text-primary)}
+.ffc-main>h2:first-child{margin-top:0}
+.ffc-main h3{font-size:var(--text-lg);letter-spacing:var(--tracking-h3);color:var(--text-primary);margin:var(--space-5) 0 var(--space-2)}
+.ffc-main>p,.ffc-main>section p,.ffc-main>section li{color:var(--text-secondary);line-height:1.7}
+.ffc-main>section h2{font-size:var(--text-xl);letter-spacing:var(--tracking-h3);color:var(--text-primary);margin:var(--space-6) 0 var(--space-2)}
+.ffc-main>ul,.ffc-main>ol:not(.ffc-steps){color:var(--text-secondary);line-height:1.7}
+.ffc-main a{text-underline-offset:2px}
+/* Numbered lists hold inline links and emphasis, so lay them out as block text with an absolutely placed counter (flex would split each inline node into its own column). */
+.ff-art .sec ol li,.ffc-steps li{display:block;position:relative;padding-left:calc(var(--space-4) + 22px + var(--space-3))}
+.ff-art .sec ol li::before,.ffc-steps li::before{position:absolute;left:var(--space-4);top:var(--space-3)}
+/* Reserved ad height (carried over from style.css) keeps layout shift near zero when an async ad loads. */
+.ad-slot{display:block;min-height:280px;max-width:100%;overflow:hidden;text-align:center}
+.ad-slot ins{display:block;min-height:280px}
+@media (max-width:600px){.ad-slot,.ad-slot ins{min-height:250px}}

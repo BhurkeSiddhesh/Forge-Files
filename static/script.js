@@ -841,10 +841,9 @@ function openPdfArea(areaId) {
     if (!area) return;
 
     const card = document.getElementById(PDF_AREA_CARD[areaId]);
-    if (card) {
-        card.insertAdjacentElement('afterend', area);
-        ffSelectActionCard(card);
-    }
+    // The option panel stays where the design system lays it out (between the
+    // upload zone and the tool grid); only the selected card is highlighted.
+    if (card) ffSelectActionCard(card);
 
     area.classList.remove('hidden');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2024,46 +2023,76 @@ function initWorkflowBuilder() {
 
     // Step palette drag start
     stepItems.forEach(item => {
+        const ioMeta = wfStepMeta(item.dataset.stepType);
+        if (ioMeta && !item.querySelector('small')) {
+            const io = document.createElement('small');
+            io.className = 'step-io';
+            io.textContent = wfIoText(ioMeta);
+            item.appendChild(io);
+        }
         item.ondragstart = (e) => {
             e.dataTransfer.setData('step-type', item.dataset.stepType);
             e.dataTransfer.setData('step-label', item.dataset.stepLabel);
             e.dataTransfer.setData('step-icon', item.dataset.stepIcon);
+            e.dataTransfer.effectAllowed = 'copy';
+            wfDrag = { kind: 'new', type: item.dataset.stepType, label: item.dataset.stepLabel, icon: item.dataset.stepIcon };
             item.style.opacity = '0.5';
+            wfSetDragging(true);
         };
         item.ondragend = () => {
             item.style.opacity = '1';
+            wfDrag = null;
+            wfSetDragging(false);
         };
 
         // A11y: Click to add step
         item.onclick = () => {
             addStepToWorkflow(item.dataset.stepType, item.dataset.stepLabel, item.dataset.stepIcon);
         };
+        item.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                item.click();
+            }
+        };
     });
 
-    // Canvas drop handling
+    const stepSearch = document.getElementById('workflow-step-search');
+    if (stepSearch) {
+        stepSearch.oninput = () => {
+            const q = stepSearch.value.trim().toLowerCase();
+            stepItems.forEach(item => {
+                item.hidden = !!q && !(item.dataset.stepLabel || '').toLowerCase().includes(q);
+            });
+        };
+    }
+
+    // Canvas drop handling. Drops on a slot between nodes are handled by the
+    // slot (see wfMakeSlot); a drop anywhere else on the canvas appends.
     canvas.ondragover = (e) => {
+        if (e.target.closest && e.target.closest('.dnd-slot')) return;
         e.preventDefault();
         canvas.classList.add('drag-over');
     };
 
-    canvas.ondragleave = () => canvas.classList.remove('drag-over');
+    canvas.ondragleave = (e) => {
+        if (!e.relatedTarget || !canvas.contains(e.relatedTarget)) canvas.classList.remove('drag-over');
+    };
 
     canvas.ondrop = (e) => {
         e.preventDefault();
         canvas.classList.remove('drag-over');
-
-        const stepType = e.dataTransfer.getData('step-type');
-        const stepLabel = e.dataTransfer.getData('step-label');
-        const stepIcon = e.dataTransfer.getData('step-icon');
-
-        if (stepType) {
-            addStepToWorkflow(stepType, stepLabel, stepIcon);
-        }
+        wfDropAt(e, workflowSteps.length);
     };
+
+    renderWorkflowSteps();
 }
 
 function handleWorkflowFile(file) {
     workflowFile = file;
+    ffUpdateStepTracker('workflow', 2);
+    wfAlert = null;
+    renderWorkflowSteps();
     document.getElementById('workflow-filename-display').textContent = file.name;
     document.getElementById('workflow-file-info').classList.remove('hidden');
 
@@ -2072,7 +2101,7 @@ function handleWorkflowFile(file) {
     document.getElementById('workflow-result-display').classList.add('hidden');
 }
 
-function addStepToWorkflow(type, label, icon) {
+function addStepToWorkflow(type, label, icon, atIndex) {
     const step = {
         id: Date.now(),
         type: type,
@@ -2140,21 +2169,29 @@ function addStepToWorkflow(type, label, icon) {
         step.config.password = '';
     }
 
-    workflowSteps.push(step);
+    const at = (atIndex === undefined || atIndex < 0 || atIndex > workflowSteps.length) ? workflowSteps.length : atIndex;
+    const next = workflowSteps.slice();
+    next.splice(at, 0, step);
+    if (!wfCheckChain(next)) return false;
+    workflowSteps = next;
+    wfAlert = null;
     renderWorkflowSteps();
 
     // If step needs config, open modal — keep this in sync with needsConfig().
     if (needsConfig(type)) {
-        openConfigModal(workflowSteps.length - 1);
+        openConfigModal(at);
     }
+    return true;
 }
 
 function renderWorkflowSteps() {
     const container = document.getElementById('workflow-steps-container');
     const placeholder = document.querySelector('.canvas-placeholder');
+    wfRenderHints();
 
     if (workflowSteps.length === 0) {
         container.classList.add('hidden');
+        container.innerHTML = '';
         placeholder.style.display = 'flex';
         return;
     }
@@ -2163,29 +2200,51 @@ function renderWorkflowSteps() {
     container.classList.remove('hidden');
     container.innerHTML = '';
 
+    container.appendChild(wfMakeSlot(0, false));
     workflowSteps.forEach((step, index) => {
-        // Add arrow before step (except first)
-        if (index > 0) {
-            const arrow = document.createElement('span');
-            arrow.className = 'step-arrow';
-            arrow.dataset.arrowIndex = index - 1; // Arrow between step[index-1] and step[index]
-            arrow.innerHTML = '<i class="fas fa-arrow-right"></i>';
-            container.appendChild(arrow);
-        }
+        // Slot between steps; doubles as the connector (arrow index = step[index-1] -> step[index])
+        if (index > 0) container.appendChild(wfMakeSlot(index, true));
 
+        const meta = wfStepMeta(step.type);
+        const ioText = meta ? wfIoText(meta) : '';
         const stepCard = document.createElement('div');
-        stepCard.className = 'workflow-step-card';
+        stepCard.className = 'workflow-step-card ff-node dnd-node';
         stepCard.dataset.stepIndex = index;
+        stepCard.draggable = true;
         stepCard.innerHTML = `
-            <i class="fas ${step.icon}"></i>
-            <span class="step-label">${step.label}</span>
-            ${needsConfig(step.type) ? `<button class="config-btn" onclick="openConfigModal(${index})"><i class="fas fa-cog"></i></button>` : ''}
+            <span class="no" aria-hidden="true">${index + 1}</span>
+            <span class="hd" aria-hidden="true" title="Drag to reorder"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
+            <i class="fas ${step.icon} step-ic" aria-hidden="true"></i>
+            <span class="grow"><span class="step-label">${step.label}</span>${ioText ? `<small class="step-io">${ioText}</small>` : ''}</span>
+            ${needsConfig(step.type) ? `<button type="button" class="config-btn" onclick="openConfigModal(${index})" aria-label="Configure ${escapeAttr(step.label)}"><i class="fas fa-cog" aria-hidden="true"></i></button>` : ''}
             <button type="button" class="move-step" onclick="moveStep(${index}, -1)" aria-label="Move step up" ${index === 0 ? 'disabled' : ''}>&uarr;</button>
             <button type="button" class="move-step" onclick="moveStep(${index}, 1)" aria-label="Move step down" ${index === workflowSteps.length - 1 ? 'disabled' : ''}>&darr;</button>
-            <button class="remove-step" onclick="removeStep(${index})"><i class="fas fa-times"></i></button>
+            <button type="button" class="remove-step" onclick="removeStep(${index})" aria-label="Remove ${escapeAttr(step.label)}"><i class="fas fa-times" aria-hidden="true"></i></button>
         `;
+        stepCard.addEventListener('dragstart', (e) => {
+            if (e.target !== stepCard) return;
+            e.dataTransfer.setData('text/plain', 'workflow-node');
+            e.dataTransfer.setData('step-index', String(index));
+            e.dataTransfer.effectAllowed = 'move';
+            wfDrag = { kind: 'node', from: index };
+            stepCard.classList.add('dragging');
+            wfSetDragging(true);
+        });
+        stepCard.addEventListener('dragend', () => {
+            stepCard.classList.remove('dragging');
+            wfDrag = null;
+            wfSetDragging(false);
+        });
         container.appendChild(stepCard);
     });
+    container.appendChild(wfMakeSlot(workflowSteps.length, false));
+
+    const out = document.createElement('div');
+    out.className = 'dnd-out';
+    const outCls = wfTailClass(workflowSteps);
+    out.innerHTML = `<span>Output</span><b>${outCls ? wfTypeLabel(outCls) : 'varies by step'}</b>`;
+    container.appendChild(out);
+
     if (workflowUndo) {
         const undo = document.createElement('button');
         undo.type = 'button';
@@ -2194,6 +2253,165 @@ function renderWorkflowSteps() {
         undo.addEventListener('click', undoRemoveStep);
         container.appendChild(undo);
     }
+}
+
+// === Workflow drag-and-drop and type chain (design system) ===
+// Step input/output types come from window.ffLocal.workflow.STEP_TYPES (ops-workflow.js),
+// the same table the run-time preflight uses. If it is unavailable nothing is type
+// checked here and the server remains the judge.
+let wfDrag = null;
+let wfAlert = null;
+const WF_TYPE_LABELS = {
+    pdf: ['PDF', 'PDF'], csv: ['CSV', 'CSV'], xlsx: ['Excel (XLSX)', 'XLSX'], xls: ['Excel (XLS)', 'XLS'],
+    docx: ['Word (DOCX)', 'DOCX'], doc: ['Word (DOC)', 'DOC'], pptx: ['PowerPoint (PPTX)', 'PPTX'],
+    ppt: ['PowerPoint (PPT)', 'PPT'], txt: ['text', 'TXT'], epub: ['EPUB', 'EPUB'],
+    heic: ['HEIC image', 'HEIC'], image: ['image', 'Image'],
+};
+
+function wfTypeLabel(cls, short) {
+    if (!cls) return short ? 'Files' : 'varies';
+    const l = WF_TYPE_LABELS[cls];
+    return l ? l[short ? 1 : 0] : cls;
+}
+
+function wfIoText(meta) {
+    return wfTypeLabel(meta.in[0], true) + (meta.in.length > 1 ? '+' : '') + ' → ' + wfTypeLabel(meta.out, true);
+}
+
+function wfStepMeta(type) {
+    const m = window.ffLocal && window.ffLocal.workflow;
+    return (m && m.STEP_TYPES && m.STEP_TYPES[type]) || null;
+}
+
+function wfStartClass() {
+    const m = window.ffLocal && window.ffLocal.workflow;
+    return (m && m.classOf && workflowFile) ? m.classOf(workflowFile.name) : null;
+}
+
+// First place where a step is handed a file class it does not accept, or null.
+function wfFindProblem(list) {
+    let cls = wfStartClass();
+    for (let i = 0; i < list.length; i++) {
+        const meta = wfStepMeta(list[i].type);
+        if (!meta) { cls = null; continue; }
+        if (cls && meta.in.indexOf(cls) < 0) return { index: i, step: list[i], need: meta.in, have: cls };
+        cls = meta.out;
+    }
+    return null;
+}
+
+function wfTailClass(list) {
+    let cls = wfStartClass();
+    for (const s of list) {
+        const meta = wfStepMeta(s.type);
+        cls = meta ? meta.out : null;
+    }
+    return cls;
+}
+
+function wfProblemText(p) {
+    const need = p.need.map(c => wfTypeLabel(c)).join(' or ');
+    return `${p.step.label} needs ${need}, but the file at that point is ${wfTypeLabel(p.have)}.`;
+}
+
+// True if the list is a valid chain; otherwise shows the inline alert and returns false.
+function wfCheckChain(list) {
+    const p = wfFindProblem(list);
+    if (!p) return true;
+    wfAlert = { title: "That step can't go there", text: wfProblemText(p) };
+    wfRenderAlert();
+    return false;
+}
+
+function wfRenderAlert() {
+    const host = document.getElementById('workflow-chain-alert');
+    if (!host) return;
+    let a = wfAlert;
+    if (!a) {
+        const p = wfFindProblem(workflowSteps);
+        if (p) a = { title: 'Check the order of your steps', text: wfProblemText(p) };
+    }
+    host.innerHTML = '';
+    if (!a) return;
+    const el = document.createElement('div');
+    el.className = 'ff-alert danger';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = '<span class="ff-alert-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span><div><h4></h4><p></p></div>';
+    el.querySelector('h4').textContent = a.title;
+    el.querySelector('p').textContent = a.text;
+    host.appendChild(el);
+}
+
+// Palette hints: dim steps that cannot follow the current end of the pipeline.
+function wfRenderHints() {
+    wfRenderAlert();
+    const tail = wfTailClass(workflowSteps);
+    document.querySelectorAll('#workflow-page .step-item').forEach(item => {
+        const meta = wfStepMeta(item.dataset.stepType);
+        item.classList.toggle('dim', !!(tail && meta && meta.in.indexOf(tail) < 0));
+    });
+}
+
+function wfSetDragging(on) {
+    const c = document.getElementById('workflow-steps-container');
+    if (c) c.classList.toggle('is-dragging', !!on);
+    if (!on) document.querySelectorAll('#workflow-page .dnd-slot.on').forEach(el => el.classList.remove('on'));
+}
+
+function wfMakeSlot(index, isConnector) {
+    const slot = document.createElement('div');
+    slot.className = 'dnd-slot' + (isConnector ? ' step-arrow ff-conn' : '');
+    slot.dataset.slotIndex = index;
+    if (isConnector) slot.dataset.arrowIndex = index - 1;
+    slot.innerHTML = '<span>Drop here</span>';
+    slot.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = (wfDrag && wfDrag.kind === 'node') ? 'move' : 'copy';
+        slot.classList.add('on');
+    });
+    slot.addEventListener('dragleave', (e) => {
+        if (!e.relatedTarget || !slot.contains(e.relatedTarget)) slot.classList.remove('on');
+    });
+    slot.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        slot.classList.remove('on');
+        const cv = document.getElementById('workflow-canvas');
+        if (cv) cv.classList.remove('drag-over');
+        wfDropAt(e, index);
+    });
+    return slot;
+}
+
+// Handle a drop of a palette step or an existing node at slot index `slot`.
+function wfDropAt(e, slot) {
+    let drag = wfDrag;
+    if (!drag && e.dataTransfer) {
+        const t = e.dataTransfer.getData('step-type');
+        const n = e.dataTransfer.getData('step-index');
+        if (t) drag = { kind: 'new', type: t, label: e.dataTransfer.getData('step-label'), icon: e.dataTransfer.getData('step-icon') };
+        else if (n !== '') drag = { kind: 'node', from: Number(n) };
+    }
+    wfDrag = null;
+    wfSetDragging(false);
+    if (!drag) return;
+    if (drag.kind === 'new') {
+        addStepToWorkflow(drag.type, drag.label, drag.icon, slot);
+    } else if (drag.kind === 'node') {
+        reorderStep(drag.from, slot > drag.from ? slot - 1 : slot);
+    }
+}
+
+function reorderStep(from, to) {
+    if (from === to || from < 0 || from >= workflowSteps.length || to < 0 || to >= workflowSteps.length) return false;
+    const next = workflowSteps.slice();
+    const moved = next.splice(from, 1)[0];
+    next.splice(to, 0, moved);
+    if (!wfCheckChain(next)) return false;
+    workflowSteps = next;
+    wfAlert = null;
+    renderWorkflowSteps();
+    return true;
 }
 
 function needsConfig(type) {
@@ -2211,6 +2429,7 @@ let workflowUndo = null;
 function removeStep(index) {
     workflowUndo = { index: index, step: workflowSteps[index] };
     workflowSteps.splice(index, 1);
+    wfAlert = null;
     renderWorkflowSteps();
 }
 
@@ -2225,10 +2444,14 @@ function undoRemoveStep() {
 function moveStep(index, dir) {
     const j = index + dir;
     if (j < 0 || j >= workflowSteps.length) return;
-    const tmp = workflowSteps[index];
-    workflowSteps[index] = workflowSteps[j];
-    workflowSteps[j] = tmp;
-    renderWorkflowSteps();
+    if (!reorderStep(index, j)) return;
+    // Rendering rebuilt the buttons; keep keyboard focus on the same control.
+    const card = document.querySelector(`.workflow-step-card[data-step-index="${j}"]`);
+    const btns = card ? card.querySelectorAll('.move-step') : [];
+    if (btns.length === 2) {
+        const want = dir < 0 ? btns[0] : btns[1];
+        (want.disabled ? (dir < 0 ? btns[1] : btns[0]) : want).focus();
+    }
 }
 window.moveStep = moveStep;
 window.undoRemoveStep = undoRemoveStep;
@@ -2747,6 +2970,7 @@ function handleWorkflowEvent(data, statusDisplay, resultDisplay) {
         case 'complete':
             statusDisplay.classList.add('hidden');
             resultDisplay.classList.remove('hidden');
+            ffUpdateStepTracker('workflow', 3);
             document.getElementById('workflow-result-message').textContent = `${data.message}: ${data.filename}`;
             updateDownloadLink(document.getElementById('workflow-download-link'), data.download_token);
             // Keep completed states visible for a moment
@@ -2769,6 +2993,7 @@ function setAllStepsPending() {
         card.classList.remove('processing', 'completed');
         card.classList.add('pending');
     });
+    wfRenderRun();
 
     arrows.forEach(arrow => {
         arrow.classList.remove('processing', 'completed');
@@ -2781,6 +3006,7 @@ function setStepProcessing(index) {
         card.classList.remove('pending', 'completed');
         card.classList.add('processing');
     }
+    wfMarkRun(index, 'running');
 
     // Highlight arrow leading to this step
     if (index > 0) {
@@ -2797,6 +3023,7 @@ function setStepCompleted(index) {
         card.classList.remove('pending', 'processing');
         card.classList.add('completed');
     }
+    wfMarkRun(index, 'success');
 
     // Mark arrow as completed
     if (index > 0) {
@@ -2806,6 +3033,28 @@ function setStepCompleted(index) {
             arrow.classList.add('completed');
         }
     }
+}
+
+// Run status list (.ff-run) shown inside the status panel while the workflow runs.
+function wfRenderRun() {
+    const list = document.getElementById('workflow-run-list');
+    if (!list) return;
+    list.innerHTML = '';
+    workflowSteps.forEach((step, i) => {
+        const li = document.createElement('li');
+        li.dataset.runIndex = i;
+        li.innerHTML = '<span class="mk" aria-hidden="true"></span><span class="run-label"></span><small>Waiting</small>';
+        li.querySelector('.run-label').textContent = step.label;
+        list.appendChild(li);
+    });
+}
+
+function wfMarkRun(index, state) {
+    const li = document.querySelector(`#workflow-run-list li[data-run-index="${index}"]`);
+    if (!li) return;
+    li.className = state;
+    li.querySelector('.mk').innerHTML = state === 'success' ? '<i class="fas fa-check"></i>' : '<i class="fas fa-circle-notch fa-spin"></i>';
+    li.querySelector('small').textContent = state === 'success' ? 'Done' : 'Running';
 }
 
 function clearStepStates() {
@@ -2842,6 +3091,7 @@ function resetWorkflowUI() {
     renderWorkflowSteps();
     document.getElementById('workflow-status-display')?.classList.add('hidden');
     document.getElementById('workflow-result-display')?.classList.add('hidden');
+    ffUpdateStepTracker('workflow', 1);
 }
 
 // Extend resetUI to include workflow reset
@@ -3684,7 +3934,18 @@ const DEEP_LINK_OPS = {
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
+
+// Tools reachable from the home grid that have no SEO landing page, so they are
+// not in DEEP_LINK_OPS (whose keys mirror the SEO slugs). Same resolution rule:
+// the op is only ever looked up here, never used as an element id.
+const DEEP_LINK_EXTRA_OPS = Object.fromEntries([
+    ['repair-pdf', 'repair-pdf-btn'],
+    ['create-pdf', 'create-pdf-btn'],
+    ['annotate-pdf', 'annotate-pdf-btn'],
+    ['edit-pdf-metadata', 'pdf-metadata-btn'],
+    ['word-to-powerpoint', 'word-to-pptx-btn'],
+].map(([op, card]) => [op, { card }]));
 
 // The action card a deep link asked for, held until the visitor picks a file.
 // Most card handlers ffNotify("Please select a file first.") when clicked with no
@@ -3746,7 +4007,8 @@ const FF_CATEGORY_INPUTS = {
 
     // `op` is only ever resolved through DEEP_LINK_OPS — never used to look up
     // an element id directly, so an arbitrary ?op= value can't reach the DOM.
-    const op = DEEP_LINK_OPS[params.get('op')];
+    const opKey = params.get('op');
+    const op = DEEP_LINK_OPS[opKey] || DEEP_LINK_EXTRA_OPS[opKey];
     if (!op) return;
 
     // No tool_open for the specific op here on purpose: it's fired by the

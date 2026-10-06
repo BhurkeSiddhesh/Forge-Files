@@ -110,6 +110,14 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     <link rel="stylesheet" href="/static/style.css?v=20260928e">
+    <link rel="stylesheet" href="/static/ds/design-system.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/toolpage.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/pdf.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/image.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/excel.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/ppt.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/word.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/workflow.css?v=20261009">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Cropper.js (CSS + JS) is lazy-loaded by script.js only when the crop tool is opened, to protect LCP/INP. -->
     {{CF_ANALYTICS}}
@@ -143,160 +151,46 @@
 </head>
 
 <body>
-    <!-- Startup Animated Intro Splash (Android & Web) -->
-    <div id="startup-splash-overlay" class="startup-splash-overlay" role="presentation" aria-hidden="true">
-        <div class="startup-splash-content">
-            <div class="startup-splash-badge">
-                <img src="/static/forge-files-logo-animation.gif" alt="Forge Files" class="startup-splash-gif" width="112" height="112">
-            </div>
-            <div class="startup-splash-brand">Forge <span class="accent">Files</span></div>
-            <div class="startup-splash-tagline">Fast, Private &amp; Open Document Engine</div>
-            <div class="startup-splash-loader" aria-hidden="true"><div class="startup-splash-progress"></div></div>
-        </div>
-    </div>
-    <script>
-        (function() {
-            try {
-                var overlay = document.getElementById('startup-splash-overlay');
-                if (!overlay) return;
-                if (sessionStorage.getItem('ff_startup_seen') === '1' || window.navigator.webdriver) {
-                    overlay.style.display = 'none';
-                    return;
-                }
-                function dismissSplash() {
-                    if (!overlay || overlay.classList.contains('dismissed')) return;
-                    overlay.classList.add('dismissed');
-                    sessionStorage.setItem('ff_startup_seen', '1');
-                    setTimeout(function() {
-                        if (overlay && overlay.parentNode) {
-                            overlay.style.display = 'none';
-                        }
-                    }, 500);
-                }
-                overlay.addEventListener('click', dismissSplash);
-                overlay.addEventListener('touchstart', dismissSplash, { passive: true });
-                setTimeout(dismissSplash, 1400);
-            } catch (e) {}
-        })();
-    </script>
-    <button class="theme-toggle" id="theme-toggle-btn" aria-label="Toggle Dark Mode">
-        <i class="fas fa-moon" id="theme-icon"></i>
-    </button>
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
-    </div>
+    <header class="ff-ds ff-nav ffh-nav">
+        <a class="brand" href="/" onclick="showHome(); return false;" aria-label="Forge Files home"><img src="/static/forge-files-logo-animation.gif" alt="" width="32" height="32">Forge <span class="fi">Files</span></a>
+        <span class="sp"></span>
+        <button type="button" class="ff-searchbtn" id="ffh-open-pal"><svg class="ff-icon-svg" data-icon="search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle pathLength="1" cx="11" cy="11" r="8"/><path pathLength="1" d="m21 21-4.3-4.3"/></svg>Search tools<span class="ff-kbd" style="margin-left:auto">&#8984;K</span></button>
+        <button type="button" class="ff-iconbtn theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle Dark Mode"><i class="fas fa-moon" id="theme-icon"></i></button>
+    </header>
 
     <main class="app-container">
         <!-- Main Page -->
-        <section id="home-page" class="view active">
-            <header class="hero">
-                <div class="hero-brand">
-                    <img src="/static/forge-files-logo-animation.gif" alt="Forge Files Logo" class="hero-brand-logo" width="96" height="96" loading="eager">
-                </div>
-                <h1>Forge <span class="accent">Files</span></h1>
-                <div style="display:flex;justify-content:center;">
-                    <p class="trust-strip">
-                        <span>Free PDF, image, Excel &amp; PPT tools</span>
-                        <span><i class="fas fa-check"></i> 100% free</span>
-                        <span><i class="fab fa-github"></i> <a href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener">Open source</a></span>
-                        <span><i class="fas fa-user-slash"></i> No signup</span>
-                        <span><i class="fas fa-trash-alt"></i> Files auto-deleted</span>
-                    </p>
-                </div>
-            </header>
-
-            <div class="tool-grid">
-                <a class="tool-card active" href="/?tool=pdf" onclick="showDrillDown('pdf'); return false;">
-                    <div class="icon-wrapper pdf">
-                        <i class="fas fa-file-pdf"></i>
-                    </div>
-                    <h3>PDF Tools</h3>
-                    <p>Unlock, convert, and compress PDF files effortlessly.</p>
-                    <div class="badge">Available</div>
-                </a>
-
-                <a class="tool-card active" href="/?tool=image" onclick="showDrillDown('image'); return false;">
-                    <div class="icon-wrapper image">
-                        <i class="fas fa-image"></i>
-                    </div>
-                    <h3>Image Tools</h3>
-                    <p>Convert HEIC to JPEG and more image transformations.</p>
-                    <div class="badge">Available</div>
-                </a>
-
-                <a class="tool-card active" href="/?tool=workflow" onclick="showDrillDown('workflow'); return false;">
-                    <div class="icon-wrapper workflow">
-                        <i class="fas fa-project-diagram"></i>
-                    </div>
-                    <h3>Workflow</h3>
-                    <p>Chain operations: PDF unlock → Word and more pipelines.</p>
-                    <div class="badge">New</div>
-                </a>
-
-                <a class="tool-card active" href="/?tool=excel" onclick="showDrillDown('excel'); return false;">
-                    <div class="icon-wrapper excel">
-                        <i class="fas fa-file-excel"></i>
-                    </div>
-                    <h3>Excel Tools</h3>
-                    <p>Excel → PDF, CSV ↔ XLSX, and merge workbooks.</p>
-                    <div class="badge">New</div>
-                </a>
-
-                <a class="tool-card active" href="/?tool=ppt" onclick="showDrillDown('ppt'); return false;">
-                    <div class="icon-wrapper ppt">
-                        <i class="fas fa-file-powerpoint"></i>
-                    </div>
-                    <h3>PPT Tools</h3>
-                    <p>PPT → PDF, PPT → Images, and merge presentations.</p>
-                    <div class="badge">New</div>
-                </a>
-
-                <a class="tool-card active" href="/?tool=word" onclick="showDrillDown('word'); return false;">
-                    <div class="icon-wrapper word">
-                        <i class="fas fa-file-word"></i>
-                    </div>
-                    <h3>Word Tools</h3>
-                    <p>Convert DOCX to PDF and more Word operations.</p>
-                    <div class="badge">New</div>
-                </a>
+        <section id="home-page" class="view active ff-ds ffh">
+            <div class="ffh-wrap">
+                <header class="ffh-hero">
+                    <span class="ffh-eyebrow"><span class="dot"></span><span>Ready to</span><span class="ffh-rot" id="ffh-rot"><b>Compress</b></span><span>a file</span></span>
+                    <h1><span class="ffh-w" style="animation-delay:0s">Every</span> <span class="ffh-w" style="animation-delay:.07s">file</span> <span class="ffh-w" style="animation-delay:.14s">tool.</span> <em><span class="ffh-w" style="animation-delay:.4s">One</span> <span class="ffh-w" style="animation-delay:.47s">place.</span></em></h1>
+                    <p class="ffh-sub">Convert, compress, edit and organize files privately.</p>
+                    <div class="ffh-sbox" id="ffh-search"></div>
+                    <div class="ffh-trust" id="ffh-trust"><span>Free</span><span>No signup</span><span>Open source</span><span>Private by design</span></div>
+                </header>
+                <div class="ffh-sec"><h2>Popular</h2></div>
+                <div class="ffh-grid" id="ffh-popular"></div>
+                <div class="ffh-sec"><h2>All tools</h2><div class="ff-fc" id="ffh-chips" role="group" aria-label="Category"></div></div>
+                <div class="ffh-grid ffh-end" id="ffh-all"></div>
+                <noscript><p><a href="/?tool=pdf">PDF tools</a> &middot; <a href="/?tool=image">Image tools</a> &middot; <a href="/?tool=excel">Excel tools</a> &middot; <a href="/?tool=ppt">PowerPoint tools</a> &middot; <a href="/?tool=word">Word tools</a> &middot; <a href="/?tool=workflow">Workflow</a></p></noscript>
             </div>
-
         </section>
 
         <!-- Drill Down Page (PDF) -->
-        <section id="pdf-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="pdf-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload PDF</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="pdf-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="pdf-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="pdf-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>PDF</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">PDF tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">PDF tools</h2><p class="ffp-desc">Drop a PDF to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="pdf-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="pdf-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="pdf-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload PDF file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your PDF or <span class="browse-text">browse</span></p>
+                    <div id="drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload PDF file">
+                        <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a PDF here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">PDF</span>
                         <input type="file" id="file-input" accept=".pdf" hidden>
                         <div id="file-info" class="file-info hidden">
                             <i class="fas fa-file-pdf"></i>
@@ -306,165 +200,34 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">PDF tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="remove-password-btn" role="button" tabindex="0">
-                            <i class="fas fa-unlock"></i>
-                            <div class="action-text">
-                                <h4>Remove Password</h4>
-                                <p>Unlock protected PDF files</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="convert-word-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-word"></i>
-                            <div class="action-text">
-                                <h4>Convert to Word</h4>
-                                <p>Transform PDF into editable DOCX</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="extract-pages-btn" role="button" tabindex="0">
-                            <i class="fas fa-cut"></i>
-                            <div class="action-text">
-                                <h4>Extract Pages</h4>
-                                <p>Cut selected pages into a new PDF</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="split-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-copy"></i>
-                            <div class="action-text">
-                                <h4>Split PDF</h4>
-                                <p>Create a ZIP of separate PDFs</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="compress-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-archive"></i>
-                            <div class="action-text">
-                                <h4>Compress PDF</h4>
-                                <p>Reduce size; inspect image detail</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="merge-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-object-group"></i>
-                            <div class="action-text">
-                                <h4>Merge PDFs</h4>
-                                <p>Combine multiple PDFs into one</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="watermark-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-stamp"></i>
-                            <div class="action-text">
-                                <h4>Add Watermark</h4>
-                                <p>Stamp text across every page</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="to-images-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-images"></i>
-                            <div class="action-text">
-                                <h4>PDF → JPG</h4>
-                                <p>Render each page as an image (zip)</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="sign-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-signature"></i>
-                            <div class="action-text">
-                                <h4>Sign PDF</h4>
-                                <p>Stamp a signature image onto a page</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="rotate-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-sync-alt"></i>
-                            <div class="action-text">
-                                <h4>Rotate PDF</h4>
-                                <p>Rotate pages 90°, 180° or 270°</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="protect-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-lock"></i>
-                            <div class="action-text">
-                                <h4>Protect PDF</h4>
-                                <p>Add password protection</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="extract-text-btn" role="button" tabindex="0">
-                            <i class="fas fa-font"></i>
-                            <div class="action-text">
-                                <h4>Extract Text</h4>
-                                <p>Export all text to .txt file</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="ocr-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-search"></i>
-                            <div class="action-text">
-                                <h4>OCR PDF</h4>
-                                <p>Add a searchable text layer</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="organize-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-sort"></i>
-                            <div class="action-text">
-                                <h4>Organize PDF</h4>
-                                <p>Reorder, delete or duplicate pages</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="page-numbers-btn" role="button" tabindex="0">
-                            <i class="fas fa-list-ol"></i>
-                            <div class="action-text">
-                                <h4>Add Page Numbers</h4>
-                                <p>Insert numbered footers or headers</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="repair-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-wrench"></i>
-                            <div class="action-text">
-                                <h4>Repair PDF</h4>
-                                <p>Fix corrupted or damaged PDFs</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="create-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-plus-circle"></i>
-                            <div class="action-text">
-                                <h4>Create PDF</h4>
-                                <p>Generate from text or blank</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="annotate-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-highlighter"></i>
-                            <div class="action-text">
-                                <h4>Annotate PDF</h4>
-                                <p>Highlight, underline and add notes</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="pdf-metadata-btn" role="button" tabindex="0">
-                            <i class="fas fa-info-circle"></i>
-                            <div class="action-text">
-                                <h4>Edit Metadata</h4>
-                                <p>Change title, author and keywords</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="pdf-to-excel-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-excel"></i>
-                            <div class="action-text">
-                                <h4>PDF → Excel</h4>
-                                <p>Extract tables to spreadsheet</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="pdf-to-pptx-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-powerpoint"></i>
-                            <div class="action-text">
-                                <h4>PDF → PowerPoint</h4>
-                                <p>Convert pages to presentation</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="pdf-to-epub-btn" role="button" tabindex="0">
-                            <i class="fas fa-book"></i>
-                            <div class="action-text">
-                                <h4>PDF → EPUB</h4>
-                                <p>Turn a PDF into a reflowable ebook</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="remove-password-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="lock-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="11" x="3" y="11" rx="2" ry="2"/><path pathLength="1" d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span><span class="action-text"><h4>Unlock PDF</h4><p>Remove a known password from a PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="convert-word-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-word);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="file-type" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M9 13v-1h6v1"/><path pathLength="1" d="M12 12v6"/><path pathLength="1" d="M11 18h2"/></svg></span><span class="action-text"><h4>PDF → Word</h4><p>Convert a PDF to an editable DOCX.</p></span></div>
+                        <div class="action-card ff-tool" id="extract-pages-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="scissors" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle pathLength="1" cx="6" cy="6" r="3"/><path pathLength="1" d="M8.12 8.12 12 12"/><path pathLength="1" d="M20 4 8.12 15.88"/><circle pathLength="1" cx="6" cy="18" r="3"/><path pathLength="1" d="M14.8 14.8 20 20"/></svg></span><span class="action-text"><h4>Extract PDF Pages</h4><p>Cut selected pages into a new PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="split-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.1s"><svg class="ff-icon-svg" data-icon="scissors" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle pathLength="1" cx="6" cy="6" r="3"/><path pathLength="1" d="M8.12 8.12 12 12"/><path pathLength="1" d="M20 4 8.12 15.88"/><circle pathLength="1" cx="6" cy="18" r="3"/><path pathLength="1" d="M14.8 14.8 20 20"/></svg></span><span class="action-text"><h4>Split PDF</h4><p>Create a ZIP of separate PDFs.</p></span></div>
+                        <div class="action-card ff-tool" id="compress-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-2.75s"><svg class="ff-icon-svg" data-icon="minimize-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline pathLength="1" points="4 14 10 14 10 20"/><polyline pathLength="1" points="20 10 14 10 14 4"/><line pathLength="1" x1="14" x2="21" y1="10" y2="3"/><line pathLength="1" x1="3" x2="10" y1="21" y2="14"/></svg></span><span class="action-text"><h4>Compress PDF</h4><p>Reduce PDF size while preserving readable quality.</p></span></div>
+                        <div class="action-card ff-tool" id="merge-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.1s"><svg class="ff-icon-svg" data-icon="combine" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M10 18H5a3 3 0 0 1-3-3v-1"/><path pathLength="1" d="M14 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="M20 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="m7 21 3-3-3-3"/><rect pathLength="1" x="14" y="14" width="8" height="8" rx="2"/><rect pathLength="1" x="2" y="2" width="8" height="8" rx="2"/></svg></span><span class="action-text"><h4>Merge PDF</h4><p>Combine several PDFs into one file.</p></span></div>
+                        <div class="action-card ff-tool" id="watermark-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-3.3000000000000003s"><svg class="ff-icon-svg" data-icon="file-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M10 9H8"/><path pathLength="1" d="M16 13H8"/><path pathLength="1" d="M16 17H8"/></svg></span><span class="action-text"><h4>Watermark PDF</h4><p>Stamp text across every page.</p></span></div>
+                        <div class="action-card ff-tool" id="to-images-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-1.1s"><svg class="ff-icon-svg" data-icon="image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle pathLength="1" cx="9" cy="9" r="2"/><path pathLength="1" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>PDF → JPG</h4><p>Render each page as an image (zip).</p></span></div>
+                        <div class="action-card ff-tool" id="sign-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-0.55s"><svg class="ff-icon-svg" data-icon="pen-line" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M12 20h9"/><path pathLength="1" d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg></span><span class="action-text"><h4>Sign PDF</h4><p>Stamp a signature image onto a page.</p></span></div>
+                        <div class="action-card ff-tool" id="rotate-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="rotate-cw" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path pathLength="1" d="M21 3v5h-5"/></svg></span><span class="action-text"><h4>Rotate PDF</h4><p>Rotate pages 90°, 180° or 270°.</p></span></div>
+                        <div class="action-card ff-tool" id="protect-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-2.2s"><svg class="ff-icon-svg" data-icon="lock" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="11" x="3" y="11" rx="2" ry="2"/><path pathLength="1" d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="action-text"><h4>Protect PDF</h4><p>Add password protection.</p></span></div>
+                        <div class="action-card ff-tool" id="extract-text-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="file-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M10 9H8"/><path pathLength="1" d="M16 13H8"/><path pathLength="1" d="M16 17H8"/></svg></span><span class="action-text"><h4>PDF → Text</h4><p>Export all text to a .txt file.</p></span></div>
+                        <div class="action-card ff-tool" id="ocr-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-0.0s"><svg class="ff-icon-svg" data-icon="scan-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M3 7V5a2 2 0 0 1 2-2h2"/><path pathLength="1" d="M17 3h2a2 2 0 0 1 2 2v2"/><path pathLength="1" d="M21 17v2a2 2 0 0 1-2 2h-2"/><path pathLength="1" d="M7 21H5a2 2 0 0 1-2-2v-2"/><path pathLength="1" d="M7 8h8"/><path pathLength="1" d="M7 12h10"/><path pathLength="1" d="M7 16h6"/></svg></span><span class="action-text"><h4>OCR PDF</h4><p>Add a searchable text layer.</p></span></div>
+                        <div class="action-card ff-tool" id="organize-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-2.75s"><svg class="ff-icon-svg" data-icon="arrow-up" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="m5 12 7-7 7 7"/><path pathLength="1" d="M12 19V5"/></svg></span><span class="action-text"><h4>Organize PDF</h4><p>Reorder, delete or duplicate pages.</p></span></div>
+                        <div class="action-card ff-tool" id="page-numbers-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.1s"><svg class="ff-icon-svg" data-icon="file-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M10 9H8"/><path pathLength="1" d="M16 13H8"/><path pathLength="1" d="M16 17H8"/></svg></span><span class="action-text"><h4>Add Page Numbers</h4><p>Insert numbered footers or headers.</p></span></div>
+                        <div class="action-card ff-tool" id="repair-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="refresh-cw" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path pathLength="1" d="M21 3v5h-5"/><path pathLength="1" d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path pathLength="1" d="M8 16H3v5"/></svg></span><span class="action-text"><h4>Repair PDF</h4><p>Fix corrupted or damaged PDFs.</p></span></div>
+                        <div class="action-card ff-tool" id="create-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="plus" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M5 12h14"/><path pathLength="1" d="M12 5v14"/></svg></span><span class="action-text"><h4>Create PDF</h4><p>Generate a PDF from text or blank pages.</p></span></div>
+                        <div class="action-card ff-tool" id="annotate-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-2.75s"><svg class="ff-icon-svg" data-icon="pen-line" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M12 20h9"/><path pathLength="1" d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg></span><span class="action-text"><h4>Annotate PDF</h4><p>Highlight, underline and add notes.</p></span></div>
+                        <div class="action-card ff-tool" id="pdf-metadata-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-3.3000000000000003s"><svg class="ff-icon-svg" data-icon="info" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle pathLength="1" cx="12" cy="12" r="10"/><path pathLength="1" d="M12 16v-4"/><path pathLength="1" d="M12 8h.01"/></svg></span><span class="action-text"><h4>Edit Metadata</h4><p>Change title, author and keywords.</p></span></div>
+                        <div class="action-card ff-tool" id="pdf-to-excel-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-excel);--d:-2.2s"><svg class="ff-icon-svg" data-icon="sheet" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><line pathLength="1" x1="3" x2="21" y1="9" y2="9"/><line pathLength="1" x1="3" x2="21" y1="15" y2="15"/><line pathLength="1" x1="9" x2="9" y1="9" y2="21"/><line pathLength="1" x1="15" x2="15" y1="9" y2="21"/></svg></span><span class="action-text"><h4>PDF → Excel</h4><p>Extract tables to a spreadsheet.</p></span></div>
+                        <div class="action-card ff-tool" id="pdf-to-pptx-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-1.1s"><svg class="ff-icon-svg" data-icon="presentation" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M2 3h20"/><path pathLength="1" d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path pathLength="1" d="m7 21 5-5 5 5"/></svg></span><span class="action-text"><h4>PDF → PowerPoint</h4><p>Convert pages to a presentation.</p></span></div>
+                        <div class="action-card ff-tool" id="pdf-to-epub-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-pdf);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="file-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M10 9H8"/><path pathLength="1" d="M16 13H8"/><path pathLength="1" d="M16 17H8"/></svg></span><span class="action-text"><h4>PDF → EPUB</h4><p>Turn a PDF into a reflowable ebook.</p></span></div>
                     </div>
 
                     <!-- Compress PDF Options -->
-                    <div id="compress-area" class="compress-area hidden">
+                    <div id="compress-area" class="compress-area password-area hidden">
                         <fieldset class="options-panel">
                             <legend>Compression method</legend>
                             <label><input type="radio" name="compress-mode" value="structural" checked> Preserve searchable text, links and vectors</label>
@@ -765,7 +528,7 @@
 
                     <div id="result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="result-message"></p>
                         <a id="download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
@@ -780,38 +543,20 @@
         </section>
 
         <!-- Drill Down Page (Image) -->
-        <section id="image-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="image-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload Image</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="image-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="image-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="image-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Images</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Image tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Image tools</h2><p class="ffp-desc">Drop an image to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="image-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="image-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="image-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="image-drop-zone" class="drop-zone" role="button" tabindex="0"
+                    <div id="image-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0"
                         aria-label="Upload Image file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop an image or <span class="browse-text">browse</span></p>
+                        <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop an image here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">JPG &middot; PNG &middot; WebP &middot; HEIC</span>
                         <input type="file" id="image-file-input" accept="image/*,.heic,.heif" hidden>
                         <div id="image-file-info" class="file-info hidden">
                             <i class="fas fa-image"></i>
@@ -821,67 +566,19 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">Image tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="convert-jpeg-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-image"></i>
-                            <div class="action-text">
-                                <h4>HEIC to JPEG</h4>
-                                <p>Convert iPhone HEIC or images to JPEG</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="convert-jpeg-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle pathLength="1" cx="9" cy="9" r="2"/><path pathLength="1" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>HEIC → JPG</h4><p>Convert iPhone photos to JPG.</p></span></div>
 
-                        <div class="action-card" id="resize-btn" role="button"
-                            tabindex="0">
-                            <i class="fas fa-compress-arrows-alt"></i>
-                            <div class="action-text">
-                                <h4>Resize Image</h4>
-                                <p>Change dimensions or file size</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="resize-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-2.75s"><svg class="ff-icon-svg" data-icon="scaling" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path pathLength="1" d="M14 15H9v-5"/><path pathLength="1" d="M16 3h5v5"/><path pathLength="1" d="M21 3 9 15"/></svg></span><span class="action-text"><h4>Resize Image</h4><p>Change image dimensions in pixels or percent.</p></span></div>
 
-                        <div class="action-card" id="crop-btn" role="button" tabindex="0">
-                            <i class="fas fa-crop-alt"></i>
-                            <div class="action-text">
-                                <h4>Crop Image</h4>
-                                <p>Apply cropping selection</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="crop-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-1.6500000000000001s"><svg class="ff-icon-svg" data-icon="scissors" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle pathLength="1" cx="6" cy="6" r="3"/><path pathLength="1" d="M8.12 8.12 12 12"/><path pathLength="1" d="M20 4 8.12 15.88"/><circle pathLength="1" cx="6" cy="18" r="3"/><path pathLength="1" d="M14.8 14.8 20 20"/></svg></span><span class="action-text"><h4>Crop Image</h4><p>Apply a cropping selection.</p></span></div>
 
-                        <div class="action-card" id="rotate-image-btn" role="button" tabindex="0">
-                            <i class="fas fa-redo"></i>
-                            <div class="action-text">
-                                <h4>Rotate</h4>
-                                <p>Rotate by 90°, 180° or 270°</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="compress-image-btn" role="button" tabindex="0">
-                            <i class="fas fa-compress"></i>
-                            <div class="action-text">
-                                <h4>Compress</h4>
-                                <p>Reduce file size without changing format</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="convert-format-btn" role="button" tabindex="0">
-                            <i class="fas fa-exchange-alt"></i>
-                            <div class="action-text">
-                                <h4>Convert Format</h4>
-                                <p>JPG ↔ PNG ↔ WebP</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="watermark-image-btn" role="button" tabindex="0">
-                            <i class="fas fa-stamp"></i>
-                            <div class="action-text">
-                                <h4>Add Watermark</h4>
-                                <p>Stamp text on the image</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="image-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>Image → PDF</h4>
-                                <p>Convert image(s) to a PDF document</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="rotate-image-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-2.75s"><svg class="ff-icon-svg" data-icon="rotate-cw" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path pathLength="1" d="M21 3v5h-5"/></svg></span><span class="action-text"><h4>Rotate Image</h4><p>Rotate by 90°, 180° or 270°.</p></span></div>
+                        <div class="action-card ff-tool" id="compress-image-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-0.0s"><svg class="ff-icon-svg" data-icon="minimize-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline pathLength="1" points="4 14 10 14 10 20"/><polyline pathLength="1" points="20 10 14 10 14 4"/><line pathLength="1" x1="14" x2="21" y1="10" y2="3"/><line pathLength="1" x1="3" x2="10" y1="21" y2="14"/></svg></span><span class="action-text"><h4>Compress Image</h4><p>Reduce file size without changing format.</p></span></div>
+                        <div class="action-card ff-tool" id="convert-format-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-3.3000000000000003s"><svg class="ff-icon-svg" data-icon="image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle pathLength="1" cx="9" cy="9" r="2"/><path pathLength="1" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>Convert Image</h4><p>JPG ↔ PNG ↔ WebP.</p></span></div>
+                        <div class="action-card ff-tool" id="watermark-image-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-0.55s"><svg class="ff-icon-svg" data-icon="image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle pathLength="1" cx="9" cy="9" r="2"/><path pathLength="1" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>Watermark Image</h4><p>Stamp text on the image.</p></span></div>
+                        <div class="action-card ff-tool" id="image-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-image);--d:-2.2s"><svg class="ff-icon-svg" data-icon="file-image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><circle pathLength="1" cx="10" cy="12" r="2"/><path pathLength="1" d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22"/></svg></span><span class="action-text"><h4>Image → PDF</h4><p>Turn images into a single PDF.</p></span></div>
                     </div>
 
                     <div id="convert-options" class="password-area hidden">
@@ -1012,7 +709,7 @@
 
                     <div id="image-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="image-result-message"></p>
                         <a id="image-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
@@ -1027,37 +724,19 @@
         </section>
 
         <!-- Excel Page -->
-        <section id="excel-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="excel-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload Excel/CSV</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="excel-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="excel-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="excel-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Spreadsheets</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Excel tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Excel tools</h2><p class="ffp-desc">Drop a spreadsheet to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="excel-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="excel-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="excel-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="excel-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload Excel/CSV file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your Excel/CSV or <span class="browse-text">browse</span></p>
+                    <div id="excel-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload Excel/CSV file">
+                        <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a spreadsheet here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">XLSX, XLS, CSV</span>
                         <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" hidden>
                         <div id="excel-file-info" class="file-info hidden">
                             <i class="fas fa-file-excel"></i>
@@ -1067,35 +746,12 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">Excel tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="excel-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>Excel → PDF</h4>
-                                <p>Render every sheet as a styled table</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="csv-to-xlsx-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-excel"></i>
-                            <div class="action-text">
-                                <h4>CSV → XLSX</h4>
-                                <p>Turn a CSV into a workbook</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="xlsx-to-csv-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-csv"></i>
-                            <div class="action-text">
-                                <h4>XLSX → CSV</h4>
-                                <p>Export a sheet to CSV</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="merge-excel-btn" role="button" tabindex="0">
-                            <i class="fas fa-object-group"></i>
-                            <div class="action-text">
-                                <h4>Merge Workbooks</h4>
-                                <p>Combine multiple .xlsx files</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="excel-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-excel);--d:0s"><svg class="ff-icon-svg" data-icon="table-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg></span><span class="action-text"><h4>Excel → PDF</h4><p>Convert a spreadsheet to PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="csv-to-xlsx-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-excel);--d:-1.1s"><svg class="ff-icon-svg" data-icon="sheet" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><line pathLength="1" x1="3" x2="21" y1="9" y2="9"/><line pathLength="1" x1="3" x2="21" y1="15" y2="15"/><line pathLength="1" x1="9" x2="9" y1="9" y2="21"/><line pathLength="1" x1="15" x2="15" y1="9" y2="21"/></svg></span><span class="action-text"><h4>CSV → Excel</h4><p>Turn a CSV into a workbook.</p></span></div>
+                        <div class="action-card ff-tool" id="xlsx-to-csv-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-excel);--d:-2.2s"><svg class="ff-icon-svg" data-icon="sheet" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><line pathLength="1" x1="3" x2="21" y1="9" y2="9"/><line pathLength="1" x1="3" x2="21" y1="15" y2="15"/><line pathLength="1" x1="9" x2="9" y1="9" y2="21"/><line pathLength="1" x1="15" x2="15" y1="9" y2="21"/></svg></span><span class="action-text"><h4>Excel → CSV</h4><p>Export a sheet to CSV.</p></span></div>
+                        <div class="action-card ff-tool" id="merge-excel-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-excel);--d:-3.3s"><svg class="ff-icon-svg" data-icon="combine" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M10 18H5a3 3 0 0 1-3-3v-1"/><path pathLength="1" d="M14 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="M20 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="m7 21 3-3-3-3"/><rect pathLength="1" x="14" y="14" width="8" height="8" rx="2"/><rect pathLength="1" x="2" y="2" width="8" height="8" rx="2"/></svg></span><span class="action-text"><h4>Merge Excel</h4><p>Combine multiple .xlsx files.</p></span></div>
                     </div>
 
                     <div id="excel-to-pdf-area" class="password-area hidden">
@@ -1142,7 +798,7 @@
 
                     <div id="excel-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="excel-result-message"></p>
                         <a id="excel-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
@@ -1157,37 +813,19 @@
         </section>
 
         <!-- PPT Page -->
-        <section id="ppt-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="ppt-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload PPTX</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="ppt-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="ppt-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="ppt-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Presentations</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">PowerPoint tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">PowerPoint tools</h2><p class="ffp-desc">Drop a PPTX to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="ppt-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="ppt-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="ppt-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="ppt-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload PPTX file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your PPTX or <span class="browse-text">browse</span></p>
+                    <div id="ppt-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload PPTX file">
+                        <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a PPTX here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">PPTX</span>
                         <input type="file" id="ppt-file-input" accept=".pptx" hidden>
                         <div id="ppt-file-info" class="file-info hidden">
                             <i class="fas fa-file-powerpoint"></i>
@@ -1197,28 +835,11 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">PowerPoint tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="ppt-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>PPT → PDF</h4>
-                                <p>Render slides into a PDF</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="ppt-to-images-btn" role="button" tabindex="0">
-                            <i class="fas fa-images"></i>
-                            <div class="action-text">
-                                <h4>PPT → Images</h4>
-                                <p>Each slide as PNG/JPG (zip)</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="merge-ppt-btn" role="button" tabindex="0">
-                            <i class="fas fa-object-group"></i>
-                            <div class="action-text">
-                                <h4>Merge PPTX</h4>
-                                <p>Combine multiple presentations</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="ppt-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-1.1s"><svg class="ff-icon-svg" data-icon="presentation" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M2 3h20"/><path pathLength="1" d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path pathLength="1" d="m7 21 5-5 5 5"/></svg></span><span class="action-text"><h4>PowerPoint → PDF</h4><p>Convert slides to PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="ppt-to-images-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-2.75s"><svg class="ff-icon-svg" data-icon="image" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect pathLength="1" width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle pathLength="1" cx="9" cy="9" r="2"/><path pathLength="1" d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>PPT → Images</h4><p>Each slide as PNG or JPG (zip).</p></span></div>
+                        <div class="action-card ff-tool" id="merge-ppt-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-1.1s"><svg class="ff-icon-svg" data-icon="combine" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M10 18H5a3 3 0 0 1-3-3v-1"/><path pathLength="1" d="M14 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="M20 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path pathLength="1" d="m7 21 3-3-3-3"/><rect pathLength="1" x="14" y="14" width="8" height="8" rx="2"/><rect pathLength="1" x="2" y="2" width="8" height="8" rx="2"/></svg></span><span class="action-text"><h4>Merge PowerPoint</h4><p>Combine multiple presentations.</p></span></div>
                     </div>
 
                     <div id="ppt-to-pdf-area" class="password-area hidden">
@@ -1262,7 +883,7 @@
 
                     <div id="ppt-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="ppt-result-message"></p>
                         <a id="ppt-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
@@ -1277,37 +898,19 @@
         </section>
 
         <!-- Word Tools Page -->
-        <section id="word-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="word-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload Word</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="word-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="word-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="word-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Documents</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Word tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Word tools</h2><p class="ffp-desc">Drop a Word document to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="word-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="word-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="word-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="word-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload Word file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your DOCX or <span class="browse-text">browse</span></p>
+                    <div id="word-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload Word file">
+                        <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a Word document here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">DOCX, DOC</span>
                         <input type="file" id="word-file-input" accept=".docx,.doc" hidden>
                         <div id="word-file-info" class="file-info hidden">
                             <i class="fas fa-file-word"></i>
@@ -1317,21 +920,10 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">Word tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="word-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>Word → PDF</h4>
-                                <p>Convert DOCX to a PDF document</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="word-to-pptx-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-powerpoint"></i>
-                            <div class="action-text">
-                                <h4>Word → PowerPoint</h4>
-                                <p>Convert pages to a presentation</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="word-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-word);--d:-1.1s"><svg class="ff-icon-svg" data-icon="file-text" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path pathLength="1" d="M14 2v4a2 2 0 0 0 2 2h4"/><path pathLength="1" d="M10 9H8"/><path pathLength="1" d="M16 13H8"/><path pathLength="1" d="M16 17H8"/></svg></span><span class="action-text"><h4>Word → PDF</h4><p>Convert a document to PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="word-to-pptx-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-word);--d:-2.2s"><svg class="ff-icon-svg" data-icon="presentation" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M2 3h20"/><path pathLength="1" d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path pathLength="1" d="m7 21 5-5 5 5"/></svg></span><span class="action-text"><h4>Word → PowerPoint</h4><p>Convert pages to a presentation.</p></span></div>
                     </div>
 
                     <div id="word-to-pdf-area" class="password-area hidden">
@@ -1367,7 +959,7 @@
 
                     <div id="word-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="word-result-message"></p>
                         <a id="word-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
@@ -1382,29 +974,23 @@
         </section>
 
         <!-- Workflow Builder Page -->
-        <section id="workflow-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
+        <section id="workflow-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Workflows</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Workflow builder</h2><p class="ffp-desc">Pick a file, add steps in order, then run the pipeline. Use the arrows on a step to reorder it.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step active" id="workflow-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="workflow-step-2-ind"><i>2</i>Steps</div><hr>
+                <div class="ff-step" id="workflow-step-3-ind"><i>3</i>Result</div>
+            </div>
 
             <div class="workflow-builder">
-                <div class="workflow-header">
-                    <h2><i class="fas fa-project-diagram"></i> Workflow Builder</h2>
-                    <p class="helper-text">Drag steps from the palette to build your pipeline</p>
-                </div>
-
                 <div class="workflow-layout">
                     <!-- File Input -->
                     <div class="workflow-input-section">
-                        <h3>1. Input File</h3>
-                        <div id="workflow-drop-zone" class="drop-zone workflow-drop" role="button" tabindex="0"
+                        <h3>1. Input file</h3>
+                        <div id="workflow-drop-zone" class="drop-zone ff-drop workflow-drop" role="button" tabindex="0"
                             aria-label="Upload file for workflow">
-                            <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                            <p>Drop your file here or <span class="browse-text">browse</span></p>
+                            <span class="big"><svg class="ff-icon-svg" data-icon="upload" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="17 8 12 3 7 8"/><line pathLength="1" x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop your file here</span><span class="s">or <span class="browse-text">choose file</span></span>
                             <input type="file" id="workflow-file-input" hidden>
                             <div id="workflow-file-info" class="file-info hidden">
                                 <i class="fas fa-file"></i>
@@ -1413,9 +999,13 @@
                         </div>
                     </div>
 
+                </div>
+
+                <div class="wf-dnd">
                     <!-- Step Palette -->
                     <div class="workflow-palette-section">
-                        <h3>2. Available Steps</h3>
+                        <h3>2. Add steps</h3>
+                        <div class="ff-pick-q"><input type="search" id="workflow-step-search" placeholder="Search steps" aria-label="Search steps" autocomplete="off"></div>
                         <div class="step-palette">
                             <div class="step-item" draggable="true" data-step-type="remove_password"
                                 data-step-label="Unlock PDF" data-step-icon="fa-unlock" role="button" tabindex="0" aria-label="Add Unlock PDF step to workflow">
@@ -1559,15 +1149,16 @@
                             </div>
                         </div>
                     </div>
-                </div>
 
+                <div class="wf-main">
                 <!-- Workflow Canvas -->
                 <div class="workflow-canvas-section">
-                    <h3>3. Your Pipeline</h3>
+                    <h3>3. Your pipeline</h3>
+                    <div id="workflow-chain-alert" aria-live="polite"></div>
                     <div id="workflow-canvas" class="workflow-canvas">
                         <div class="canvas-placeholder">
                             <i class="fas fa-arrow-down"></i>
-                            <p>Drop steps here to build your workflow</p>
+                            <p>Drag a step here, or click one to add it</p>
                         </div>
                         <div id="workflow-steps-container" class="workflow-steps hidden"></div>
                     </div>
@@ -1590,7 +1181,7 @@
                     <button id="run-workflow-btn" class="primary-btn large-btn" onclick="runWorkflow()">
                         <i class="fas fa-play"></i> Run Workflow
                     </button>
-                    <button class="secondary-btn" onclick="resetWorkflowUI()" style="margin-left: 1rem;">
+                    <button class="secondary-btn" onclick="resetWorkflowUI()">
                         <i class="fas fa-trash-alt"></i> Clear
                     </button>
                 </div>
@@ -1599,21 +1190,24 @@
                 <div id="workflow-status-display" class="status-display hidden">
                     <div class="loader"></div>
                     <p id="workflow-status-text">Processing workflow...</p>
+                    <ol id="workflow-run-list" class="ff-run" aria-label="Step progress"></ol>
                 </div>
 
                 <div id="workflow-result-display" class="result-display hidden">
                     <i class="fas fa-check-circle success-icon"></i>
-                    <h3>Workflow Complete!</h3>
+                    <h3>Done</h3>
                     <p id="workflow-result-message"></p>
                     <a id="workflow-download-link" href="#" class="primary-btn download-btn">
                         <i class="fas fa-download"></i> Download Result
                     </a>
                 </div>
+                </div>
+                </div>
             </div>
         </section>
-        <footer class="site-footer">
-            <div class="footer-cols">
-                <div class="footer-col">
+        <footer class="site-footer ff-ds ff-foot">
+            <div class="cols">
+                <div class="col">
                     <h4>PDF Tools</h4>
                     <a href="/merge-pdf">Merge PDF</a>
                     <a href="/split-pdf">Split PDF</a>
@@ -1627,7 +1221,7 @@
                     <a href="/sign-pdf">Sign PDF</a>
                     <a href="/watermark-pdf">Watermark PDF</a>
                 </div>
-                <div class="footer-col">
+                <div class="col">
                     <h4>Convert PDF</h4>
                     <a href="/pdf-to-word">PDF to Word</a>
                     <a href="/pdf-to-text">PDF to Text</a>
@@ -1640,7 +1234,7 @@
                     <a href="/powerpoint-to-pdf">PowerPoint to PDF</a>
                     <a href="/image-to-pdf">Image to PDF</a>
                 </div>
-                <div class="footer-col">
+                <div class="col">
                     <h4>Image Tools</h4>
                     <a href="/heic-to-jpeg">HEIC to JPG</a>
                     <a href="/resize-image">Resize Image</a>
@@ -1650,7 +1244,7 @@
                     <a href="/rotate-image">Rotate Image</a>
                     <a href="/watermark-image">Watermark Image</a>
                 </div>
-                <div class="footer-col">
+                <div class="col">
                     <h4>Excel &amp; PowerPoint</h4>
                     <a href="/excel-to-pdf">Excel to PDF</a>
                     <a href="/powerpoint-to-pdf">PowerPoint to PDF</a>
@@ -1660,7 +1254,7 @@
                     <a href="/ppt-to-images">PPT to Images</a>
                     <a href="/merge-ppt">Merge PowerPoint</a>
                 </div>
-                <div class="footer-col">
+                <div class="col">
                     <h4>Forge Files</h4>
                     <a href="/about">About</a>
                     <a href="/faq">FAQ</a>
@@ -1668,13 +1262,13 @@
                     <a href="/contact">Contact</a>
                     <a href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener">GitHub</a>
                 </div>
-                <div class="footer-col">
+                <div class="col">
                     <h4>Legal</h4>
                     <a href="/privacy">Privacy Policy</a>
                     <a href="/terms">Terms of Use</a>
                 </div>
             </div>
-            <p class="footer-note">© 2026 Forge Files. Public toolbox: AGPLv3, with commercial licensing available.
+            <p class="note">© 2026 Forge Files. Public toolbox: AGPLv3, with commercial licensing available.
                 Some supported files process on your device; others upload to the server. Keep originals and download results promptly.
                 Processing and upload limits apply. <a href="/privacy">File handling and retention</a>.</p>
         </footer>
@@ -1684,7 +1278,7 @@
     <!-- On-device processing. Must precede script.js: these register the local
          handlers that ffProcess() dispatches to, and define ffProcess itself.
          Small (~30 KB total) — pdf-lib is fetched on demand, not from here. -->
-    <script src="/static/local/ff-server-gate.js?v=20261005"></script>
+    <script src="/static/local/ff-server-gate.js?v=20261008"></script>
     <script src="/static/local/ff-local.js?v=20261005"></script>
     <script src="/static/local/office-entry.js?v=20261005"></script>
     <script src="/static/local/ops-image.js?v=20260929b"></script>
@@ -1703,8 +1297,11 @@
     <script src="/static/local/ops-pdf-compress.js?v=20261006"></script>
     <script src="/static/local/ops-heic.js?v=20261006"></script>
     <script src="/static/local/ops-excel.js?v=20261006"></script>
-    <script src="/static/local/ops-workflow.js?v=20261006"></script>
-    <script src="/static/script.js?v=20261005"></script>
+    <script src="/static/local/ops-workflow.js?v=20261008"></script>
+    <script src="/static/ds/icons.js?v=20261009"></script>
+    <script src="/static/ds/home.js?v=20261009"></script>
+    <script src="/static/ds/toolpage.js?v=20261009"></script>
+    <script src="/static/script.js?v=20261008"></script>
     {{CONSENT_BANNER}}
 </body>
 

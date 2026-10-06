@@ -1,0 +1,2 @@
+/* word tool page: page-specific styles for the design-system migration. Scoped under #word-page.ffp. */
+#word-page.ffp .file-info i{color:var(--file-word)}

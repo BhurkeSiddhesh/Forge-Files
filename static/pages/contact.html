@@ -16,7 +16,9 @@
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/style.css?v=20260926">
+    <link rel="stylesheet" href="/static/ds/design-system.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/content.css?v=20261009">
+    <script>(function(){try{var t=localStorage.getItem("theme");if(t!=="dark"&&t!=="light"){var n=new Date(),m=n.getHours()*60+n.getMinutes();t=(m>=1110||m<390)?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
     <meta name="theme-color" content="#ffffff">
 
     {{CF_ANALYTICS}}
@@ -29,17 +31,19 @@
     </script>
 </head>
 
-<body class="seo-page">
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
+<body class="ff-ds ffc">
     <a class="skip-content" href="#main-content">Skip to content</a>
-    <main class="page-wrap" id="main-content">
-        <nav class="page-nav" aria-label="Main navigation"><a href="/" class="brand-nav-link"><img src="/static/apple-touch-icon.png" alt="Forge Files" class="brand-nav-icon" width="22" height="22"><span>Forge <span class="accent">Files</span></span></a><a href="/">All tools</a><a href="/blog">Guides &amp; examples</a><a href="/about">About</a></nav>
-
-<h1>Contact Forge Files</h1>
-<p class="lede">Report a failed conversion, a confusing instruction or an incorrect example. Useful reports help us improve the tools and their guidance.</p>
+    <header class="ff-nav ffc-nav">
+        <a class="brand" href="/" aria-label="Forge Files home"><img src="/static/forge-files-logo-animation.gif" alt="" width="32" height="32">Forge <span class="fi">Files</span></a>
+        <a class="l" href="/">All tools</a><a class="l" href="/blog">Guides</a><a class="l" href="/about">About</a>
+        <span class="sp"></span>
+        <button type="button" class="ff-iconbtn" id="theme-toggle-btn" aria-label="Toggle dark mode"><svg class="ffc-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><svg class="ffc-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-2.93 1.41-1.41M17.66 6.34l1.41-1.41M2 12h2M20 12h2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41"/></svg></button>
+    </header>
+    <main class="ffc-wrap ffc-main ffc-narrow" id="main-content">
+        <nav class="ff-bc" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">Contact</span></nav>
+        <article class="ff-prose">
+<h1 class="ffc-h1">Contact Forge Files</h1>
+<p class="ffc-lede">Report a failed conversion, a confusing instruction or an incorrect example. Useful reports help us improve the tools and their guidance.</p>
 <h2>Report a problem</h2>
 <p>Open an issue in the <a href="https://github.com/BhurkeSiddhesh/File-Forge/issues">public GitHub issue tracker</a>. Include the tool, browser or mobile platform, selected options, the error message and what you expected. A page URL and approximate file type and size are usually enough to start.</p>
 <p>Try one of our <a href="/blog">practice files</a> if you can reproduce the problem without your own document. Public issues are visible to others: do not attach bank statements, identity documents, private contracts, passwords or unredacted personal information.</p>
@@ -49,15 +53,42 @@
 <ul><li>Keep the original and compare the downloaded output in another viewer.</li><li>For a scan, explain whether text can be selected before processing.</li><li>For a layout issue, describe the affected element: table, font, image or page break.</li><li>For an upload error, include the visible error text without document contents.</li></ul>
 <h2>Temporary files cannot serve as backups</h2>
 <p>Browser outputs and server results are temporary. We cannot promise to recover a deleted file. Download results promptly and keep your originals. See the <a href="/privacy">retention details</a>.</p>
-
-        <footer class="page-footer">
-            <a href="/">Home</a> · <a href="/about">About</a> · <a href="/faq">FAQ</a> · <a href="/contact">Contact</a>
-            · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a
-                href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener">GitHub</a>
-        </footer>
+        </article>
     </main>
+    <footer class="ff-foot ffc-foot">
+        <div class="ffc-wrap">
+            <div class="cols">
+                <div class="col">
+                    <h4>Popular tools</h4>
+                    <a href="/merge-pdf">Merge PDF</a>
+                    <a href="/compress-pdf">Compress PDF</a>
+                    <a href="/pdf-to-word">PDF to Word</a>
+                    <a href="/unlock-pdf">Unlock PDF</a>
+                    <a href="/heic-to-jpeg">HEIC to JPG</a>
+                    <a href="/image-to-pdf">Image to PDF</a>
+                </div>
+                <div class="col">
+                    <h4>Forge Files</h4>
+                    <a href="/about">About</a>
+                    <a href="/faq">FAQ</a>
+                    <a href="/blog">Guides &amp; practice files</a>
+                    <a href="/contact">Contact</a>
+                    <a href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener">GitHub</a>
+                </div>
+                <div class="col">
+                    <h4>Legal</h4>
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/terms">Terms of Use</a>
+                </div>
+            </div>
+            <p class="note">&copy; 2026 Forge Files. Public toolbox: AGPLv3, with commercial licensing available.
+                Some supported files process on your device; others upload to the server. Keep originals and download results promptly.
+                Processing and upload limits apply. <a href="/privacy">File handling and retention</a>.</p>
+        </div>
+    </footer>
     <script>(function(){try{var p=JSON.stringify({event:'page_view',label:location.pathname||'/',ref:document.referrer||''});var u='/api/track';if(navigator.sendBeacon){navigator.sendBeacon(u,new Blob([p],{type:'application/json'}));}else{fetch(u,{method:'POST',body:p,keepalive:true,headers:{'Content-Type':'application/json'},credentials:'same-origin'});}}catch(e){}})();</script>
     {{CONSENT_BANNER}}
+    <script>(function(){var b=document.getElementById("theme-toggle-btn");if(!b)return;b.addEventListener("click",function(){var r=document.documentElement,n=r.getAttribute("data-theme")==="dark"?"light":"dark";r.setAttribute("data-theme",n);try{localStorage.setItem("theme",n);}catch(e){}});})();</script>
 </body>
 
 </html>

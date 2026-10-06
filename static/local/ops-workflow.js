@@ -403,6 +403,7 @@
     L.workflow = {
         STEP_PATH_MAP: STEP_PATH_MAP,
         STEP_TYPES: STEP_TYPES,
+        classOf: classOf,
         buildStepFormData: buildStepFormData,
         preflight: preflight,
     };

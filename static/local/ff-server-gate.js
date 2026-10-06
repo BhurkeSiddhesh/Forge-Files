@@ -100,13 +100,23 @@
 
     var STYLE_ID = 'ff-consent-style';
     var CSS = '' +
-        '.ff-consent-backdrop{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.55)}' +
-        '.ff-consent-dialog{box-sizing:border-box;width:100%;max-width:440px;max-height:100%;overflow:auto;padding:20px;border-radius:14px;background:var(--bg-card,#fff);color:var(--text,#111);box-shadow:0 12px 40px rgba(0,0,0,.35);font:inherit}' +
-        '.ff-consent-dialog h2{margin:0 0 10px;font-size:1.15rem;line-height:1.3}' +
-        '.ff-consent-dialog p{margin:0 0 16px;line-height:1.5}' +
-        '.ff-consent-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}' +
-        '.ff-consent-actions button{min-height:44px;padding:10px 16px;border-radius:10px;border:1px solid currentColor;background:transparent;color:inherit;font:inherit;cursor:pointer}' +
-        '.ff-consent-actions button.ff-consent-ok{background:var(--accent,#2563eb);border-color:var(--accent,#2563eb);color:#fff}';
+        '.ff-consent-backdrop{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.45)}' +
+        '.ff-consent-dialog{box-sizing:border-box;width:100%;max-width:460px;max-height:100%;overflow:auto;padding:24px;border-radius:16px;background:var(--bg-panel,var(--bg-card,#fff));color:var(--text-primary,var(--text,#171717));border:1px solid var(--border-subtle,#eaeaea);box-shadow:var(--shadow-popover,0 12px 40px rgba(0,0,0,.18));font:inherit}' +
+        '.ff-consent-tag{display:inline-flex;align-items:center;gap:6px;margin:0 0 12px;font-size:.75rem;font-weight:500;color:var(--text-secondary,#5f5f5f)}' +
+        '.ff-consent-dialog h2{margin:0 0 8px;font-size:1.25rem;font-weight:600;letter-spacing:-.02em;line-height:1.3}' +
+        '.ff-consent-lead{margin:0 0 16px;font-size:.9375rem;line-height:1.5;color:var(--text-secondary,#5f5f5f)}' +
+        '.ff-consent-why{margin:0 0 16px;padding:12px 14px;border-radius:10px;background:var(--bg-subtle,#f5f5f5);border:1px solid var(--border-subtle,#eaeaea);font-size:.875rem;line-height:1.5}' +
+        '.ff-consent-why b{display:block;margin-bottom:2px;font-size:.6875rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted,#8a8a8a)}' +
+        '.ff-consent-points{list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:10px}' +
+        '.ff-consent-points li{display:flex;gap:10px;font-size:.875rem;line-height:1.45;color:var(--text-secondary,#5f5f5f)}' +
+        '.ff-consent-points li:before{content:"✓";flex:none;width:20px;height:20px;border-radius:50%;background:var(--success-soft,#e8f7f1);color:var(--success,#17a673);font-size:.75rem;font-weight:700;line-height:20px;text-align:center}' +
+        '.ff-consent-points b{color:var(--text-primary,#171717);font-weight:600}' +
+        '.ff-consent-points a{color:var(--accent,#006fee)}' +
+        '.ff-consent-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}' +
+        '.ff-consent-actions button{min-height:44px;padding:0 20px;border-radius:8px;border:1px solid var(--border-default,#dadada);background:var(--bg-panel,#fff);color:var(--text-primary,#171717);font-weight:500;font-size:.875rem;font-family:inherit;cursor:pointer}' +
+        '.ff-consent-actions button:hover{background:var(--bg-subtle,#f5f5f5)}' +
+        '.ff-consent-actions button.ff-consent-ok{background:var(--accent,#006fee);border-color:var(--accent,#006fee);color:#fff}' +
+        '.ff-consent-actions button.ff-consent-ok:hover{background:var(--accent-hover,#005ed1)}';
 
     var active = null; // the open request, if any
 
@@ -140,15 +150,52 @@
         dialog.setAttribute('aria-labelledby', uid + '-t');
         dialog.setAttribute('aria-describedby', uid + '-d');
 
+        var tag = doc.createElement('p');
+        tag.className = 'ff-consent-tag';
+        tag.textContent = 'Secure server processing';
+
         var title = doc.createElement('h2');
         title.id = uid + '-t';
-        title.textContent = 'Process this file on the server?';
+        title.textContent = 'Continue with server processing?';
 
-        var body = doc.createElement('p');
+        // The reason strings are written to sit mid-sentence, so capitalise for display.
+        var reasonText = String(info.reason || '');
+        reasonText = reasonText.charAt(0).toUpperCase() + reasonText.slice(1);
+
+        var body = doc.createElement('div');
         body.id = uid + '-d';
-        body.textContent = info.tool + ' needs Forge Files server processing because ' + info.reason +
-            '. Your selected file will be uploaded for this conversion, and the result will be available to download. ' +
-            'Files are handled under our privacy and retention policy.';
+
+        var lead = doc.createElement('p');
+        lead.className = 'ff-consent-lead';
+        lead.textContent = info.tool + ' needs our server engine for this file. It completes the job accurately where on-device processing cannot.';
+
+        var why = doc.createElement('div');
+        why.className = 'ff-consent-why';
+        var whyLabel = doc.createElement('b');
+        whyLabel.textContent = 'Why the server';
+        why.appendChild(whyLabel);
+        why.appendChild(doc.createTextNode(reasonText + '.'));
+
+        var points = doc.createElement('ul');
+        points.className = 'ff-consent-points';
+        [
+            ['A complete result. ', 'The server engine handles the cases your device cannot, so the output reflects your whole file.'],
+            ['Used only for this task. ', 'Your file is uploaded for this conversion and nothing else.'],
+            ['Temporary by design. ', 'Your upload is deleted once processing finishes. The result is deleted after you download it, or within an hour.']
+        ].forEach(function (pt) {
+            var li = doc.createElement('li');
+            var span = doc.createElement('span');
+            var strong = doc.createElement('b');
+            strong.textContent = pt[0];
+            span.appendChild(strong);
+            span.appendChild(doc.createTextNode(pt[1]));
+            li.appendChild(span);
+            points.appendChild(li);
+        });
+
+        body.appendChild(lead);
+        body.appendChild(why);
+        body.appendChild(points);
 
         var actions = doc.createElement('div');
         actions.className = 'ff-consent-actions';
@@ -162,6 +209,7 @@
         actions.appendChild(cancel);
         actions.appendChild(ok);
 
+        dialog.appendChild(tag);
         dialog.appendChild(title);
         dialog.appendChild(body);
         dialog.appendChild(actions);
