@@ -854,37 +854,19 @@
         </section>
 
         <!-- PPT Page -->
-        <section id="ppt-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
-
-            <div class="step-tracker-bar" aria-label="Process steps">
-                <div class="step-indicator active" id="ppt-step-1-ind">
-                    <span class="step-badge">1</span>
-                    <span>Upload PPTX</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="ppt-step-2-ind">
-                    <span class="step-badge">2</span>
-                    <span>Select Action</span>
-                </div>
-                <div class="step-divider"></div>
-                <div class="step-indicator" id="ppt-step-3-ind">
-                    <span class="step-badge">3</span>
-                    <span>Download</span>
-                </div>
+        <section id="ppt-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span>Presentations</span><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">PowerPoint tools</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">PowerPoint tools</h2><p class="ffp-desc">Drop a PPTX to begin, or pick a tool below.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step cur" id="ppt-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="ppt-step-2-ind"><i>2</i>Options</div><hr>
+                <div class="ff-step" id="ppt-step-3-ind"><i>3</i>Result</div>
             </div>
 
             <div class="drill-down-content">
                 <div class="file-selector-area">
-                    <div id="ppt-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload PPTX file">
-                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                        <p>Drag & drop your PPTX or <span class="browse-text">browse</span></p>
+                    <div id="ppt-drop-zone" class="drop-zone ff-drop" role="button" tabindex="0" aria-label="Upload PPTX file">
+                        <span class="big"><svg class="ff-icon-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop a PPTX here</span><span class="s">or <span class="browse-text">choose file</span></span><span class="m">PPTX</span>
                         <input type="file" id="ppt-file-input" accept=".pptx" hidden>
                         <div id="ppt-file-info" class="file-info hidden">
                             <i class="fas fa-file-powerpoint"></i>
@@ -894,28 +876,11 @@
                 </div>
 
                 <div class="actions-panel">
+                    <p class="ffp-sub">PowerPoint tools</p>
                     <div class="action-buttons">
-                        <div class="action-card" id="ppt-to-pdf-btn" role="button" tabindex="0">
-                            <i class="fas fa-file-pdf"></i>
-                            <div class="action-text">
-                                <h4>PPT → PDF</h4>
-                                <p>Render slides into a PDF</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="ppt-to-images-btn" role="button" tabindex="0">
-                            <i class="fas fa-images"></i>
-                            <div class="action-text">
-                                <h4>PPT → Images</h4>
-                                <p>Each slide as PNG/JPG (zip)</p>
-                            </div>
-                        </div>
-                        <div class="action-card" id="merge-ppt-btn" role="button" tabindex="0">
-                            <i class="fas fa-object-group"></i>
-                            <div class="action-text">
-                                <h4>Merge PPTX</h4>
-                                <p>Combine multiple presentations</p>
-                            </div>
-                        </div>
+                        <div class="action-card ff-tool" id="ppt-to-pdf-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-1.1s"><svg class="ff-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></svg></span><span class="action-text"><h4>PowerPoint → PDF</h4><p>Convert slides to PDF.</p></span></div>
+                        <div class="action-card ff-tool" id="ppt-to-images-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-2.75s"><svg class="ff-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span><span class="action-text"><h4>PPT → Images</h4><p>Each slide as PNG or JPG (zip).</p></span></div>
+                        <div class="action-card ff-tool" id="merge-ppt-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-ppt);--d:-1.1s"><svg class="ff-icon-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 18H5a3 3 0 0 1-3-3v-1"/><path d="M14 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path d="M20 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2"/><path d="m7 21 3-3-3-3"/><rect x="14" y="14" width="8" height="8" rx="2"/><rect x="2" y="2" width="8" height="8" rx="2"/></svg></span><span class="action-text"><h4>Merge PowerPoint</h4><p>Combine multiple presentations.</p></span></div>
                     </div>
 
                     <div id="ppt-to-pdf-area" class="password-area hidden">
@@ -959,7 +924,7 @@
 
                     <div id="ppt-result-display" class="result-display hidden">
                         <i class="fas fa-check-circle success-icon"></i>
-                        <h3>Process Complete!</h3>
+                        <h3>Done</h3>
                         <p id="ppt-result-message"></p>
                         <a id="ppt-download-link" href="#" class="primary-btn download-btn">
                             <i class="fas fa-download"></i> Download File
