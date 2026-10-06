@@ -1292,6 +1292,8 @@ def pdf_to_images_zip(
 MAX_EMBEDDED_IMAGES = 500
 MAX_EMBEDDED_BYTES = 200 * 1024 * 1024
 MAX_EMBEDDED_IMAGE_PIXELS = 100_000_000
+MAX_EMBEDDED_IMAGE_SIDE = 30_000
+MAX_EMBEDDED_DECODED_BYTES = 400 * 1024 * 1024
 
 
 def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password: str = None) -> dict:
@@ -1308,7 +1310,8 @@ def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password:
             dims = {}
             for page in doc:
                 for img in page.get_images(full=True):
-                    dims[img[0]] = (img[2], img[3])  # width, height from the image dictionary
+                    # width, height, bits per component, colour space name (image dictionary)
+                    dims[img[0]] = (img[2], img[3], img[4], str(img[5] or ""))
             xrefs = sorted(dims)
             if not xrefs:
                 raise ValueError("No embedded images were found in this PDF.")
@@ -1316,8 +1319,12 @@ def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password:
                 raise ValueError(f"PDF has too many embedded images (max {MAX_EMBEDDED_IMAGES}).")
             # Check declared sizes before extract_image(), which may decode a whole raster.
             for xref in xrefs:
-                width, height = dims[xref]
-                if width * height > MAX_EMBEDDED_IMAGE_PIXELS:
+                width, height, bpc, colorspace = dims[xref]
+                components = 1 if "Gray" in colorspace else 4 if "CMYK" in colorspace else 3
+                decoded = width * height * components * max(1, (int(bpc or 8) + 7) // 8)
+                if (width * height > MAX_EMBEDDED_IMAGE_PIXELS
+                        or max(width, height) > MAX_EMBEDDED_IMAGE_SIDE
+                        or decoded > MAX_EMBEDDED_DECODED_BYTES):
                     raise ValueError("An embedded image is too large to extract.")
             total = 0
             with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:

@@ -72,7 +72,8 @@
     // Lossless extraction of plain JPEG (DCTDecode) image XObjects, ordered by
     // object number to match pdf_utils.py::_pdf_extract_embedded_images_zip.
     // Any other encoding needs a real decoder, so the server takes over.
-    async function extractEmbedded(file) {
+    async function extractEmbedded(file, ctx) {
+        var signal = ctx && ctx.signal;
         var budget = L.constrained() ? BUDGET.mobile : BUDGET.desktop;
         if (file.size > budget.bytes) {
             throw new L.Unsupported('input exceeds the on-device render budget', 'resource_budget_exceeded');
@@ -81,6 +82,7 @@
         var doc;
         try { doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false }); }
         catch (e) { throw new L.Unsupported('PDF cannot be parsed on-device', 'unsupported_structure'); }
+        L.checkAbort(signal);
         var N = PDFLib.PDFName.of;
         // Only images referenced by a page's own resources, like the server's
         // page.get_images(); orphaned or deleted-page objects are not exposed.
@@ -111,14 +113,18 @@
         var zip = new JSZip();
         var base = L.stem(file.name);
         for (var i = 0; i < found.length; i++) {
+            L.checkAbort(signal);
             var st = found[i][1];
             if (st.dict.get(N('Filter')) !== N('DCTDecode')) {
                 throw new L.Unsupported('embedded image needs a decoder', 'unsupported_structure');
             }
             zip.file(base + '_img_' + pad3(i + 1) + '.jpg', st.getContents());
         }
+        L.checkAbort(signal);
+        var zipped = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        L.checkAbort(signal);
         return {
-            blob: await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }),
+            blob: zipped,
             filename: L.brandedName(file.name, 'zip'),
             message: 'Extracted ' + found.length + ' embedded image(s)',
             extra: { page_count: found.length },
@@ -136,7 +142,7 @@
         }
         var mode = L.str(fd, 'mode', 'pages');
         if (mode !== 'pages' && mode !== 'embedded') throw new L.Error("mode must be 'pages' or 'embedded'.");
-        if (mode === 'embedded') return extractEmbedded(file);
+        if (mode === 'embedded') return extractEmbedded(file, ctx);
         var dpi = parseDpi(fd);
         var ext = parseFormat(fd);
 

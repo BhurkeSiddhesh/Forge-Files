@@ -128,6 +128,47 @@
     var MAX_IMAGE_PIXELS = 50 * 1000 * 1000;
     var MAX_IMAGE_SIDE = 20000;
 
+    /**
+     * Width, height and EXIF orientation read straight from the JPEG bytes. The PDF
+     * dictionary is not trusted: the decoder sizes its raster from the SOF header.
+     */
+    function jpegInfo(b) {
+        if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+        var info = { w: 0, h: 0, orientation: 1 };
+        var i = 2;
+        while (i + 4 <= b.length) {
+            if (b[i] !== 0xff) { i++; continue; }
+            var m = b[i + 1];
+            if (m === 0xff) { i++; continue; }
+            if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+            if (m === 0xd9) break;
+            var len = (b[i + 2] << 8) | b[i + 3];
+            if (len < 2) return null;
+            if (m === 0xe1 && len >= 16 && b[i + 4] === 0x45 && b[i + 5] === 0x78 && b[i + 6] === 0x69 && b[i + 7] === 0x66) {
+                var t = i + 10; // TIFF header after "Exif\0\0"
+                var le = b[t] === 0x49;
+                var u16 = function (o) { return le ? (b[o] | (b[o + 1] << 8)) : ((b[o] << 8) | b[o + 1]); };
+                var u32 = function (o) { return le ? (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0 : ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0; };
+                var ifd = t + u32(t + 4);
+                if (ifd + 2 <= b.length) {
+                    var n = u16(ifd);
+                    for (var k = 0; k < n && ifd + 2 + k * 12 + 12 <= b.length; k++) {
+                        var e = ifd + 2 + k * 12;
+                        if (u16(e) === 0x0112) info.orientation = u16(e + 8);
+                    }
+                }
+            }
+            if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+                if (i + 9 > b.length) return null;
+                info.h = (b[i + 5] << 8) | b[i + 6];
+                info.w = (b[i + 7] << 8) | b[i + 8];
+                return info;
+            }
+            i += 2 + len;
+        }
+        return null;
+    }
+
     async function downsampleImages(file, level, signal, onProgress) {
         var cfg = IMAGE_SETTINGS[level] || IMAGE_SETTINGS.medium;
         var PDFLib = await L.loadPdfLib();
@@ -168,8 +209,16 @@
                 unsupported++;
                 continue;
             }
+            var head = jpegInfo(raw);
+            // The JPEG's own header decides the decoded raster size, and an EXIF
+            // orientation would be applied by the decoder but not by the PDF page matrix.
+            if (!head || !head.w || !head.h || head.w * head.h > MAX_IMAGE_PIXELS
+                || Math.max(head.w, head.h) > MAX_IMAGE_SIDE || head.orientation !== 1) {
+                unsupported++;
+                continue;
+            }
             var bitmap;
-            try { bitmap = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' })); }
+            try { bitmap = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' }), { imageOrientation: 'none' }); }
             catch (err) { continue; }
             var scale = Math.min(1, cfg.maxDim / Math.max(bitmap.width, bitmap.height));
             var w = Math.max(1, Math.round(bitmap.width * scale));

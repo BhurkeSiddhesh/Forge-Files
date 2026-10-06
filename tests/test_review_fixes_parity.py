@@ -137,3 +137,24 @@ def test_extraction_rejects_images_declaring_a_huge_raster(tmp_path: Path) -> No
     doc.save(pdf)
     with pytest.raises(ValueError, match="too large"):
         pdf_to_images_zip(str(pdf), str(tmp_path), mode="embedded")
+
+
+def test_extraction_budgets_decoded_bytes_not_just_pixels(tmp_path: Path) -> None:
+    doc = pikepdf.new()
+    page = doc.add_blank_page(page_size=(200, 200))
+    img = pikepdf.Stream(doc, b"\x00")
+    img.Type, img.Subtype = pikepdf.Name.XObject, pikepdf.Name.Image
+    img.Width, img.Height, img.BitsPerComponent = 9000, 9000, 16  # 81 MP, but ~486 MB decoded as RGB
+    img.ColorSpace = pikepdf.Name.DeviceRGB
+    page.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=img))
+    page.Contents = doc.make_stream(b"q 100 0 0 100 0 0 cm /Im0 Do Q")
+    pdf = tmp_path / "wide_gamut.pdf"
+    doc.save(pdf)
+    with pytest.raises(ValueError, match="too large"):
+        pdf_to_images_zip(str(pdf), str(tmp_path), mode="embedded")
+
+
+def test_remove_pages_message_matches_between_engines(tmp_path: Path) -> None:
+    pdf = make_pdf(tmp_path / "in.pdf", pages=3)
+    result, _ = run_local(tmp_path, "/api/pdf/organize", [_file(pdf)], {"remove_pages": "2"})
+    assert result["message"] == "Pages removed"

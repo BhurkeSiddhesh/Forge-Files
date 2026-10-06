@@ -559,7 +559,7 @@
         return {
             blob: await save(out),
             filename: L.brandedName(file.name, 'pdf'),
-            message: 'PDF organized (' + order.length + ' pages in output)',
+            message: removeSpec ? 'Pages removed' : 'PDF organized (' + order.length + ' pages in output)',
         };
     });
 
