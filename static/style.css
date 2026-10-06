@@ -1797,42 +1797,6 @@ body {
     }
 }
 
-.footer-cols {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 2rem;
-    margin-bottom: 2rem;
-}
-
-.footer-col h4 {
-    color: var(--ink);
-    margin-bottom: 0.75rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-family: var(--font-mono);
-    font-weight: 500;
-}
-
-.footer-col a {
-    display: block;
-    color: var(--body-text);
-    text-decoration: none;
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
-}
-
-.footer-col a:hover {
-    color: var(--ink);
-}
-
-.footer-note {
-    color: var(--mute);
-    font-size: 0.8rem;
-    text-align: center;
-    padding-bottom: 1rem;
-}
-
 /* ── SEO / info pages ── */
 body.seo-page {
     display: block;

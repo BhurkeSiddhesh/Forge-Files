@@ -841,10 +841,9 @@ function openPdfArea(areaId) {
     if (!area) return;
 
     const card = document.getElementById(PDF_AREA_CARD[areaId]);
-    if (card) {
-        card.insertAdjacentElement('afterend', area);
-        ffSelectActionCard(card);
-    }
+    // The option panel stays where the design system lays it out (between the
+    // upload zone and the tool grid); only the selected card is highlighted.
+    if (card) ffSelectActionCard(card);
 
     area.classList.remove('hidden');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

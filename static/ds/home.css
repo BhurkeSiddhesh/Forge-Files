@@ -1,0 +1,57 @@
+/* Home page (design-system UI kit, ui_kits/web). Page-level classes are prefixed ffh- so they cannot collide with legacy style.css. */
+body:has(#home-page.active){background:#FAFAFA}
+[data-theme="dark"] body:has(#home-page.active){background:#111111}
+.ffh-nav{position:sticky;top:0;z-index:30}
+.ffh-nav .brand{background:none;border:0;padding:0;cursor:pointer;text-decoration:none}
+.ffh-nav .brand:hover{text-decoration:none;color:var(--text-primary)}
+.ffh-nav .ff-iconbtn i{font-size:16px}
+#home-page.ffh{background:transparent}
+.ffh-wrap{width:min(100% - 32px,var(--content-max));margin-inline:auto}
+.ffh-hero{text-align:center;padding:28px 0 8px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.ffh-hero h1{font-size:clamp(2rem,4.2vw,3.1rem);font-weight:600;letter-spacing:var(--tracking-h1);line-height:var(--leading-tight);margin:0;text-wrap:balance;perspective:700px;color:var(--text-primary)}
+.ffh-hero h1 br{display:none}
+.ffh-hero p.ffh-sub{margin:0;color:var(--text-secondary);font-size:var(--text-base);max-width:46ch}
+.ffh-sbox{width:min(100%,560px);animation:ffh-rise .6s .2s var(--ease-standard) both}
+.ffh-sbox .ff-ts{border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
+.ffh-sbox .ff-ts .in{height:48px;padding:0 6px 0 var(--space-4)}
+.ffh-sbox .ff-ts .in input{font-size:var(--text-base)}
+.ffh-trust{display:flex;gap:8px 20px;flex-wrap:wrap;justify-content:center;font-size:var(--text-xs);color:var(--text-secondary);animation:ffh-rise .6s .3s both}
+.ffh-trust span{display:inline-flex;align-items:center;gap:6px}
+.ffh-trust svg{color:var(--text-muted)}
+.ffh-eyebrow{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;line-height:1.3;height:32px;padding:0 14px;border-radius:99px;border:1px solid var(--border-default);background:var(--bg-panel);box-shadow:var(--shadow-1);font-size:var(--text-sm);color:var(--text-secondary);animation:ffh-rise .7s var(--ease-standard) both}
+.ffh-eyebrow .dot{width:6px;height:6px;margin-right:3px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 var(--success);animation:ffh-ping 1.8s infinite}
+@keyframes ffh-ping{70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.ffh-rot{display:inline-block;height:1.3em;line-height:1.3;overflow:hidden;text-align:left}
+.ffh-rot b{display:block;color:var(--text-primary);font-weight:600;animation:ffh-rotin .45s var(--ease-standard) both}
+@keyframes ffh-rotin{from{transform:translateY(100%);opacity:0}to{transform:none;opacity:1}}
+.ffh-w{display:inline-block;animation:ffh-wordin .8s var(--ease-standard) both}
+@keyframes ffh-wordin{from{opacity:0;transform:translateY(.5em) rotateX(-50deg);filter:blur(10px)}to{opacity:1;transform:none;filter:blur(0)}}
+@keyframes ffh-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.ffh-hero h1 em{font-style:normal;white-space:nowrap}
+.ffh-hero h1 em .ffh-w{background:var(--grad-brand);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ffh-wordin .8s var(--ease-standard) .4s both,ffh-shift 6s linear 1s infinite}
+@keyframes ffh-shift{to{background-position:250% 0}}
+.ffh-sec{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:28px 0 12px}
+.ffh-sec h2{font-size:var(--text-lg);font-weight:600;letter-spacing:var(--tracking-h3);margin:0;line-height:var(--leading-snug)}
+.ffh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:stretch;grid-auto-rows:1fr}
+.ffh-tilt{position:relative;perspective:700px;height:100%;animation:ffh-rise .6s var(--ease-standard) both}
+.ffh-tilt>.ff-tool{height:100%;min-height:92px;text-decoration:none;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(0);transition:transform .2s var(--ease-standard),box-shadow .2s;will-change:transform}
+.ffh-tilt>.ff-tool:hover{text-decoration:none;color:inherit}
+.ffh-tilt:hover>.ff-tool{box-shadow:0 14px 32px rgba(0,0,0,.12),var(--shadow-2)}
+.ffh-tilt::after{content:"";position:absolute;inset:0;border-radius:var(--radius-lg);pointer-events:none;opacity:0;transition:opacity .2s;background:radial-gradient(180px circle at var(--gx,50%) var(--gy,50%),var(--accent-soft),transparent 70%)}
+.ffh-tilt:hover::after{opacity:1}
+.ff-tool h4{color:var(--text-primary)}
+.ff-tool p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ffh-pal-bg{align-items:flex-start;padding-top:96px}
+.ffh-pal-bg[hidden]{display:none}
+.ffh-end{padding-bottom:16px}
+@media (max-width:640px){.ffh-grid{grid-template-columns:1fr}.ffh-hero{padding:20px 0 8px}}
+@media (hover:none){.ffh-tilt>.ff-tool{transform:none!important}}
+@media (prefers-reduced-motion:reduce){.ffh-hero h1 em .ffh-w,.ffh-w,.ffh-eyebrow,.ffh-sbox,.ffh-trust,.ffh-tilt{animation:none!important}.ffh-tilt>.ff-tool{transform:none!important}}
+/* Legacy tool pages: the global nav now carries the brand, so hide the duplicate in each breadcrumb bar. */
+.breadcrumb .breadcrumb-brand{display:none}
+/* Legacy body is a centered flex row with padding; stack the global nav above the views instead. */
+body:has(.ffh-nav){flex-direction:column;align-items:center;padding:0 0 4rem}
+body:has(.ffh-nav) .ffh-nav{align-self:stretch;width:100%}
+body:has(.ffh-nav) .app-container{padding:2.5rem 1rem 0}
+body:has(#home-page.active) .app-container{padding:0;max-width:none}
+body:has(#home-page.active) .site-footer{width:min(100% - 32px,var(--content-max));margin-inline:auto}
