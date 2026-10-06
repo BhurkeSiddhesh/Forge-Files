@@ -234,6 +234,7 @@
                             <label><input type="radio" name="compress-mode" value="lossy"> Rasterise pages for a smaller file</label>
                             <small class="helper-text">Rasterising turns every page into an image. Text selection, search, links and accessibility structure will be lost.</small>
                         </fieldset>
+                        <div id="pdf-compress-levels" class="hidden">
                         <p class="helper-text">Select compression level:</p>
                         <div class="compress-levels">
                             <label class="compress-level-option">
@@ -260,6 +261,7 @@
                                     <small>Smallest size</small>
                                 </span>
                             </label>
+                        </div>
                         </div>
                         <p id="pdf-compress-preview" class="helper-text compress-preview-hint"></p>
                         <button id="process-compress-btn" class="primary-btn">Compress Now</button>

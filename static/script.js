@@ -475,6 +475,16 @@ function updateDownloadLink(element, token, filename) {
     ffShowSuccessUpsell(element);
     ffShowSuccessShare(element, filename, local);
 
+    // The shared notice promises server copies are temporary, which is
+    // misleading for results that never left the browser.
+    const notice = element.parentElement?.querySelector('.file-deleted-notice span');
+    if (notice) {
+        if (!notice.dataset.serverText) notice.dataset.serverText = notice.textContent;
+        notice.textContent = local
+            ? 'Processed on your device — your file never left this browser.'
+            : notice.dataset.serverText;
+    }
+
     if (local) {
         ffHeldLocalTokens.set(element, token);
         element.href = local.url;
@@ -896,9 +906,13 @@ function handleFile(file) {
     filenameDisplay.textContent = file.name;
     fileInfo.classList.remove('hidden');
 
-    // Reset displays
+    // Reset displays, then keep the tool the visitor already chose open so
+    // swapping the file doesn't force them to re-pick it.
     document.getElementById('status-display').classList.add('hidden');
+    const activeArea = Object.keys(PDF_AREA_CARD).find(id =>
+        id !== 'merge-area' && !document.getElementById(id)?.classList.contains('hidden'));
     hidePdfActionAreas();
+    if (activeArea) openPdfArea(activeArea);
     const extractInput = document.getElementById('extract-pages-input');
     if (extractInput) extractInput.value = '';
     ffUpdateStepTracker('pdf', 2);
@@ -1405,6 +1419,9 @@ function ffUpdatePdfCompressPreview() {
     if (!el) return;
     const level = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
     const mode = document.querySelector('input[name="compress-mode"]:checked')?.value || 'structural';
+    // Structural compression is lossless and has no quality levels, so the
+    // picker only applies when pages are rasterised.
+    document.getElementById('pdf-compress-levels')?.classList.toggle('hidden', mode !== 'lossy');
     if (mode === 'structural') {
         el.textContent = 'Structural mode preserves searchable text, links and vectors. Savings depend on how the PDF was originally encoded.';
         return;
@@ -1484,13 +1501,8 @@ function showResult(filename, message, token) {
     const resultMessage = document.getElementById('result-message');
     const downloadLink = document.getElementById('download-link');
 
-    // Clear any previous compress stats
-    const existingStats = resultDisplay.querySelector('.compress-stats');
-    if (existingStats) existingStats.remove();
-    const existingBadge = resultDisplay.querySelector('.reduction-badge');
-    if (existingBadge) existingBadge.remove();
-    const existingNote = resultDisplay.querySelector('.compression-note');
-    if (existingNote) existingNote.remove();
+    // Clear any previous compress stats and notes
+    resultDisplay.querySelectorAll('.compress-stats, .reduction-badge, .compression-note').forEach(el => el.remove());
 
     resultDisplay.classList.remove('hidden');
     resultMessage.textContent = message + ': ' + filename;
@@ -1503,11 +1515,8 @@ function showCompressResult(data) {
     const resultMessage = document.getElementById('result-message');
     const downloadLink = document.getElementById('download-link');
 
-    // Clear any previous compress stats
-    const existingStats = resultDisplay.querySelector('.compress-stats');
-    if (existingStats) existingStats.remove();
-    const existingBadge = resultDisplay.querySelector('.reduction-badge');
-    if (existingBadge) existingBadge.remove();
+    // Clear any previous compress stats and notes
+    resultDisplay.querySelectorAll('.compress-stats, .reduction-badge, .compression-note').forEach(el => el.remove());
 
     resultDisplay.classList.remove('hidden');
     resultMessage.textContent = 'Compressed: ' + data.filename;
