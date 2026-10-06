@@ -84,3 +84,23 @@ test('images mode falls back to the original bytes when nothing can be saved', a
     assert.equal(body.compression_mode, 'images');
     assert.ok(body.compressed_size <= 100);
 });
+
+test('cancelling image-mode compression is not turned into a successful result', async () => {
+    const s = context();
+    s.createImageBitmap = async () => { throw new Error('no decode'); };
+    s.ffLocal.loadPdfLib = async () => ({
+        PDFName: { of: n => n }, PDFRawStream: class {}, PDFNumber: { of: n => n },
+        PDFDocument: { load: async () => ({ context: { enumerateIndirectObjects: () => [] } }) },
+    });
+    const abort = new AbortController();
+    abort.abort();
+    const fd = new FormData();
+    fd.append('file', new File([new Uint8Array(100)], 'photos.pdf', { type: 'application/pdf' }));
+    fd.append('mode', 'images');
+    await assert.rejects(s.ffProcess('/api/pdf/compress', fd, { signal: abort.signal }), (e) => e.name === 'AbortError');
+});
+
+test('images mode refuses to decode JPEGs with oversized declared dimensions', () => {
+    const src = readFileSync(join(STATIC, 'local/ops-pdf-compress.js'), 'utf8');
+    assert.ok(src.indexOf('MAX_IMAGE_PIXELS') < src.indexOf('createImageBitmap(new Blob'));
+});

@@ -106,3 +106,34 @@ def test_flate_only_images_hand_over_to_the_server(tmp_path: Path) -> None:
     result, _ = run_local(tmp_path, "/api/pdf/compress", [_file(pdf)], {"mode": "images"})
     assert result["status"] == 499, result  # consent to upload was asked (and declined by the harness)
     assert result["asked"]["tool"]
+
+
+# ---- Review round 2 ----
+
+def test_oversized_pages_are_not_searched_quadratically() -> None:
+    from scripts.pdf_utils import _split_groups_by_size
+
+    calls = []
+
+    def build(indices):
+        calls.append(len(indices))
+        return b"x" * (200 * len(indices))
+
+    parts = _split_groups_by_size(40, 100, build)  # every single page is already over the limit
+    assert [p[0] for p in parts] == [[i] for i in range(40)]
+    assert calls == [1] * 40  # one serialisation per page, no half-document candidates
+
+
+def test_extraction_rejects_images_declaring_a_huge_raster(tmp_path: Path) -> None:
+    doc = pikepdf.new()
+    page = doc.add_blank_page(page_size=(200, 200))
+    img = pikepdf.Stream(doc, b"\x00")
+    img.Type, img.Subtype = pikepdf.Name.XObject, pikepdf.Name.Image
+    img.Width, img.Height, img.BitsPerComponent = 20000, 20000, 8
+    img.ColorSpace = pikepdf.Name.DeviceGray
+    page.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Im0=img))
+    page.Contents = doc.make_stream(b"q 100 0 0 100 0 0 cm /Im0 Do Q")
+    pdf = tmp_path / "huge_img.pdf"
+    doc.save(pdf)
+    with pytest.raises(ValueError, match="too large"):
+        pdf_to_images_zip(str(pdf), str(tmp_path), mode="embedded")

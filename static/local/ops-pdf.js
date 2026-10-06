@@ -308,7 +308,8 @@
                 }
                 return cache[k];
             };
-            var lo = 1, hi = total - start, best = 1;
+            var lo = 2, hi = total - start, best = 1;
+            if ((await attempt(1)).length > maxBytes) hi = 0; // oversized page: emit it alone
             while (lo <= hi) {
                 var mid = Math.floor((lo + hi) / 2);
                 if ((await attempt(mid)).length <= maxBytes) { best = mid; lo = mid + 1; }

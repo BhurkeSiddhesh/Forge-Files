@@ -167,7 +167,13 @@
 
         var existing = mounts[areaId];
         if (existing && existing.file === file) return;
-        if (existing) { existing.state.token = null; existing.root.remove(); }
+        if (existing) {
+            existing.state.token = null;
+            existing.root.remove();
+            // The field still holds the previous document's pages or order; it must not
+            // be mistaken for a deliberate choice about this one.
+            input.value = '';
+        }
 
         var root = el('div', 'ff-page-grid');
         root.setAttribute('role', 'group');
@@ -271,10 +277,35 @@
             return item;
         }
 
+        var drawQueued = false;
+        var more = el('p', 'ff-page-grid-more helper-text');
+        root.appendChild(more);
+
+        // At most MAX_THUMBS items ever exist as DOM nodes. Pages beyond that stay in the
+        // selection / order state and the text field, but get no per-page node.
         function draw() {
+            drawQueued = false;
             grid.textContent = '';
-            var list = cfg.mode === 'order' ? order : Array.from({ length: state.total }, function (_, i) { return i + 1; });
-            list.forEach(function (p, pos) { grid.appendChild(pageItem(p, pos)); });
+            var shown = Math.min(state.total, MAX_THUMBS);
+            if (cfg.mode === 'order') {
+                order.slice(0, MAX_THUMBS).forEach(function (p, pos) { grid.appendChild(pageItem(p, pos)); });
+                var hidden = order.length - Math.min(order.length, MAX_THUMBS);
+                more.textContent = hidden > 0
+                    ? hidden + ' more page(s) are kept in the output after these; edit the text field to change them.'
+                    : '';
+            } else {
+                for (var p = 1; p <= shown; p++) grid.appendChild(pageItem(p, p - 1));
+                more.textContent = state.total > shown
+                    ? 'Pages ' + (shown + 1) + '\u2013' + state.total + ' have no preview; type them in the field below.'
+                    : '';
+            }
+        }
+
+        // Thumbnails arrive one by one; coalesce the redraws into one per frame.
+        function scheduleDraw() {
+            if (drawQueued) return;
+            drawQueued = true;
+            (window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); })(draw);
         }
 
         function addBarButton(label, fn) {
@@ -330,7 +361,7 @@
         renderThumbnails(file, token, state, function (p, src, w, h) {
             thumbs[p] = { src: src, w: w, h: h };
             status.textContent = 'Page previews: ' + p + ' of ' + state.limit + (state.truncated ? ' (first ' + MAX_THUMBS + ' of ' + state.total + ' pages shown; the rest are kept)' : '');
-            draw();
+            scheduleDraw();
             if (p === state.limit) status.textContent = cfg.mode === 'order'
                 ? 'Drag pages, or use the arrows, to reorder. × removes a page.'
                 : 'Click pages to select them.';

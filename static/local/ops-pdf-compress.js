@@ -125,6 +125,8 @@
         high: { maxDim: 1000, quality: 0.50 },
     };
     var MIN_IMAGE_BYTES = 20 * 1024;
+    var MAX_IMAGE_PIXELS = 50 * 1000 * 1000;
+    var MAX_IMAGE_SIDE = 20000;
 
     async function downsampleImages(file, level, signal, onProgress) {
         var cfg = IMAGE_SETTINGS[level] || IMAGE_SETTINGS.medium;
@@ -156,6 +158,13 @@
             if (filter !== N('DCTDecode') || (cs !== N('DeviceRGB') && cs !== N('DeviceGray'))
                 || (bpc && bpc.asNumber && bpc.asNumber() !== 8)
                 || dict.get(N('Decode')) || dict.get(N('Mask')) || dict.get(N('ImageMask')) || dict.get(N('SMask'))) {
+                unsupported++;
+                continue;
+            }
+            // Declared size is checked before the browser is asked to decode anything.
+            var declW = dict.get(N('Width')), declH = dict.get(N('Height'));
+            var pw = declW && declW.asNumber ? declW.asNumber() : 0, ph = declH && declH.asNumber ? declH.asNumber() : 0;
+            if (!pw || !ph || pw * ph > MAX_IMAGE_PIXELS || Math.max(pw, ph) > MAX_IMAGE_SIDE) {
                 unsupported++;
                 continue;
             }
@@ -202,7 +211,10 @@
         var inter = new File([step.bytes], file.name, { type: 'application/pdf' });
         var result;
         try { result = await structural(inter, signal); }
-        catch (err) { result = { bytes: step.bytes }; }
+        catch (err) {
+            if (err && err.name === 'AbortError') throw err;
+            result = { bytes: step.bytes };
+        }
         var chosen = result.bytes.length < file.size ? result.bytes : null;
         if (!chosen) return { bytes: new Uint8Array(await file.arrayBuffer()), noSaving: true, imagesRecompressed: step.imagesRecompressed };
         return { bytes: chosen, imagesRecompressed: step.imagesRecompressed };

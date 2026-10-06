@@ -307,8 +307,12 @@ def _split_groups_by_size(total_pages: int, max_bytes: int, part_bytes) -> List[
                 cache[k] = part_bytes(list(range(start, start + k)))
             return cache[k]
 
-        lo, hi = 1, total_pages - start
+        lo, hi = 2, total_pages - start
         best = 1
+        # A page that alone exceeds the limit is emitted at once; searching longer runs
+        # would only serialise bigger and bigger candidates to reach the same answer.
+        if len(attempt(1)) > max_bytes:
+            hi = 0
         while lo <= hi:
             mid = (lo + hi) // 2
             if len(attempt(mid)) <= max_bytes:
@@ -1287,6 +1291,7 @@ def pdf_to_images_zip(
 
 MAX_EMBEDDED_IMAGES = 500
 MAX_EMBEDDED_BYTES = 200 * 1024 * 1024
+MAX_EMBEDDED_IMAGE_PIXELS = 100_000_000
 
 
 def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password: str = None) -> dict:
@@ -1300,11 +1305,20 @@ def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password:
     try:
         doc = fitz.open(decrypted_path)
         try:
-            xrefs = sorted({img[0] for page in doc for img in page.get_images(full=True)})
+            dims = {}
+            for page in doc:
+                for img in page.get_images(full=True):
+                    dims[img[0]] = (img[2], img[3])  # width, height from the image dictionary
+            xrefs = sorted(dims)
             if not xrefs:
                 raise ValueError("No embedded images were found in this PDF.")
             if len(xrefs) > MAX_EMBEDDED_IMAGES:
                 raise ValueError(f"PDF has too many embedded images (max {MAX_EMBEDDED_IMAGES}).")
+            # Check declared sizes before extract_image(), which may decode a whole raster.
+            for xref in xrefs:
+                width, height = dims[xref]
+                if width * height > MAX_EMBEDDED_IMAGE_PIXELS:
+                    raise ValueError("An embedded image is too large to extract.")
             total = 0
             with zipfile.ZipFile(output_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                 for n, xref in enumerate(xrefs, start=1):
