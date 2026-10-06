@@ -2039,6 +2039,16 @@ function initWorkflowBuilder() {
         };
     });
 
+    const stepSearch = document.getElementById('workflow-step-search');
+    if (stepSearch) {
+        stepSearch.oninput = () => {
+            const q = stepSearch.value.trim().toLowerCase();
+            stepItems.forEach(item => {
+                item.hidden = !!q && !(item.dataset.stepLabel || '').toLowerCase().includes(q);
+            });
+        };
+    }
+
     // Canvas drop handling
     canvas.ondragover = (e) => {
         e.preventDefault();
@@ -2063,6 +2073,7 @@ function initWorkflowBuilder() {
 
 function handleWorkflowFile(file) {
     workflowFile = file;
+    ffUpdateStepTracker('workflow', 2);
     document.getElementById('workflow-filename-display').textContent = file.name;
     document.getElementById('workflow-file-info').classList.remove('hidden');
 
@@ -2166,14 +2177,14 @@ function renderWorkflowSteps() {
         // Add arrow before step (except first)
         if (index > 0) {
             const arrow = document.createElement('span');
-            arrow.className = 'step-arrow';
+            arrow.className = 'step-arrow ff-conn';
             arrow.dataset.arrowIndex = index - 1; // Arrow between step[index-1] and step[index]
             arrow.innerHTML = '<i class="fas fa-arrow-right"></i>';
             container.appendChild(arrow);
         }
 
         const stepCard = document.createElement('div');
-        stepCard.className = 'workflow-step-card';
+        stepCard.className = 'workflow-step-card ff-node';
         stepCard.dataset.stepIndex = index;
         stepCard.innerHTML = `
             <i class="fas ${step.icon}"></i>
@@ -2746,6 +2757,7 @@ function handleWorkflowEvent(data, statusDisplay, resultDisplay) {
         case 'complete':
             statusDisplay.classList.add('hidden');
             resultDisplay.classList.remove('hidden');
+            ffUpdateStepTracker('workflow', 3);
             document.getElementById('workflow-result-message').textContent = `${data.message}: ${data.filename}`;
             updateDownloadLink(document.getElementById('workflow-download-link'), data.download_token);
             // Keep completed states visible for a moment
@@ -2841,6 +2853,7 @@ function resetWorkflowUI() {
     renderWorkflowSteps();
     document.getElementById('workflow-status-display')?.classList.add('hidden');
     document.getElementById('workflow-result-display')?.classList.add('hidden');
+    ffUpdateStepTracker('workflow', 1);
 }
 
 // Extend resetUI to include workflow reset

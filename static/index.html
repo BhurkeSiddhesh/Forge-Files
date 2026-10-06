@@ -1079,29 +1079,23 @@
         </section>
 
         <!-- Workflow Builder Page -->
-        <section id="workflow-page" class="view">
-            <nav class="breadcrumb">
-                <button onclick="showHome()" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Home</button>
-                <a href="/" onclick="showHome(); return false;" class="breadcrumb-brand" aria-label="Forge Files Home">
-                    <img src="/static/apple-touch-icon.png" alt="Forge Files Logo" class="brand-nav-icon" width="28" height="28">
-                    <span class="brand-nav-text">Forge <span class="accent">Files</span></span>
-                </a>
-            </nav>
+        <section id="workflow-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Workflows</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Workflow builder</h2><p class="ffp-desc">Pick a file, add steps in order, then run the pipeline. Use the arrows on a step to reorder it.</p></div>
+            <div class="ff-steps" aria-label="Process steps">
+                <div class="ff-step active" id="workflow-step-1-ind"><i>1</i>File</div><hr>
+                <div class="ff-step" id="workflow-step-2-ind"><i>2</i>Steps</div><hr>
+                <div class="ff-step" id="workflow-step-3-ind"><i>3</i>Result</div>
+            </div>
 
             <div class="workflow-builder">
-                <div class="workflow-header">
-                    <h2><i class="fas fa-project-diagram"></i> Workflow Builder</h2>
-                    <p class="helper-text">Drag steps from the palette to build your pipeline</p>
-                </div>
-
                 <div class="workflow-layout">
                     <!-- File Input -->
                     <div class="workflow-input-section">
-                        <h3>1. Input File</h3>
-                        <div id="workflow-drop-zone" class="drop-zone workflow-drop" role="button" tabindex="0"
+                        <h3>1. Input file</h3>
+                        <div id="workflow-drop-zone" class="drop-zone ff-drop workflow-drop" role="button" tabindex="0"
                             aria-label="Upload file for workflow">
-                            <i class="fas fa-cloud-upload-alt upload-icon"></i>
-                            <p>Drop your file here or <span class="browse-text">browse</span></p>
+                            <span class="big"><svg class="ff-icon-svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span><span class="t">Drop your file here</span><span class="s">or <span class="browse-text">choose file</span></span>
                             <input type="file" id="workflow-file-input" hidden>
                             <div id="workflow-file-info" class="file-info hidden">
                                 <i class="fas fa-file"></i>
@@ -1112,7 +1106,8 @@
 
                     <!-- Step Palette -->
                     <div class="workflow-palette-section">
-                        <h3>2. Available Steps</h3>
+                        <h3>2. Add steps</h3>
+                        <div class="ff-pick-q"><input type="search" id="workflow-step-search" placeholder="Search steps" aria-label="Search steps" autocomplete="off"></div>
                         <div class="step-palette">
                             <div class="step-item" draggable="true" data-step-type="remove_password"
                                 data-step-label="Unlock PDF" data-step-icon="fa-unlock" role="button" tabindex="0" aria-label="Add Unlock PDF step to workflow">
@@ -1260,11 +1255,11 @@
 
                 <!-- Workflow Canvas -->
                 <div class="workflow-canvas-section">
-                    <h3>3. Your Pipeline</h3>
+                    <h3>3. Your pipeline</h3>
                     <div id="workflow-canvas" class="workflow-canvas">
                         <div class="canvas-placeholder">
                             <i class="fas fa-arrow-down"></i>
-                            <p>Drop steps here to build your workflow</p>
+                            <p>Pick a step above to build your workflow</p>
                         </div>
                         <div id="workflow-steps-container" class="workflow-steps hidden"></div>
                     </div>
@@ -1287,7 +1282,7 @@
                     <button id="run-workflow-btn" class="primary-btn large-btn" onclick="runWorkflow()">
                         <i class="fas fa-play"></i> Run Workflow
                     </button>
-                    <button class="secondary-btn" onclick="resetWorkflowUI()" style="margin-left: 1rem;">
+                    <button class="secondary-btn" onclick="resetWorkflowUI()">
                         <i class="fas fa-trash-alt"></i> Clear
                     </button>
                 </div>
@@ -1300,7 +1295,7 @@
 
                 <div id="workflow-result-display" class="result-display hidden">
                     <i class="fas fa-check-circle success-icon"></i>
-                    <h3>Workflow Complete!</h3>
+                    <h3>Done</h3>
                     <p id="workflow-result-message"></p>
                     <a id="workflow-download-link" href="#" class="primary-btn download-btn">
                         <i class="fas fa-download"></i> Download Result
