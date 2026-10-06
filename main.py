@@ -56,6 +56,7 @@ from scripts.pdf_utils import (
     compress_pdf,
     merge_pdfs,
     add_watermark,
+    crop_pdf,
     pdf_to_images_zip,
     sign_pdf,
     rotate_pdf,
@@ -2102,6 +2103,42 @@ async def api_add_watermark(
             try:
                 os.remove(temp_path)
             except PermissionError:
+                pass
+
+
+@app.post("/api/pdf/crop")
+async def api_crop_pdf(
+    file: UploadFile = File(...),
+    top: float = Form(0),
+    bottom: float = Form(0),
+    left: float = Form(0),
+    right: float = Form(0),
+    pages: str = Form(None),
+    password: str = Form(None),
+):
+    """Crop PDF pages by percentage margins (sets the CropBox)."""
+    safe_filename = secure_filename(file.filename)
+    temp_path = await save_upload(file, PDF_EXTENSIONS)
+    result_dir = new_result_dir()
+    try:
+        output_path = await event_log.timed(
+            "pdf_crop",
+            run_in_threadpool(
+                crop_pdf, str(temp_path), str(result_dir), top, bottom, left, right,
+                pages or None, password or None,
+            ),
+        )
+        return {"status": "success", "message": "PDF cropped", **download_fields(output_path)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))
+    except Exception as e:
+        logger.exception("PDF crop failed for %s", safe_filename)
+        raise HTTPException(status_code=400, detail=event_log.scrub_paths(str(e)))
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
                 pass
 
 

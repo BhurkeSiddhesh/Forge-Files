@@ -406,6 +406,57 @@
         };
     });
 
+    // ── /api/pdf/crop ─────────────────────────────────────────────────────
+    //
+    // Mirrors pdf_utils.py::crop_pdf: percentage margins of the displayed page
+    // become a smaller CropBox; nothing is removed from the file.
+
+    L.register('/api/pdf/crop', async function (fd) {
+        var names = ['top', 'bottom', 'left', 'right'];
+        var m = names.map(function (n) {
+            var v = L.num(fd, n, 0);
+            if (typeof v !== 'number' || !isFinite(v)) throw new L.Error('Crop margins must be numbers.');
+            return v;
+        });
+        var top = m[0], bottom = m[1], left = m[2], right = m[3];
+        if (m.some(function (v) { return v < 0 || v > 90; })) {
+            throw new L.Error('Each crop margin must be between 0 and 90 percent.');
+        }
+        if (top + bottom > 90 || left + right > 90) {
+            throw new L.Error('Opposite crop margins must add up to at most 90 percent.');
+        }
+        if (!m.some(function (v) { return v > 0; })) throw new L.Error('Choose at least one margin to crop.');
+
+        var file = only(fd);
+        var PDFLib = await L.loadPdfLib();
+        var doc = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
+        var pagesArg = L.str(fd, 'pages', null);
+        var indices = pagesArg === null ? doc.getPageIndices() : parsePageSelection(pagesArg, doc.getPageCount());
+
+        indices.forEach(function (idx) {
+            var page = doc.getPage(idx);
+            var box = page.getCropBox();
+            var rotation = (((page.getRotation().angle || 0) % 360) + 360) % 360;
+            var swap = rotation === 90 || rotation === 270;
+            var shownW = swap ? box.height : box.width, shownH = swap ? box.width : box.height;
+            var vt = shownH * top / 100, vb = shownH * bottom / 100, vl = shownW * left / 100, vr = shownW * right / 100;
+            var mL, mT, mR, mB;
+            if (rotation === 90) { mL = vt; mT = vr; mR = vb; mB = vl; }
+            else if (rotation === 180) { mL = vr; mT = vb; mR = vl; mB = vt; }
+            else if (rotation === 270) { mL = vb; mT = vl; mR = vt; mB = vr; }
+            else { mL = vl; mT = vt; mR = vr; mB = vb; }
+            var round3 = function (v) { return Math.round(v * 1000) / 1000; };
+            var x0 = round3(box.x + mL), y0 = round3(box.y + mB);
+            page.setCropBox(x0, y0, round3(box.x + box.width - mR) - x0, round3(box.y + box.height - mT) - y0);
+        });
+
+        return {
+            blob: await save(doc),
+            filename: L.brandedName(file.name, 'pdf'),
+            message: 'PDF cropped',
+        };
+    });
+
     // ── /api/pdf/rotate ───────────────────────────────────────────────────
 
     L.register('/api/pdf/rotate', async function (fd) {

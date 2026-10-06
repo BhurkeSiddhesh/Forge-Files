@@ -1404,6 +1404,75 @@ def merge_docx_files(input_files: list, output_file: str) -> None:
 
     composer.save(output_file)
 
+def _crop_margins_in_page_space(rotation: int, top: float, bottom: float, left: float, right: float):
+    """Map margins measured on the page as displayed to (left, top, right, bottom)
+    margins on the unrotated page, in the same units."""
+    rotation %= 360
+    if rotation == 90:
+        return top, right, bottom, left
+    if rotation == 180:
+        return right, bottom, left, top
+    if rotation == 270:
+        return bottom, left, top, right
+    return left, top, right, bottom
+
+
+def crop_pdf(
+    input_path: str,
+    output_dir: str,
+    top: float = 0,
+    bottom: float = 0,
+    left: float = 0,
+    right: float = 0,
+    pages: str = None,
+    password: str = None,
+) -> str:
+    """Crop pages by setting the CropBox inwards by a percentage of the displayed page.
+
+    Margins are percentages (0-90) of the displayed height (top, bottom) or
+    width (left, right). The page content is not removed, only hidden.
+    """
+    try:
+        margins = [float(v) for v in (top, bottom, left, right)]
+    except (TypeError, ValueError):
+        raise ValueError("Crop margins must be numbers.")
+    top, bottom, left, right = margins
+    if any(not 0 <= v <= 90 for v in margins):
+        raise ValueError("Each crop margin must be between 0 and 90 percent.")
+    if top + bottom > 90 or left + right > 90:
+        raise ValueError("Opposite crop margins must add up to at most 90 percent.")
+    if not any(margins):
+        raise ValueError("Choose at least one margin to crop.")
+
+    input_file = Path(input_path)
+    output_file = Path(output_dir) / branded_filename(input_file, "pdf")
+    decrypted_path, needs_cleanup = _get_decrypted_pdf_path(input_path, password)
+    try:
+        with pikepdf.open(decrypted_path) as pdf:
+            total_pages = len(pdf.pages)
+            selected = list(range(total_pages)) if pages is None else _parse_page_selection(pages, total_pages)
+            for idx in selected:
+                page = pdf.pages[idx]
+                x0, y0, x1, y1 = (float(v) for v in page.cropbox)
+                x0, x1 = min(x0, x1), max(x0, x1)
+                y0, y1 = min(y0, y1), max(y0, y1)
+                rotation = int(page.get("/Rotate", 0)) % 360
+                shown_w, shown_h = (y1 - y0, x1 - x0) if rotation in (90, 270) else (x1 - x0, y1 - y0)
+                m_left, m_top, m_right, m_bottom = _crop_margins_in_page_space(
+                    rotation,
+                    shown_h * top / 100, shown_h * bottom / 100, shown_w * left / 100, shown_w * right / 100,
+                )
+                page.cropbox = [
+                    round(x0 + m_left, 3), round(y0 + m_bottom, 3),
+                    round(x1 - m_right, 3), round(y1 - m_top, 3),
+                ]
+            pdf.save(output_file)
+    finally:
+        if needs_cleanup:
+            Path(decrypted_path).unlink(missing_ok=True)
+    return str(output_file)
+
+
 def rotate_pdf(input_path: str, output_dir: str, angle: int, pages: str = None, password: str = None) -> str:
     """Rotate PDF pages by specified angle (90, 180, 270).
 

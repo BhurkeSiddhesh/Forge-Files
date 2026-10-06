@@ -795,6 +795,8 @@ function hidePdfActionAreas() {
     document.getElementById('extract-text-area')?.classList.add('hidden');
     document.getElementById('ocr-pdf-area')?.classList.add('hidden');
     document.getElementById('organize-pdf-area')?.classList.add('hidden');
+    document.getElementById('remove-pages-area')?.classList.add('hidden');
+    document.getElementById('crop-pdf-area')?.classList.add('hidden');
     document.getElementById('page-numbers-area')?.classList.add('hidden');
     document.getElementById('repair-pdf-area')?.classList.add('hidden');
     document.getElementById('create-pdf-area')?.classList.add('hidden');
@@ -825,6 +827,8 @@ const PDF_AREA_CARD = {
     'extract-text-area': 'extract-text-btn',
     'ocr-pdf-area': 'ocr-pdf-btn',
     'organize-pdf-area': 'organize-pdf-btn',
+    'remove-pages-area': 'remove-pages-btn',
+    'crop-pdf-area': 'crop-pdf-btn',
     'page-numbers-area': 'page-numbers-btn',
     'repair-pdf-area': 'repair-pdf-btn',
     'create-pdf-area': 'create-pdf-btn',
@@ -847,6 +851,10 @@ function openPdfArea(areaId) {
 
     area.classList.remove('hidden');
     area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Visual page picker for the page-based tools; the text input stays the source of truth.
+    if (window.ffPageGrid && window.ffPageGrid.supports(areaId) && selectedFile) {
+        window.ffPageGrid.mount(areaId, selectedFile);
+    }
 }
 
 function setMergeMode(on) {
@@ -3619,6 +3627,50 @@ document.getElementById('process-organize-pdf-btn')?.addEventListener('click', (
     fd.append('file', selectedFile);
     fd.append('page_order', order);
     processAction('/api/pdf/organize', 'Organizing pages...', fd);
+});
+
+// --- Crop PDF ---
+document.getElementById('crop-pdf-btn')?.addEventListener('click', () => {
+    showPdfOptionPanel('crop-pdf-area');
+});
+document.getElementById('process-crop-pdf-btn')?.addEventListener('click', () => {
+    if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    ['top', 'bottom', 'left', 'right'].forEach((edge) => {
+        fd.append(edge, document.getElementById('crop-pdf-' + edge).value || '0');
+    });
+    const pages = document.getElementById('crop-pdf-pages').value.trim();
+    if (pages) fd.append('pages', pages);
+    processAction('/api/pdf/crop', 'Cropping PDF...', fd);
+});
+
+// --- Remove Pages (organize with the picked pages left out) ---
+document.getElementById('remove-pages-btn')?.addEventListener('click', () => {
+    showPdfOptionPanel('remove-pages-area');
+});
+document.getElementById('process-remove-pages-btn')?.addEventListener('click', async () => {
+    if (!selectedFile) { ffNotify('Please select a PDF file first.'); return; }
+    const raw = document.getElementById('remove-pages-input').value.trim();
+    if (!raw) { ffNotify('Please choose the pages to remove (e.g. 2,4-6).'); return; }
+    let total;
+    try {
+        const doc = await window.ffLocal.openPdfJs(selectedFile);
+        total = doc.numPages;
+        try { await doc.destroy(); } catch (e) { /* already released */ }
+    } catch (e) {
+        ffNotify('Could not read this PDF to count its pages. It may be password protected.');
+        return;
+    }
+    const removed = window.ffPageGrid.parseRanges(raw, total);
+    if (!removed || !removed.length) { ffNotify('Enter page numbers between 1 and ' + total + ', e.g. 2,4-6.'); return; }
+    const keep = [];
+    for (let p = 1; p <= total; p++) if (removed.indexOf(p) < 0) keep.push(p);
+    if (!keep.length) { ffNotify('You cannot remove every page.'); return; }
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('page_order', keep.join(','));
+    processAction('/api/pdf/organize', 'Removing pages...', fd);
 });
 
 // --- Add Page Numbers ---

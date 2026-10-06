@@ -2132,3 +2132,32 @@ body.seo-page {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(0); }
 }
+
+/* Page thumbnail picker (ff-page-grid.js) */
+.ff-page-grid { margin: 8px 0 12px; }
+.ff-page-grid-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+.ff-page-grid-bar-btn { font: inherit; padding: 4px 10px; border-radius: 8px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; opacity: .8; }
+.ff-page-grid-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 360px; overflow: auto; padding: 4px; }
+.ff-page-grid-item { display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: 8px; padding: 4px; border: 2px solid transparent; }
+.ff-page-grid-item.is-selected { border-color: var(--accent, #6366f1); background: rgba(99, 102, 241, .12); }
+.ff-page-grid-thumb { position: relative; padding: 0; border: 1px solid rgba(128, 128, 128, .4); background: #fff; border-radius: 4px; cursor: pointer; line-height: 0; min-width: 60px; min-height: 80px; }
+.ff-page-grid-thumb img { max-width: 100%; height: auto; display: block; }
+.ff-page-grid-blank { display: block; padding: 28px 0; color: #888; line-height: 1; }
+.ff-page-grid-num { position: absolute; bottom: 2px; right: 2px; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 6px; background: rgba(0, 0, 0, .65); color: #fff; }
+.ff-page-grid-item.is-selected .ff-page-grid-thumb { outline: 2px solid var(--accent, #6366f1); }
+.ff-page-grid-tools { display: flex; gap: 4px; }
+.ff-page-grid-tool { font: inherit; min-width: 28px; min-height: 28px; border-radius: 6px; border: 1px solid rgba(128, 128, 128, .5); background: transparent; color: inherit; cursor: pointer; }
+.ff-page-grid-tool:disabled { opacity: .35; cursor: default; }
+.ff-page-grid-thumb:focus-visible, .ff-page-grid-tool:focus-visible, .ff-page-grid-bar-btn:focus-visible { outline: 2px solid var(--accent, #6366f1); outline-offset: 2px; }
+
+/* Crop PDF preview (ff-page-grid.js) */
+.ff-crop-preview { margin: 8px 0; }
+.ff-crop-stage { position: relative; border: 1px solid rgba(128, 128, 128, .5); line-height: 0; max-width: 100%; }
+.ff-crop-stage canvas { display: block; max-width: 100%; height: auto; }
+.ff-crop-shade { position: absolute; background: rgba(220, 38, 38, .35); pointer-events: none; }
+.ff-crop-shade-top { top: 0; left: 0; right: 0; }
+.ff-crop-shade-bottom { bottom: 0; left: 0; right: 0; }
+.ff-crop-shade-left { top: 0; bottom: 0; left: 0; }
+.ff-crop-shade-right { top: 0; bottom: 0; right: 0; }
+.ff-crop-margins { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ff-crop-margins label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
