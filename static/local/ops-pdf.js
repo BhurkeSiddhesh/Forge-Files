@@ -562,6 +562,17 @@
             throw new L.Error('Opacity must be between 0.1 and 1.0.');
         }
 
+        var colorText = L.str(fd, 'color', '#808080');
+        if (!/^#?[0-9a-fA-F]{6}$/.test(colorText.trim())) throw new L.Error('color must be a #RRGGBB hex value.');
+        var hex = colorText.trim().replace('#', '');
+        var fontSizeArg = L.int(fd, 'font_size', 0);
+        if (fontSizeArg !== 0 && (fontSizeArg < 8 || fontSizeArg > 200)) {
+            throw new L.Error('font_size must be 0 (auto) or between 8 and 200.');
+        }
+        var tile = ['true', '1', 'on', 'yes'].indexOf(String(L.str(fd, 'tile', 'false')).toLowerCase()) >= 0;
+        var layer = L.str(fd, 'layer', 'over');
+        if (layer !== 'over' && layer !== 'under') throw new L.Error("layer must be 'over' or 'under'.");
+
         var file = only(fd);
         var PDFLib = await L.loadPdfLib();
         var doc = await loadDoc(PDFLib, file, L.str(fd, 'password', null));
@@ -575,7 +586,7 @@
         }
 
         var font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
-        var grey = PDFLib.rgb(0.5, 0.5, 0.5);
+        var grey = PDFLib.rgb(parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255);
 
         // Helvetica here is WinAnsi only; text in other scripts cannot be drawn.
         try {
@@ -589,9 +600,33 @@
             var page = pages[n];
             // The visible page is its CropBox; the server measures page.rect, which is the same thing.
             var crop = page.getCropBox();
-            var fontSize = Math.max(24, Math.trunc(crop.width / 12));
+            var fontSize = fontSizeArg || Math.max(24, Math.trunc(crop.width / 12));
+            // 'under' draws inside its own q/Q pair and is then moved to the front
+            // of the page's content streams.
+            if (layer === 'under') page.pushOperators(PDFLib.pushGraphicsState());
 
-            if (position === 'diagonal') {
+            if (tile) {
+                // Mirrors pdf_utils.py::_watermark_tile_points (top-left origin there).
+                var rotated = position === 'diagonal';
+                var textW = font.widthOfTextAtSize(text, fontSize);
+                var stepU = textW * 1.4 + fontSize, stepV = fontSize * 4;
+                var reach = Math.hypot(crop.width, crop.height) / 2 + stepU;
+                var cc = rotated ? Math.SQRT1_2 : 1, ss = rotated ? Math.SQRT1_2 : 0;
+                var count = 0;
+                for (var v = -reach; v <= reach; v += stepV) {
+                    for (var u = -reach; u <= reach; u += stepU) {
+                        var tx = crop.width / 2 + u * cc + v * ss;
+                        var tyTop = crop.height / 2 - u * ss + v * cc;
+                        if (tx < -stepU || tx > crop.width + stepU || tyTop < -fontSize || tyTop > crop.height + fontSize) continue;
+                        if (++count > 2000) throw new L.Error('Watermark would be tiled too many times; use a larger font size.');
+                        page.drawText(text, {
+                            x: crop.x + tx, y: crop.y + crop.height - tyTop,
+                            size: fontSize, font: font, color: grey, opacity: opacity,
+                            rotate: PDFLib.degrees(rotated ? 45 : 0),
+                        });
+                    }
+                }
+            } else if (position === 'diagonal') {
                 // The text is centred on the page centre, running up and to the
                 // right at 45 degrees. (The server anchors the START of the text
                 // at the centre, so a long watermark could leave the page there;
@@ -616,6 +651,14 @@
                     y: crop.y + crop.height - fromTop,
                     size: fontSize, font: font, color: grey, opacity: opacity,
                 });
+            }
+            if (layer === 'under') {
+                page.pushOperators(PDFLib.popGraphicsState());
+                page.node.normalize();
+                var entries = page.node.Contents();
+                var mine = entries.get(entries.size() - 1);
+                entries.remove(entries.size() - 1);
+                entries.insert(0, mine);
             }
             if (ctx.onProgress) ctx.onProgress(n + 1, pages.length);
             if (n % 10 === 9) await L.tick();

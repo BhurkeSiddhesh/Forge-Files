@@ -934,6 +934,52 @@ def merge_pdfs(input_paths: List[str], output_dir: str, passwords: List[str] = N
     return str(output_file)
 
 
+MAX_WATERMARK_TILES = 2000
+
+
+def parse_hex_color(value: str) -> tuple:
+    """``#RRGGBB`` (or ``RRGGBB``) to an (r, g, b) tuple of 0-1 floats."""
+    import re
+
+    text = (value or "").strip()
+    if not re.fullmatch(r"#?[0-9a-fA-F]{6}", text):
+        raise ValueError("color must be a #RRGGBB hex value.")
+    text = text.lstrip("#")
+    return tuple(int(text[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def _watermark_tile_points(width: float, height: float, size: float, text_width: float, rotated: bool):
+    """Top-left-origin start points (and morph angle) covering a page with tiles.
+
+    Rows run along the text direction; when ``rotated`` that direction is 45
+    degrees up and to the right, and the grid is laid out in that frame.
+    """
+    import math
+
+    step_u = text_width * 1.4 + size
+    step_v = size * 4
+    cx, cy = width / 2, height / 2
+    reach = math.hypot(width, height) / 2 + step_u
+    c = math.sqrt(0.5) if rotated else 1.0
+    s = math.sqrt(0.5) if rotated else 0.0
+    # u runs along the text; v runs perpendicular, down the page.
+    du, dv = (c, -s), (s, c)
+    points = []
+    v = -reach
+    while v <= reach:
+        u = -reach
+        while u <= reach:
+            x = cx + u * du[0] + v * dv[0]
+            y = cy + u * du[1] + v * dv[1]
+            if -step_u <= x <= width + step_u and -size <= y <= height + size:
+                points.append(((x, y), 45 if rotated else 0))
+            u += step_u
+        v += step_v
+    if len(points) > MAX_WATERMARK_TILES:
+        raise ValueError("Watermark would be tiled too many times; use a larger font size.")
+    return points
+
+
 def add_watermark(
     input_path: str,
     output_dir: str,
@@ -941,8 +987,17 @@ def add_watermark(
     position: str = "diagonal",
     opacity: float = 0.3,
     password: str = None,
+    color: str = "#808080",
+    font_size: int = 0,
+    tile: bool = False,
+    layer: str = "over",
 ) -> str:
-    """Stamp a text watermark on every page."""
+    """Stamp a text watermark on every page.
+
+    color is ``#RRGGBB``; font_size 0 picks a size from the page width; tile
+    repeats the text across the page (rotated 45 degrees when position is
+    ``diagonal``); layer ``under`` places it beneath the page content.
+    """
     import fitz
 
     if not text or not text.strip():
@@ -955,6 +1010,16 @@ def add_watermark(
         raise ValueError("Opacity must be between 0.1 and 1.0.")
     if position not in ("diagonal", "top", "center", "bottom"):
         raise ValueError("Position must be one of: diagonal, top, center, bottom.")
+    rgb = parse_hex_color(color)
+    try:
+        font_size = int(font_size)
+    except (TypeError, ValueError):
+        raise ValueError("font_size must be an integer.")
+    if font_size != 0 and not 8 <= font_size <= 200:
+        raise ValueError("font_size must be 0 (auto) or between 8 and 200.")
+    if layer not in ("over", "under"):
+        raise ValueError("layer must be 'over' or 'under'.")
+    overlay = layer == "over"
 
     input_file = Path(input_path)
     output_file = Path(output_dir) / branded_filename(input_file, "pdf")
@@ -968,10 +1033,21 @@ def add_watermark(
             for page in doc:
                 rect = page.rect
                 # Pick a font size relative to page width.
-                font_size = max(24, int(rect.width / 12))
-                color = (0.5, 0.5, 0.5)
+                size = font_size or max(24, int(rect.width / 12))
 
-                if position == "diagonal":
+                if tile:
+                    for pt, morph_angle in _watermark_tile_points(
+                        rect.width, rect.height, size,
+                        fitz.get_text_length(text, fontname="helv", fontsize=size),
+                        position == "diagonal",
+                    ):
+                        point = fitz.Point(*pt)
+                        kw = {"morph": (point, fitz.Matrix(1, 1).prerotate(morph_angle))} if morph_angle else {}
+                        page.insert_text(
+                            point, text, fontname="helv", fontsize=size,
+                            color=rgb, fill_opacity=opacity, overlay=overlay, **kw,
+                        )
+                elif position == "diagonal":
                     # Diagonal stamp anchored at page center (PyMuPDF rotate= must be a
                     # multiple of 90, so apply the 45° rotation via morph).
                     point = fitz.Point(rect.width / 2, rect.height / 2)
@@ -979,9 +1055,10 @@ def add_watermark(
                         point,
                         text,
                         fontname="helv",
-                        fontsize=font_size,
-                        color=color,
+                        fontsize=size,
+                        color=rgb,
                         fill_opacity=opacity,
+                        overlay=overlay,
                         morph=(point, fitz.Matrix(1, 1).prerotate(45)),
                     )
                 else:
@@ -992,15 +1069,16 @@ def add_watermark(
                     else:  # bottom
                         y = rect.height * 0.9
                     # Rough horizontal centering.
-                    text_width = font_size * 0.5 * len(text)
+                    text_width = size * 0.5 * len(text)
                     x = max(10, (rect.width - text_width) / 2)
                     page.insert_text(
                         fitz.Point(x, y),
                         text,
                         fontname="helv",
-                        fontsize=font_size,
-                        color=color,
+                        fontsize=size,
+                        color=rgb,
                         fill_opacity=opacity,
+                        overlay=overlay,
                     )
             doc.save(str(output_file), garbage=3, deflate=True)
         finally:

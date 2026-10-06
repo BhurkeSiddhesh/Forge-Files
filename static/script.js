@@ -1286,6 +1286,10 @@ document.getElementById('process-watermark-btn').onclick = () => {
     formData.append('text', text);
     formData.append('position', position);
     formData.append('opacity', opacity);
+    formData.append('color', document.getElementById('watermark-color')?.value || '#808080');
+    formData.append('font_size', document.getElementById('watermark-size')?.value || '0');
+    formData.append('layer', document.getElementById('watermark-layer')?.value || 'over');
+    formData.append('tile', document.getElementById('watermark-tile')?.checked ? 'true' : 'false');
 
     processAction('/api/pdf/watermark', 'Adding watermark...', formData);
 };

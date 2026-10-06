@@ -2068,6 +2068,10 @@ async def api_add_watermark(
     position: str = Form("diagonal"),
     opacity: float = Form(0.3),
     password: str = Form(None),
+    color: str = Form("#808080"),
+    font_size: int = Form(0),
+    tile: bool = Form(False),
+    layer: str = Form("over"),
 ):
     """Stamp a text watermark on every page."""
     safe_filename = secure_filename(file.filename)
@@ -2077,7 +2081,8 @@ async def api_add_watermark(
         output_path = await event_log.timed(
             "pdf_watermark",
             run_in_threadpool(
-                add_watermark, str(temp_path), str(result_dir), text, position, opacity, password or None
+                add_watermark, str(temp_path), str(result_dir), text, position, opacity, password or None,
+                color, font_size, tile, layer,
             ),
         )
         return {"status": "success", "message": "Watermark added", **download_fields(output_path)}
