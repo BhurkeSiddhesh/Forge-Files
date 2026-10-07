@@ -262,7 +262,7 @@ BASE_URL = os.environ.get("BASE_URL", "https://www.forgefiles.org").rstrip("/")
 # date on every request is inaccurate and teaches crawlers to distrust the field
 # (wasting crawl budget). Bump CONTENT_LAST_MODIFIED (or set the env var on a
 # real content change) so the sitemap reflects the true last edit, not "now".
-CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-09-26").strip()
+CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-10-07").strip()
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 # Multi-file endpoints (the merge tools, images->PDF) share one budget across the
 # whole request: a per-file cap alone would let a single request write

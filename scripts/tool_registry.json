@@ -305,7 +305,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["remove-pdf-pages"]
     },
     {
       "id": "crop_pdf",
@@ -322,7 +322,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["crop-pdf"]
     },
     {
       "id": "organize_pdf",
@@ -356,7 +356,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["repair-pdf"]
     },
     {
       "id": "create_pdf",
@@ -373,7 +373,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["create-pdf"]
     },
     {
       "id": "annotate_pdf",
@@ -390,7 +390,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["annotate-pdf"]
     },
     {
       "id": "edit_pdf_metadata",
@@ -407,7 +407,7 @@
       "output": "PDF",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["edit-pdf-metadata"]
     },
     {
       "id": "heic_to_jpeg",
@@ -696,7 +696,7 @@
       "output": "PPTX",
       "auth": false,
       "premium": false,
-      "seo_slugs": []
+      "seo_slugs": ["word-to-powerpoint"]
     },
     {
       "id": "workflows",

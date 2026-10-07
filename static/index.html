@@ -58,7 +58,11 @@
             "Convert HEIC to JPEG",
             "Resize and crop images",
             "Excel to PDF, CSV to XLSX",
-            "PowerPoint to PDF"
+            "PowerPoint to PDF",
+            "Crop PDF and remove PDF pages",
+            "Annotate PDF and edit PDF metadata",
+            "Create PDF from text and repair a damaged PDF",
+            "OCR PDF and make a scanned PDF searchable"
         ]
     }
     </script>
@@ -80,7 +84,35 @@
             { "@type": "ListItem", "position": 10, "name": "Word to PDF", "url": "{{BASE_URL}}/word-to-pdf" },
             { "@type": "ListItem", "position": 11, "name": "Excel to PDF", "url": "{{BASE_URL}}/excel-to-pdf" },
             { "@type": "ListItem", "position": 12, "name": "PowerPoint to PDF", "url": "{{BASE_URL}}/powerpoint-to-pdf" },
-            { "@type": "ListItem", "position": 13, "name": "PDF to EPUB", "url": "{{BASE_URL}}/pdf-to-epub" }
+            { "@type": "ListItem", "position": 13, "name": "PDF to EPUB", "url": "{{BASE_URL}}/pdf-to-epub" },
+            { "@type": "ListItem", "position": 14, "name": "Extract PDF Pages", "url": "{{BASE_URL}}/extract-pdf-pages" },
+            { "@type": "ListItem", "position": 15, "name": "PDF to Text", "url": "{{BASE_URL}}/pdf-to-text" },
+            { "@type": "ListItem", "position": 16, "name": "OCR PDF", "url": "{{BASE_URL}}/ocr-pdf" },
+            { "@type": "ListItem", "position": 17, "name": "Rotate PDF", "url": "{{BASE_URL}}/rotate-pdf" },
+            { "@type": "ListItem", "position": 18, "name": "Protect PDF", "url": "{{BASE_URL}}/protect-pdf" },
+            { "@type": "ListItem", "position": 19, "name": "Watermark PDF", "url": "{{BASE_URL}}/watermark-pdf" },
+            { "@type": "ListItem", "position": 20, "name": "Add Page Numbers", "url": "{{BASE_URL}}/pdf-page-numbers" },
+            { "@type": "ListItem", "position": 21, "name": "PDF to Excel", "url": "{{BASE_URL}}/pdf-to-excel" },
+            { "@type": "ListItem", "position": 22, "name": "PDF to PowerPoint", "url": "{{BASE_URL}}/pdf-to-powerpoint" },
+            { "@type": "ListItem", "position": 23, "name": "Sign PDF", "url": "{{BASE_URL}}/sign-pdf" },
+            { "@type": "ListItem", "position": 24, "name": "Organize PDF", "url": "{{BASE_URL}}/organize-pdf" },
+            { "@type": "ListItem", "position": 25, "name": "Compress Image", "url": "{{BASE_URL}}/compress-image" },
+            { "@type": "ListItem", "position": 26, "name": "Convert Image", "url": "{{BASE_URL}}/convert-image" },
+            { "@type": "ListItem", "position": 27, "name": "Crop Image", "url": "{{BASE_URL}}/crop-image" },
+            { "@type": "ListItem", "position": 28, "name": "Rotate Image", "url": "{{BASE_URL}}/rotate-image" },
+            { "@type": "ListItem", "position": 29, "name": "Watermark Image", "url": "{{BASE_URL}}/watermark-image" },
+            { "@type": "ListItem", "position": 30, "name": "CSV to XLSX", "url": "{{BASE_URL}}/csv-to-xlsx" },
+            { "@type": "ListItem", "position": 31, "name": "XLSX to CSV", "url": "{{BASE_URL}}/xlsx-to-csv" },
+            { "@type": "ListItem", "position": 32, "name": "Merge Excel", "url": "{{BASE_URL}}/merge-excel" },
+            { "@type": "ListItem", "position": 33, "name": "PPT to Images", "url": "{{BASE_URL}}/ppt-to-images" },
+            { "@type": "ListItem", "position": 34, "name": "Merge PowerPoint", "url": "{{BASE_URL}}/merge-ppt" },
+            { "@type": "ListItem", "position": 35, "name": "Crop PDF", "url": "{{BASE_URL}}/crop-pdf" },
+            { "@type": "ListItem", "position": 36, "name": "Remove PDF Pages", "url": "{{BASE_URL}}/remove-pdf-pages" },
+            { "@type": "ListItem", "position": 37, "name": "Repair PDF", "url": "{{BASE_URL}}/repair-pdf" },
+            { "@type": "ListItem", "position": 38, "name": "Create PDF", "url": "{{BASE_URL}}/create-pdf" },
+            { "@type": "ListItem", "position": 39, "name": "Annotate PDF", "url": "{{BASE_URL}}/annotate-pdf" },
+            { "@type": "ListItem", "position": 40, "name": "Edit PDF Metadata", "url": "{{BASE_URL}}/edit-pdf-metadata" },
+            { "@type": "ListItem", "position": 41, "name": "Word to PowerPoint", "url": "{{BASE_URL}}/word-to-powerpoint" }
         ]
     }
     </script>
@@ -1266,6 +1298,12 @@
                     <a href="/pdf-page-numbers">Add Page Numbers</a>
                     <a href="/sign-pdf">Sign PDF</a>
                     <a href="/watermark-pdf">Watermark PDF</a>
+                    <a href="/crop-pdf">Crop PDF</a>
+                    <a href="/remove-pdf-pages">Remove PDF Pages</a>
+                    <a href="/annotate-pdf">Annotate PDF</a>
+                    <a href="/edit-pdf-metadata">Edit PDF Metadata</a>
+                    <a href="/create-pdf">Create PDF</a>
+                    <a href="/repair-pdf">Repair PDF</a>
                 </div>
                 <div class="col">
                     <h4>Convert PDF</h4>
@@ -1275,7 +1313,9 @@
                     <a href="/pdf-to-excel">PDF to Excel</a>
                     <a href="/pdf-to-powerpoint">PDF to PowerPoint</a>
                     <a href="/pdf-to-epub">PDF to EPUB</a>
+                    <a href="/ocr-pdf">OCR PDF</a>
                     <a href="/word-to-pdf">Word to PDF</a>
+                    <a href="/word-to-powerpoint">Word to PowerPoint</a>
                     <a href="/excel-to-pdf">Excel to PDF</a>
                     <a href="/powerpoint-to-pdf">PowerPoint to PDF</a>
                     <a href="/image-to-pdf">Image to PDF</a>

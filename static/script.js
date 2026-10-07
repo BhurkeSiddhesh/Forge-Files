@@ -4044,6 +4044,12 @@ const DEEP_LINK_OPS = {
     'pdf-to-epub': { card: 'pdf-to-epub-btn' },
     'sign-pdf': { card: 'sign-pdf-btn' },
     'organize-pdf': { card: 'organize-pdf-btn' },
+    'crop-pdf': { card: 'crop-pdf-btn' },
+    'remove-pdf-pages': { card: 'remove-pages-btn' },
+    'repair-pdf': { card: 'repair-pdf-btn' },
+    'create-pdf': { card: 'create-pdf-btn' },
+    'annotate-pdf': { card: 'annotate-pdf-btn' },
+    'edit-pdf-metadata': { card: 'pdf-metadata-btn' },
     // Image
     'heic-to-jpeg': { card: 'convert-jpeg-btn' },
     'resize-image': { card: 'resize-btn' },
@@ -4064,21 +4070,14 @@ const DEEP_LINK_OPS = {
     'merge-ppt': { card: 'merge-ppt-btn' },
     // Word
     'word-to-pdf': { card: 'word-to-pdf-btn' },
+    'word-to-powerpoint': { card: 'word-to-pptx-btn' },
 };
 
 // Cards that don't need a file selected first (they collect their own files).
 const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
 
-// Tools reachable from the home grid that have no SEO landing page, so they are
-// not in DEEP_LINK_OPS (whose keys mirror the SEO slugs). Same resolution rule:
-// the op is only ever looked up here, never used as an element id.
-const DEEP_LINK_EXTRA_OPS = Object.fromEntries([
-    ['repair-pdf', 'repair-pdf-btn'],
-    ['create-pdf', 'create-pdf-btn'],
-    ['annotate-pdf', 'annotate-pdf-btn'],
-    ['edit-pdf-metadata', 'pdf-metadata-btn'],
-    ['word-to-powerpoint', 'word-to-pptx-btn'],
-].map(([op, card]) => [op, { card }]));
+// Home-grid tools with no SEO landing page (none today); same resolution rule as above.
+const DEEP_LINK_EXTRA_OPS = {};
 
 // The action card a deep link asked for, held until the visitor picks a file.
 // Most card handlers ffNotify("Please select a file first.") when clicked with no

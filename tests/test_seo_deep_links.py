@@ -151,3 +151,18 @@ def test_handoff_categories_match_between_the_two_files():
     categories = {c for c, _ in claimed}
     for tool in seo_content._CATEGORY_ACCEPT:
         assert tool in categories, f"script.js cannot claim a handoff for {tool}"
+
+
+def test_every_public_web_tool_has_a_landing_page():
+    """A tool reachable from the app but absent from TOOL_PAGES is invisible to
+    search and to sitemap.xml/llms.txt. Premium and workflow surfaces are exempt."""
+    from scripts.tool_registry import TOOL_REGISTRY
+
+    missing = [
+        t["id"] for t in TOOL_REGISTRY
+        if t["web_card"] and not t["premium"] and t["category"] != "workflow" and not t["seo_slugs"]
+    ]
+    assert not missing, f"tools without an SEO landing page: {missing}"
+    for t in TOOL_REGISTRY:
+        for slug in t["seo_slugs"]:
+            assert slug in seo_content.TOOL_PAGES, (t["id"], slug)

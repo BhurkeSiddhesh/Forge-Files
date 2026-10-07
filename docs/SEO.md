@@ -42,9 +42,11 @@ into it via `/?tool=<category>`.
    },
    ```
 
-2. That's it. The page is automatically served at `/rotate-pdf`, added to
+2. Add a `HELP` entry for the slug in `scripts/tool_extra.py`, a `seo_slugs` entry for the tool in
+   `scripts/tool_registry.json`, and the slug to `DEEP_LINK_OPS` in `static/script.js` (tests enforce all three).
+3. That's it. The page is automatically served at `/rotate-pdf`, added to
    `sitemap.xml`, and gets `FAQPage` + `SoftwareApplication` + `HowTo` +
-   `BreadcrumbList` JSON-LD. The footer in `static/index.html` is hand-maintained —
+   `BreadcrumbList` JSON-LD. The footer and `ItemList` JSON-LD in `static/index.html` are hand-maintained —
    add the link there too if you want it sitewide.
 
 **Rules:** titles ≤ 60 chars, metas ≤ 160 chars (enforced by
