@@ -8,7 +8,7 @@
 
 > **Privacy by design — and verifiable.** Your upload is deleted as soon as processing finishes, the result is deleted the moment you download it, and a background sweeper purges anything older than an hour. Unlike closed-source tools that just *claim* they don't keep your files, every line of code that handles your documents is in this repository. Don't trust us? Read the code — or self-host it.
 
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/BhurkeSiddhesh/File-Forge?utm_source=oss&utm_medium=github&utm_campaign=BhurkeSiddhesh%2FFile-Forge&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/BhurkeSiddhesh/Forge-Files?utm_source=oss&utm_medium=github&utm_campaign=BhurkeSiddhesh%2FForge-Files&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 ---
 
@@ -92,7 +92,7 @@ Chain multiple operations into a single pipeline with real-time progress streami
 ## Project Structure
 
 ```
-File-Forge/
+Forge-Files/
 ├── main.py                  # FastAPI app — all API and SEO routes
 ├── requirements.txt         # Python dependencies (RapidOCR default backend)
 ├── requirements-ai-paddle.txt # Optional PaddleOCR backend (x86 only)
@@ -147,8 +147,8 @@ Once the server is running, visit **http://127.0.0.1:8001/docs** to explore all 
 ### Installation
 
 ```bash
-git clone https://github.com/BhurkeSiddhesh/File-Forge.git
-cd File-Forge
+git clone https://github.com/BhurkeSiddhesh/Forge-Files.git
+cd Forge-Files
 pip install -r requirements.txt
 ```
 

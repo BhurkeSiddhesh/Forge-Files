@@ -258,7 +258,7 @@
                 var inner = '<i class="ti ' + x[2] + '" style="--d:' + (x[3] * -1.1) + 's">' + window.FFIcon(x[0], 14) + '</i>' + x[1];
                 // Open source links to the public repo; the pulsing dot marks it as live.
                 if (x[1] === 'Open source') {
-                    return '<span><a class="ffh-oss" href="https://github.com/BhurkeSiddhesh/File-Forge" target="_blank" rel="noopener" aria-label="Open source: view Forge Files on GitHub">' +
+                    return '<span><a class="ffh-oss" href="https://github.com/BhurkeSiddhesh/Forge-Files" target="_blank" rel="noopener" aria-label="Open source: view Forge Files on GitHub">' +
                         inner + '<span class="dot" aria-hidden="true"></span></a></span>';
                 }
                 if (x[1] === 'Local first') {

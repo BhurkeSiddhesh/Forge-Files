@@ -182,3 +182,24 @@ def result_path(output_dir, payload):
     on its own addresses nothing. See main.new_result_dir / main.download_fields.
     """
     return Path(output_dir) / payload["download_token"] / payload["filename"]
+
+
+# These modules read repo-root files (public/static, mobile/, .gitignore,
+# .github/workflows/ci.yml) that exist only in the private monorepo layout.
+# The public mirror flattens public/ to its root, so they cannot run there;
+# the private CI still runs them in full.
+_PRIVATE_LAYOUT_ONLY = {
+    "test_local_excel_interop.py",
+    "test_local_workflow_interop.py",
+    "test_office_engine_static.py",
+}
+
+
+def pytest_collection_modifyitems(config, items):
+    private_root = Path(__file__).resolve().parent.parent.parent
+    if (private_root / "public" / "static").is_dir():
+        return
+    skip = pytest.mark.skip(reason="requires the private monorepo layout (not the public mirror)")
+    for item in items:
+        if Path(str(item.fspath)).name in _PRIVATE_LAYOUT_ONLY:
+            item.add_marker(skip)

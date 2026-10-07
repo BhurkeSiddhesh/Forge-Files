@@ -1672,7 +1672,7 @@ def _group_ocr_lines(items: List[dict], page_width: Optional[float] = None) -> L
     space class, and it doesn't expose sub-box geometry this function could
     use to split it back apart. A dictionary-segmentation package
     (`wordninja`) was evaluated for this, but its legacy sdist-only build
-    fails under current setuptools (>= ~68, which is what File-Forge's
+    fails under current setuptools (>= ~68, which is what Forge Files'
     Docker build installs),
     so this is intentionally left unfixed rather than shipping a fragile
     dependency or a heuristic that can silently produce wrong text. This

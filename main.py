@@ -3867,7 +3867,7 @@ async def llms_txt():
         "no file-size paywall. Uploaded files are deleted from the server "
         "automatically after processing.",
         "",
-        "Forge Files is free software (source: https://github.com/BhurkeSiddhesh/File-Forge) "
+        "Forge Files is free software (source: https://github.com/BhurkeSiddhesh/Forge-Files) "
         "and can be self-hosted. Every tool below is a standalone page that works "
         "without JavaScript for reading purposes; no account is ever required.",
         "",
