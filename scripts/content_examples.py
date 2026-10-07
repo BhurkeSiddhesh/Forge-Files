@@ -59,4 +59,4 @@ def render_example(kind: str) -> str:
         <details><summary>How this example was made</summary><p>{html.escape(data["provenance"])}
         {html.escape(data["method"])}</p><p>Generated and checked on <time datetime="{data["reviewed"]}">{data["reviewed"]}</time>.
         <a href="/static/examples/manifest.json" data-ff-download download>Exact sizes, hashes and software versions</a> ·
-        <a href="https://github.com/BhurkeSiddhesh/File-Forge/blob/main/scripts/build_content_examples.py">Reproduction script</a>.</p></details></section>'''
+        <a href="https://github.com/BhurkeSiddhesh/Forge-Files/blob/main/scripts/build_content_examples.py">Reproduction script</a>.</p></details></section>'''

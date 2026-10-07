@@ -28,7 +28,7 @@ from scripts.content_examples import render_example
 ASSET_V = "20260928"
 CONTENT_REVIEWED = "2026-09-26"
 SITE = "Forge Files"
-GITHUB = "https://github.com/BhurkeSiddhesh/File-Forge"
+GITHUB = "https://github.com/BhurkeSiddhesh/Forge-Files"
 
 # Literal tokens substituted by main.py. Defined as plain strings (NOT inside an
 # f-string) so the braces survive into the rendered output verbatim.
