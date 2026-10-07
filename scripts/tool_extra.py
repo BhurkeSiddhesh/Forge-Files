@@ -196,6 +196,45 @@ for _slug, (_language, _script, _example, _checks) in _LANGUAGES.items():
         f"Compare {_checks} with the scan. Check a word on each page. Keep the original and use a qualified reviewer when transcription errors would matter.",
     )
 
+HELP.update({
+    "crop-pdf": (
+        "Trim a percentage from the top, bottom, left and right edges of every page, or only the pages you list.",
+        "To cut a scanner's dark border, trim 3% from each edge and check the page-1 preview. Enter 1,3-5 to leave other pages untouched.",
+        "Cropping changes the visible page area and is not redaction, so content outside it may remain in the file. Margins are percentages of the page, not exact millimetres.",
+        "Open the downloaded file in a separate viewer and check text close to each edge on several pages. Keep the original in case a margin was cut too far."),
+    "remove-pdf-pages": (
+        "Delete selected pages by clicking their thumbnails or typing positions such as 2,4-6, and save the rest as a new PDF.",
+        "To drop a blank page and an ad page from a ten-page file, type 3,7. Numbering is the physical position, starting at 1, not a printed page number.",
+        "Removing a page affects only the new copy and is not redaction of content on pages you keep. A page outside the document range cannot be removed.",
+        "Count the output pages against the original minus the removed ones, then check the pages on either side of each removal."),
+    "repair-pdf": (
+        "Attempt to rebuild a damaged PDF structure and save a recovered copy. Repair is best-effort and has no guaranteed outcome.",
+        "Use it when a viewer reports a damaged cross-reference table or refuses to open a download that was interrupted. Check whether every page is present in the result.",
+        "A file cut off mid-transfer cannot regain the bytes it lost, and heavily corrupted files may fail outright. The repaired copy may drop broken objects.",
+        "Open the repaired file in two viewers and page through it. If content is missing, download the original again from its source, and keep the damaged file."),
+    "create-pdf": (
+        "Create a new PDF from typed text with a title, or generate blank pages, in a page size you choose.",
+        "Paste a short note, set a title and choose A4 to get a plain printable document. Choose blank pages when you need a fixed number of empty sheets to combine later.",
+        "Text is set in a plain style without rich formatting, images or tables. Use Word to PDF to keep the layout of a formatted document. The blank page count is limited.",
+        "Open the PDF and check line breaks, accented characters and the total page count before sharing it."),
+    "annotate-pdf": (
+        "Add a highlight, underline, strikeout, sticky note or redaction rectangle to a chosen page and area, then save a new PDF.",
+        "To highlight a sentence, choose Highlight, enter the page, and give the area as x0,y0,x1,y1 in points. A sticky note takes its text from the note field.",
+        "Positions are typed as coordinates in points, not drawn with a mouse, so placement may take a trial. Check redaction output carefully before relying on it to remove sensitive content.",
+        "Zoom in on the annotated page and check that the mark covers the intended words. For redaction, try to select or search the covered text in the downloaded file."),
+    "edit-pdf-metadata": (
+        "Change the title, author, subject and keywords stored in a PDF's document properties, or clear existing metadata first.",
+        "Set a clear title before uploading a report to a portal, since viewers and search tools often show the title property instead of the file name.",
+        "This edits document properties only. It does not change page content, and clearing metadata does not remove names or text printed on the pages themselves.",
+        "Reopen the downloaded file and check its properties dialog. Keep the original in case you need the previous values."),
+    "word-to-powerpoint": (
+        "Turn each page of a DOCX into a presentation slide, at 96, 150 or 200 DPI.",
+        "Choose 150 DPI for a balanced result. Each page becomes a slide image, so use 200 DPI when small print must stay readable on screen.",
+        "Slides are page images, so text and tables are not editable shapes in PowerPoint. Higher quality makes a larger file. Document animations and comments do not carry over.",
+        "Check slide count, order and small text in slideshow mode. Use Word to PDF when you only need a faithful fixed-layout copy."),
+})
+
+
 EXAMPLE_KIND = {"compress-pdf": "compression", "pdf-to-word": "word", "heic-to-jpeg": "heic",
                 "merge-pdf": "pages", "extract-pdf-pages": "pages"}
 
