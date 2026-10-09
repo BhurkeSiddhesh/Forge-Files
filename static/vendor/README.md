@@ -78,6 +78,21 @@ Expected checksum of the current file:
 0f9a5cad07941f0826586c94e089d89b918c46e5c17cf2d5a3c6f666e3bc694f  pdf-lib.min.js
 ```
 
+## Fonts, Font Awesome and Cropper.js (`fonts/`, `fontawesome/`, `cropperjs/`)
+
+Self-hosted so no page ever requests a third-party host (the Windows desktop app enforces this with a
+Content-Security-Policy; see `LOCAL_ONLY` in `main.py`). All three came from npm, with the tarball's
+sha512 checked against the registry's published integrity before copying:
+
+| Dir | Package | Version | Licence |
+|---|---|---|---|
+| `fonts/` | `@fontsource/inter`, `@fontsource/jetbrains-mono`, `@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `@fontsource-variable/bricolage-grotesque` | 5.3.0 each | SIL OFL 1.1 (`fonts/LICENSE.*`) |
+| `fontawesome/` | `@fortawesome/fontawesome-free` (css + woff2 only) | 6.4.0 | Icons CC BY 4.0, fonts SIL OFL, code MIT (`fontawesome/LICENSE.txt`) |
+| `cropperjs/` | `cropperjs` (`dist/cropper.min.{js,css}`) | 1.5.13 | MIT (`cropperjs/LICENSE`) |
+
+`fonts/fonts.css` declares the `@font-face` rules (latin subset; other scripts fall back to system fonts).
+To update, `npm pack <package>@<version>`, verify the integrity, copy the files and change the version here.
+
 ## pdf.js (`pdfjs/`)
 
 An ES-module build, so it is `import()`ed by `static/local/ff-local.js` (`loadPdfJs`), not script-tagged,

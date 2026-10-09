@@ -956,7 +956,6 @@ def render_tool_page(slug: str) -> str:
     <meta name="twitter:image" content="{BASE}/static/og-image.png">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="{BASE}/static/apple-touch-icon.png">
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     {DS_HEAD}
     {ADS_HEAD}
     {CF_ANALYTICS}

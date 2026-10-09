@@ -1,0 +1,11 @@
+/* Self-hosted fonts (latin subset), replacing Google Fonts so no page ever calls out.
+   Files come from the @fontsource packages (SIL Open Font License); see ../README.md. */
+@font-face{font-family:"Inter";font-style:normal;font-display:swap;font-weight:400;src:url("inter-latin-400-normal.woff2") format("woff2");}
+@font-face{font-family:"Inter";font-style:normal;font-display:swap;font-weight:500;src:url("inter-latin-500-normal.woff2") format("woff2");}
+@font-face{font-family:"Inter";font-style:normal;font-display:swap;font-weight:600;src:url("inter-latin-600-normal.woff2") format("woff2");}
+@font-face{font-family:"Inter";font-style:normal;font-display:swap;font-weight:700;src:url("inter-latin-700-normal.woff2") format("woff2");}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-display:swap;font-weight:400;src:url("jetbrains-mono-latin-400-normal.woff2") format("woff2");}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-display:swap;font-weight:500;src:url("jetbrains-mono-latin-500-normal.woff2") format("woff2");}
+@font-face{font-family:"Geist";font-style:normal;font-display:swap;font-weight:100 900;src:url("geist-latin-wght-normal.woff2") format("woff2");}
+@font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:100 900;src:url("geist-mono-latin-wght-normal.woff2") format("woff2");}
+@font-face{font-family:"Bricolage Grotesque";font-style:normal;font-display:swap;font-weight:200 800;src:url("bricolage-grotesque-latin-wght-normal.woff2") format("woff2");}

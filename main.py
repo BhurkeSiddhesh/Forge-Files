@@ -225,6 +225,8 @@ async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    if LOCAL_ONLY:
+        response.headers["Content-Security-Policy"] = _LOCAL_ONLY_CSP
     path = request.url.path
     if path.startswith(_ISOLATED_PREFIXES):
         response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
@@ -1672,8 +1674,31 @@ def validate_quality(quality: int):
     validate_range("quality", quality, 1, 95)
 
 
+# Local-only mode (the Windows desktop app sets FF_LOCAL_ONLY=1): the page makes no
+# request to any host except this server. Analytics is stripped from every page and
+# a Content-Security-Policy makes the browser refuse (and report) anything else.
+LOCAL_ONLY = os.environ.get("FF_LOCAL_ONLY") == "1"
+_THIRD_PARTY_SCRIPT = re.compile(r"<script\b[^>]*\bsrc=\"https?://[^\"]+\"[^>]*>\s*</script>", re.I)
+_LOCAL_ONLY_CSP = (
+    "default-src 'self' blob: data:; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; font-src 'self' data:; "
+    "connect-src 'self' blob: data:; worker-src 'self' blob:; "
+    "frame-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; "
+    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+)
+
+
+def _localize(html_text: str) -> str:
+    """Drop every externally-hosted <script> so local-only pages stay local."""
+    return _THIRD_PARTY_SCRIPT.sub("", html_text)
+
+
 def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
+    if LOCAL_ONLY:
+        html_text = _localize(html_text)
     return (
         html_text
         .replace("{{BASE_URL}}", BASE_URL)
