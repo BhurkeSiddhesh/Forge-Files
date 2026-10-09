@@ -567,11 +567,14 @@ async def _warmup_ai():
 
 # Ensure directories exist
 BASE_DIR = Path(__file__).parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-OUTPUT_DIR = BASE_DIR / "outputs"
+# FF_DATA_DIR relocates writable state. The Windows desktop build installs the
+# app read-only-ish under Program Files, so it points this at %LOCALAPPDATA%.
+_DATA_DIR = Path(os.environ.get("FF_DATA_DIR") or BASE_DIR)
+UPLOAD_DIR = _DATA_DIR / "uploads"
+OUTPUT_DIR = _DATA_DIR / "outputs"
 
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mount static files
 class _StaticFilesWithModuleTypes(StaticFiles):
