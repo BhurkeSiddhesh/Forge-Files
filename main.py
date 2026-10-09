@@ -99,6 +99,7 @@ from scripts.ppt_utils import (
 )
 from scripts import seo_content
 from scripts import blog_content
+from scripts import desktop_feed
 from scripts import event_log
 from scripts import ga4_mp
 
@@ -1698,7 +1699,9 @@ def _localize(html_text: str) -> str:
 def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
     if LOCAL_ONLY:
-        html_text = _localize(html_text)
+        html_text = _localize(html_text).replace(
+            "</body>", '<script src="/static/local/desktop-shell.js" defer></script></body>', 1
+        )
     return (
         html_text
         .replace("{{BASE_URL}}", BASE_URL)
@@ -1721,6 +1724,23 @@ def _render_page(relative_path: str) -> str:
 def _render_tool_page(slug: str) -> str:
     """Server-render a tool landing page (full HTML, no JS needed for crawlers)."""
     return _substitute(seo_content.render_tool_page(slug))
+
+@app.get("/api/desktop/feed")
+async def api_desktop_feed():
+    """Update check + announcement for the Windows desktop app (404 on the website)."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    return await desktop_feed.get_response(os.environ.get("FF_APP_VERSION", "0.0.0"), _DATA_DIR)
+
+
+@app.post("/api/desktop/feed/off")
+async def api_desktop_feed_off():
+    """The person turned update checks off from the in-app card."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    desktop_feed.disable_feed(_DATA_DIR)
+    return {"enabled": False}
+
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def read_index():

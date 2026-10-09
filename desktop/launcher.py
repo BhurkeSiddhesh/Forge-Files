@@ -72,7 +72,30 @@ def _add_libreoffice_to_path() -> None:
             return
 
 
+def _app_version() -> str:
+    try:
+        return (_app_root() / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+class DesktopApi:
+    """Methods the page may call as ``window.pywebview.api.<name>``."""
+
+    def open_external(self, url: str) -> bool:
+        """Open a web link in the person's normal browser (never inside the app)."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(str(url))
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return False
+        import webbrowser
+
+        return webbrowser.open(str(url))
+
+
 def _configure_environment(data: Path, port: int) -> None:
+    os.environ.setdefault("FF_APP_VERSION", _app_version())
     os.environ.setdefault("FF_DATA_DIR", str(data))
     os.environ.setdefault("EVENT_DB_PATH", str(data / "events.db"))
     os.environ.setdefault("BASE_URL", f"http://{HOST}:{port}")
@@ -199,7 +222,8 @@ def main() -> int:
 def _run_window(webview, html: str, on_ready, storage: Path | None = None) -> int:
     webview.settings["ALLOW_DOWNLOADS"] = True
     window = webview.create_window(
-        "Forge Files", html=html, width=1280, height=860, min_size=(900, 640)
+        "Forge Files", html=html, width=1280, height=860, min_size=(900, 640),
+        js_api=DesktopApi(),
     )
     # storage_path persists cookies/localStorage between launches.
     webview.start(on_ready, window, private_mode=False,

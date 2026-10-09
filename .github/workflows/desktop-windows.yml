@@ -32,6 +32,10 @@ jobs:
         shell: pwsh
         run: |
           Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2124701" -OutFile desktop\MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+      - name: Stamp app version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.TrimStart('v') | Set-Content -NoNewline desktop/VERSION }
       - name: Build app (PyInstaller)
         run: pyinstaller desktop/forgefiles.spec --noconfirm --distpath desktop/dist --workpath desktop/build
       - name: Build installer (Inno Setup)

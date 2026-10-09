@@ -11,6 +11,7 @@ ROOT = HERE.parent  # public/: the app this installer packages
 datas = [
     (str(ROOT / "static"), "static"),
     (str(ROOT / "scripts" / "tool_registry.json"), "scripts"),
+    (str(HERE / "VERSION"), "."),
 ]
 binaries = []
 hiddenimports = ["main"]
