@@ -3815,7 +3815,7 @@ async def api_track(request: Request):
 # Content pages are static files in static/pages/. Tool pages are server-rendered
 # from scripts/seo_content.py (full HTML — no JS required, so JS-less AI crawlers
 # read the title/meta/body directly). Both kinds appear in sitemap.xml.
-CONTENT_PAGES = ["about", "faq", "contact", "privacy", "terms"]
+CONTENT_PAGES = ["about", "faq", "contact", "privacy", "terms", "download"]
 TOOL_PAGES = seo_content.TOOL_PAGES
 
 # Back-compat: every indexable slug (tests and tooling expect this iterable).

@@ -1,0 +1,58 @@
+name: Windows desktop build
+
+# Builds the installer from source in the open, so anyone can verify that the
+# downloadable .exe matches this repository. Triggered by a version tag
+# (v1.2.3) or manually.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -r desktop/requirements-desktop.txt
+      - name: Fetch offline assets (OCR language models, on-device Office engine)
+        run: |
+          python scripts/fix_models.py --indic
+          python scripts/fetch_office_engine.py
+      - name: Fetch WebView2 runtime (bundled so the installer works offline)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2124701" -OutFile desktop\MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+      - name: Build app (PyInstaller)
+        run: pyinstaller desktop/forgefiles.spec --noconfirm --distpath desktop/dist --workpath desktop/build
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" desktop\installer.iss
+      - name: Checksum
+        shell: pwsh
+        run: |
+          Get-ChildItem desktop\installer-out\*.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)" | Out-File -Encoding ascii "$($_.FullName).sha256"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ForgeFiles-Windows
+          path: desktop/installer-out/*
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/installer-out/*
