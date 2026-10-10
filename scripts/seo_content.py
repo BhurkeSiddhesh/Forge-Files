@@ -129,6 +129,7 @@ DS_NAV = (
     '        <a class="brand" href="/" aria-label="Forge Files home"><img src="/static/forge-files-logo-animation.gif" alt="" width="32" height="32">Forge <span class="fi">Files</span></a>\n'
     '        <a class="l" href="/">All tools</a><a class="l" href="/blog">Guides</a><a class="l" href="/about">About</a>\n'
     '        <span class="sp"></span>\n'
+    '        {{DOWNLOAD_CTA}}\n'
     '        <button type="button" class="ff-iconbtn" id="theme-toggle-btn" aria-label="Toggle dark mode">'
     + _ICON.format(c="ffc-moon", d='<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>')
     + _ICON.format(c="ffc-sun", d='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-2.93 1.41-1.41M17.66 6.34l1.41-1.41M2 12h2M20 12h2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41"/>')

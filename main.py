@@ -1714,6 +1714,18 @@ def _localize(html_text: str) -> str:
     return _THIRD_PARTY_SCRIPT.sub("", html_text)
 
 
+# "Get the Windows app" header button (the {{DOWNLOAD_CTA}} placeholder in every page header).
+# Shown only to Windows visitors on a desktop-width screen; the .exe is useless anywhere else.
+# Left out of the desktop app itself, where the person already has it. Inline <style>/<script>
+# so it does not depend on which stylesheet version a browser has cached.
+DOWNLOAD_CTA_HTML = (
+    '<style>.ff-dl-cta{display:none}@media (min-width:900px){.ff-dl-cta:not([hidden]){display:inline-flex}}</style>'
+    '<a class="ff-btn sm secondary ff-dl-cta" id="ff-dl-cta" href="/download" hidden>Get the Windows app</a>'
+    '<script>(function(){var u=navigator.userAgent;if(/Windows/.test(u)&&!/Mobi|Android|Phone/.test(u)){'
+    'var a=document.getElementById("ff-dl-cta");if(a)a.hidden=false}})()</script>'
+)
+
+
 def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
     if LOCAL_ONLY:
@@ -1728,6 +1740,7 @@ def _substitute(html_text: str) -> str:
         .replace("{{CONSENT_BANNER}}", CONSENT_BANNER_HTML)
         .replace("{{SITE_VERIFICATION}}", SITE_VERIFICATION_HTML)
         .replace("{{CF_ANALYTICS}}", CF_ANALYTICS_HTML)
+        .replace("{{DOWNLOAD_CTA}}", "" if LOCAL_ONLY else DOWNLOAD_CTA_HTML)
         .replace("{{GA_ANALYTICS}}", GA_ANALYTICS_HTML)
     )
 
