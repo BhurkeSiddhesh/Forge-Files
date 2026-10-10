@@ -102,7 +102,7 @@ def _configure_environment(data: Path, port: int) -> None:
     # One user on their own machine: the per-IP abuse limiter only gets in the way.
     os.environ.setdefault("RATE_LIMIT_ENABLED", "0")
     # No third-party requests of any kind: strips analytics and enforces a CSP.
-    os.environ.setdefault("FF_LOCAL_ONLY", "1")
+    os.environ["FF_LOCAL_ONLY"] = "1"  # not a default: a stray FF_LOCAL_ONLY=0 must not weaken the privacy guarantee
     # Force (not default) every analytics/ads key off, even if the machine has one set.
     for key in ("GA_MEASUREMENT_ID", "GOOGLE_ANALYTICS_ID", "GA_API_SECRET",
                 "CLOUDFLARE_ANALYTICS_TOKEN", "ADSENSE_CLIENT", "ADSENSE_SLOT", "ADSENSE_ADS_TXT"):
@@ -115,10 +115,15 @@ def _configure_environment(data: Path, port: int) -> None:
     _add_libreoffice_to_path()
 
 
+def _log_level() -> int:
+    level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").strip().upper(), None)
+    return level if isinstance(level, int) else logging.INFO
+
+
 def _configure_logging(data: Path) -> None:
     # A windowed exe has no stdout/stderr, so log to a file instead.
     logging.basicConfig(
-        level=logging.INFO,
+        level=_log_level(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[logging.FileHandler(data / "forgefiles.log", encoding="utf-8")],
         force=True,
@@ -164,13 +169,29 @@ def _spawn_server(port: int):
     )
 
 
-def _wait_until_up(port: int, timeout: float = 60.0) -> bool:
+def _wait_until_up(port: int, timeout: float = 60.0, proc=None) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if proc is not None and proc.poll() is not None:
+            logging.getLogger("forgefiles.desktop").error("Server process exited with code %s", proc.returncode)
+            return False
         if _is_forge_files(port):
             return True
         time.sleep(0.25)
     return False
+
+
+def _focus_existing_window() -> None:
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "Forge Files")
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+    except Exception:  # best effort only
+        logging.getLogger("forgefiles.desktop").debug("Could not focus the window", exc_info=True)
 
 
 SPLASH_HTML = """<!doctype html><meta charset=utf-8><title>Forge Files</title>
@@ -190,8 +211,11 @@ def main() -> int:
     # Reuse a running instance rather than starting a second server.
     for candidate in PREFERRED_PORTS:
         if not _can_bind(candidate) and _is_forge_files(candidate):
-            log.info("Existing instance on port %s; opening a window on it", candidate)
-            return _run_window(webview, SPLASH_HTML, lambda w: w.load_url(f"http://{HOST}:{candidate}/"))
+            # A second window would die with the first one's server, so bring the
+            # existing window forward and exit instead.
+            log.info("Already running on port %s; focusing the existing window", candidate)
+            _focus_existing_window()
+            return 0
 
     port = next((p for p in PREFERRED_PORTS if _can_bind(p)), None) or _free_port()
     _configure_environment(data, port)
@@ -205,7 +229,7 @@ def main() -> int:
             window.load_html("<h2 style='font-family:sans-serif'>Forge Files could not start.</h2>"
                              f"<p style='font-family:sans-serif'>See {data / 'forgefiles.log'}</p>")
             return
-        if _wait_until_up(port):
+        if _wait_until_up(port, proc=state["server"]):
             window.load_url(f"http://{HOST}:{port}/")
         else:
             log.error("Server did not start within 60s")
@@ -239,5 +263,10 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     if len(sys.argv) == 3 and sys.argv[1] == "--serve":
         _configure_logging(_data_dir())
-        sys.exit(_run_server(int(sys.argv[2])))
+        try:
+            code = _run_server(int(sys.argv[2]))
+        except BaseException:  # the parent only sees "did not start"; leave the reason in the log
+            logging.getLogger("forgefiles.server").exception("Server failed to start")
+            code = 1
+        sys.exit(code)
     sys.exit(main())

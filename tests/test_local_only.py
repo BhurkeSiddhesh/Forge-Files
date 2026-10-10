@@ -11,7 +11,7 @@ STATIC = Path(main.BASE_DIR) / "static"
 # What the browser fetches by itself: src= on any tag, and href= on <link> (stylesheets,
 # preconnect, preload). Plain <a href> links do nothing until a person clicks them.
 AUTO_LOADED = re.compile(
-    r"""(?:<[a-z]+\b[^>]*\bsrc|<link\b[^>]*\bhref)=["']https?://(?!www\.forgefiles\.org)[^"']+["']""", re.I
+    r"""(?:<[a-z]+\b[^>]*\bsrc|<link\b[^>]*\bhref)=["']https?://(?!testserver|www\.forgefiles\.org)[^"']+["']""", re.I
 )
 
 
@@ -42,6 +42,7 @@ def test_font_awesome_and_cropper_are_served_from_this_app():
 @pytest.fixture
 def local_client(monkeypatch):
     monkeypatch.setattr(main, "LOCAL_ONLY", True)
+    monkeypatch.setattr(main, "BASE_URL", "http://testserver")
     main._render_page.cache_clear()
     main._render_tool_page.cache_clear()
     yield TestClient(main.app)
@@ -76,4 +77,27 @@ def test_no_stylesheet_or_script_imports_a_font_cdn():
              or "fonts.gstatic.com" in path.read_text(encoding="utf-8", errors="ignore"))
     ]
     assert offenders == []
+
+
+class TestOnlyTheAppsOwnPageMayCallTheLocalServer:
+    """Any website in the person's browser can fire requests at 127.0.0.1."""
+
+    def test_the_apps_own_requests_pass(self, local_client):
+        assert local_client.get("/").status_code == 200
+        assert local_client.get("/", headers={"origin": "http://testserver"}).status_code == 200
+
+    def test_a_cross_site_post_is_refused(self, local_client):
+        resp = local_client.post("/api/desktop/feed/off", headers={"origin": "https://evil.example"})
+        assert resp.status_code == 403
+
+    def test_the_null_origin_is_refused(self, local_client):
+        assert local_client.post("/api/desktop/feed/off", headers={"origin": "null"}).status_code == 403
+
+    def test_a_rebinding_host_header_is_refused(self, local_client):
+        assert local_client.get("/", headers={"host": "evil.example"}).status_code == 403
+
+    def test_the_website_is_unaffected(self, monkeypatch):
+        monkeypatch.setattr(main, "LOCAL_ONLY", False)
+        resp = TestClient(main.app).get("/", headers={"origin": "https://elsewhere.example"})
+        assert resp.status_code == 200
 

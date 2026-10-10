@@ -67,6 +67,8 @@ class TestAnnouncements:
     def test_garbage_feed_is_harmless(self):
         assert feed.build_response(feed.sanitize_feed("nonsense"), "0.1.0", TODAY)["announcement"] is None
         assert feed.build_response(feed.sanitize_feed({"announcements": "x"}), "0.1.0", TODAY)["update"] is None
+        for bad in (5, {"a": 1}, None, True):
+            assert feed.sanitize_feed({"announcements": bad})["announcements"] == []
 
 
 class TestFetching:
@@ -125,6 +127,7 @@ class TestEndpoints:
 
     def test_desktop_serves_it_and_injects_the_shell_script(self, monkeypatch, tmp_path):
         monkeypatch.setattr(main, "LOCAL_ONLY", True)
+        monkeypatch.setattr(main, "BASE_URL", "http://testserver")
         monkeypatch.setattr(main, "_DATA_DIR", tmp_path)
         monkeypatch.setenv("FF_APP_VERSION", "0.1.0")
 

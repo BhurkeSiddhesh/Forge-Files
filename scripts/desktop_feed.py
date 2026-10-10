@@ -97,7 +97,8 @@ def sanitize_feed(raw) -> dict:
     if notes:
         feed["notes"] = notes
     announcements = []
-    for item in (raw.get("announcements") or [])[:10]:
+    items = raw.get("announcements")
+    for item in (items if isinstance(items, list) else [])[:10]:
         if not isinstance(item, dict):
             continue
         ident = item.get("id")

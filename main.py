@@ -221,8 +221,26 @@ _ISOLATED_PREFIXES = (
 _ENGINE_PREFIX = "/static/vendor/lo-wasm/"
 
 
+def _local_origin_blocked(request: Request) -> bool:
+    """Local-only mode: refuse requests that did not come from the app's own page.
+
+    The server sits on a predictable 127.0.0.1 port, and any website open in the
+    person's browser can fire requests at it (CORS stops it *reading* replies, not
+    *sending*). A wrong Host header is DNS rebinding; a foreign Origin is a cross-site
+    request. The app's own window sends neither.
+    """
+    netloc = urlsplit(BASE_URL).netloc.lower()
+    hosts = {netloc, netloc.replace("127.0.0.1", "localhost")}
+    if request.headers.get("host", "").lower() not in hosts:
+        return True
+    origin = request.headers.get("origin")
+    return origin is not None and origin.lower() not in {f"http://{h}" for h in hosts}
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
+    if LOCAL_ONLY and _local_origin_blocked(request):
+        return JSONResponse({"detail": "Forbidden"}, status_code=403)
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
