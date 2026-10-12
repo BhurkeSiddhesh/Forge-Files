@@ -65,10 +65,40 @@ def _sidecar(installer: Path) -> Path:
     return installer.with_name(installer.name + ".sha256")
 
 
+async def _verified_digest(installer: Path) -> str:
+    """SHA-256 of an installer, from its sidecar or (once) by hashing the file.
+
+    Files copied straight to the server by CI have no sidecar yet; hashing happens
+    off the event loop, and the result is stored so it is only done once.
+    """
+    sidecar = _sidecar(installer)
+    if sidecar.is_file():
+        return sidecar.read_text(encoding="ascii").strip()
+
+    def hash_file() -> str:
+        digest = hashlib.sha256()
+        with installer.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    value = await asyncio.to_thread(hash_file)
+    sidecar.write_text(value, encoding="ascii")
+    return value
+
+
 def version_of(name: str) -> tuple:
-    """'ForgeFiles-Setup-1.2.3.exe' -> (1, 2, 3); anything else -> ()."""
-    match = re.fullmatch(r"ForgeFiles-Setup-(\d+(?:\.\d+)*)\.exe", name)
-    return tuple(int(part) for part in match.group(1).split(".")) if match else ()
+    """Sortable version of 'ForgeFiles-Setup-1.2.3[-beta].exe'.
+
+    A release sorts above its own pre-releases ('1.2.3' > '1.2.3-beta') and below
+    the next version ('1.2.3-beta' < '1.2.4'); an unparseable name sorts lowest.
+    """
+    match = re.fullmatch(r"ForgeFiles-Setup-(\d+(?:\.\d+)*)(?:-([\w.\-]+))?\.exe", name)
+    if not match:
+        return ((), 0, "")
+    numbers = tuple(int(part) for part in match.group(1).split("."))
+    suffix = match.group(2) or ""
+    return (numbers, 0 if suffix else 1, suffix)
 
 
 async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> None:
@@ -126,10 +156,8 @@ async def refresh(repo: str, directory: Path, *, force: bool = False) -> None:
                     return  # a newer build was deployed directly; never downgrade it
                 have = directory / asset["name"]
                 if have.is_file() and have.stat().st_size == asset["size"]:
-                    sidecar = _sidecar(have)
-                    verified = sidecar.read_text(encoding="ascii").strip() if sidecar.is_file() else None
-                    if not asset["sha256"] or verified is None or verified == asset["sha256"]:
-                        return  # up to date (or nothing to compare against)
+                    if not asset["sha256"] or await _verified_digest(have) == asset["sha256"]:
+                        return  # up to date (or the release gives nothing to compare against)
                 await _download(asset, directory, http)
                 logger.info("Mirrored Windows installer %s", asset["name"])
         except Exception:

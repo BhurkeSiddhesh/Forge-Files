@@ -224,3 +224,43 @@ class TestReviewFollowUps:
         TestInstallerMirror()._patch(monkeypatch, TestInstallerMirror()._github(digest=digest))
         asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
         assert exe.read_bytes() == body
+
+    def test_a_ci_deployed_installer_without_a_sidecar_is_checked_by_hashing(self, monkeypatch, tmp_path):
+        body = TestInstallerMirror.BODY
+        exe = tmp_path / "ForgeFiles-Setup-2.0.0.exe"
+        exe.write_bytes(b"" * len(body))  # same name and size, different bytes, no sidecar
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        TestInstallerMirror()._patch(monkeypatch, TestInstallerMirror()._github(digest=digest))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert exe.read_bytes() == body
+
+    def test_a_matching_installer_without_a_sidecar_is_left_alone(self, monkeypatch, tmp_path):
+        body = TestInstallerMirror.BODY
+        exe = tmp_path / "ForgeFiles-Setup-2.0.0.exe"
+        exe.write_bytes(body)
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        TestInstallerMirror()._patch(monkeypatch, self._never_downloads(digest, body))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert (tmp_path / "ForgeFiles-Setup-2.0.0.exe.sha256").read_text() == hashlib.sha256(body).hexdigest()
+
+    @staticmethod
+    def _never_downloads(digest, body):
+        asset = {
+            "name": "ForgeFiles-Setup-2.0.0.exe",
+            "browser_download_url": "https://github.com/o/r/releases/download/v2/ForgeFiles-Setup-2.0.0.exe",
+            "size": len(body),
+            "digest": digest,
+        }
+
+        def handler(request):
+            assert request.url.host == "api.github.com", "must not download"
+            return httpx.Response(200, json={"assets": [asset]})
+
+        return httpx.MockTransport(handler)
+
+    def test_prerelease_versions_order_correctly(self):
+        v = installer_mirror.version_of
+        assert v("ForgeFiles-Setup-2.0.0-beta.exe") > v("ForgeFiles-Setup-1.9.0.exe")
+        assert v("ForgeFiles-Setup-2.0.0.exe") > v("ForgeFiles-Setup-2.0.0-beta.exe")
+        assert v("ForgeFiles-Setup-2.0.1.exe") > v("ForgeFiles-Setup-2.0.0.exe")
+        assert v("junk.exe") < v("ForgeFiles-Setup-0.0.0.exe")
