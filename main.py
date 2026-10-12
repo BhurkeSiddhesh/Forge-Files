@@ -1714,13 +1714,18 @@ def _localize(html_text: str) -> str:
     return _THIRD_PARTY_SCRIPT.sub("", html_text)
 
 
-# "Get the Windows app" header button (the {{DOWNLOAD_CTA}} placeholder in every page header).
+# "Download for Windows" header button (the {{DOWNLOAD_CTA}} placeholder in every page header).
 # Shown only to Windows visitors on a desktop-width screen; the .exe is useless anywhere else.
 # Left out of the desktop app itself, where the person already has it. Inline <style>/<script>
 # so it does not depend on which stylesheet version a browser has cached.
 DOWNLOAD_CTA_HTML = (
-    '<style>.ff-dl-cta{display:none}@media (min-width:900px){.ff-dl-cta:not([hidden]){display:inline-flex}}</style>'
-    '<a class="ff-btn sm secondary ff-dl-cta" id="ff-dl-cta" href="/download" hidden>Get the Windows app</a>'
+    '<style>.ff-dl-cta{display:none;gap:6px;align-items:center;font-weight:600;white-space:nowrap}'
+    '.ff-dl-cta svg{flex:none}'
+    '@media (min-width:900px){.ff-dl-cta:not([hidden]){display:inline-flex}}</style>'
+    '<a class="ff-btn sm ff-dl-cta" id="ff-dl-cta" href="/download" hidden>'
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>'
+    'Download for Windows &mdash; free</a>'
     '<script>(function(){var u=navigator.userAgent;if(/Windows/.test(u)&&!/Mobi|Android|Phone/.test(u)){'
     'var a=document.getElementById("ff-dl-cta");if(a)a.hidden=false}})()</script>'
 )
@@ -3860,6 +3865,57 @@ async def api_track(request: Request):
                 partial(event_log.log_funnel_event, event, label=label, referrer=referrer)
             )
     return Response(status_code=204)
+
+
+# --- Windows installer download ---
+# The installer is far too big to live in git or on the app server, so it stays a
+# release asset. /download/windows looks up the newest release and sends the
+# browser straight to the installer file: one click downloads it, and nobody ever
+# lands on a GitHub page. If the lookup fails it falls back to the releases page.
+WINDOWS_RELEASE_REPO = os.environ.get("WINDOWS_RELEASE_REPO", "BhurkeSiddhesh/Forge-Files")
+_INSTALLER_RE = re.compile(r"^ForgeFiles-Setup-[\w.\-]+\.exe$")
+_INSTALLER_CACHE_SECONDS = 600
+_installer_cache: dict = {"at": 0.0, "url": None}
+
+
+# Set to the installer's public URL (e.g. an R2 custom domain such as
+# https://downloads.forgefiles.org/ForgeFiles-Setup-latest.exe) to serve it from there.
+WINDOWS_INSTALLER_URL = os.environ.get("WINDOWS_INSTALLER_URL", "").strip()
+
+
+async def _latest_installer_url() -> str | None:
+    if WINDOWS_INSTALLER_URL.startswith("https://"):
+        return WINDOWS_INSTALLER_URL
+    now = time.monotonic()
+    if _installer_cache["url"] and now - _installer_cache["at"] < _INSTALLER_CACHE_SECONDS:
+        return _installer_cache["url"]
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            resp = await http.get(
+                f"https://api.github.com/repos/{WINDOWS_RELEASE_REPO}/releases/latest",
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "ForgeFiles-Website"},
+            )
+        resp.raise_for_status()
+        for asset in resp.json().get("assets", []):
+            url = asset.get("browser_download_url", "")
+            if _INSTALLER_RE.match(asset.get("name", "")) and url.startswith("https://github.com/"):
+                _installer_cache.update(at=now, url=url)
+                return url
+    except Exception:
+        logger.warning("Could not look up the latest Windows installer", exc_info=True)
+    return _installer_cache["url"]  # a stale link beats none
+
+
+@app.get("/download/windows")
+async def download_windows():
+    url = await _latest_installer_url()
+    return RedirectResponse(
+        url or f"https://github.com/{WINDOWS_RELEASE_REPO}/releases/latest",
+        status_code=302,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # --- SEO Routes ---
