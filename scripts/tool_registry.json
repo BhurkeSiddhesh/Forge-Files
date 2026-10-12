@@ -752,7 +752,8 @@
     {"id": "adsense", "reason": "Web monetization only; mobile uses no ads"},
     {"id": "search_metadata", "reason": "Web search indexing only"},
     {"id": "web_checkout", "reason": "Mobile purchases use RevenueCat in-app purchase"},
-    {"id": "public_repo_mirroring", "reason": "Development infrastructure only"}
+    {"id": "public_repo_mirroring", "reason": "Development infrastructure only"},
+    {"id": "windows_installer_download", "reason": "Windows desktop installer; it cannot run on a phone, so the header button and /download/windows are web-only (pending owner approval)"}
   ],
   "support_api_routes": [
     {"path": "/api/pdf/convert-to-word", "reason": "Compatibility POST; the UI uses the recoverable stream endpoint"},

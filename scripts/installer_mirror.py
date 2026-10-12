@@ -5,7 +5,8 @@ when there is one, so people download from forgefiles.org instead of github.com;
 until the copy exists (or if anything here fails) the route falls back to the
 release link, so a download never breaks because of this module.
 
-Only the single newest installer is kept. The download is written to a ``.part``
+Only the single newest installer is kept, and a newer one deployed directly to the
+server (by CI) is never replaced by an older release. The download is written to a ``.part``
 file, checked against the size (and SHA-256, when GitHub reports one) and then
 renamed into place, so a half-finished or corrupt file is never served.
 """
@@ -60,6 +61,16 @@ async def latest_asset(repo: str, http: httpx.AsyncClient) -> dict | None:
     return None
 
 
+def _sidecar(installer: Path) -> Path:
+    return installer.with_name(installer.name + ".sha256")
+
+
+def version_of(name: str) -> tuple:
+    """'ForgeFiles-Setup-1.2.3.exe' -> (1, 2, 3); anything else -> ()."""
+    match = re.fullmatch(r"ForgeFiles-Setup-(\d+(?:\.\d+)*)\.exe", name)
+    return tuple(int(part) for part in match.group(1).split(".")) if match else ()
+
+
 async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> None:
     if not 0 < asset["size"] <= MAX_INSTALLER_BYTES:
         raise ValueError(f"unexpected installer size {asset['size']}")
@@ -83,10 +94,14 @@ async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> No
         if asset["sha256"] and digest.hexdigest() != asset["sha256"]:
             raise ValueError("checksum does not match the release")
         os.replace(part, final)
+        # Remember what the file was verified against, so a re-uploaded asset with
+        # the same name and size is noticed later without re-hashing 500 MB.
+        _sidecar(final).write_text(digest.hexdigest(), encoding="ascii")
     finally:
         part.unlink(missing_ok=True)
-    for old in directory.glob("ForgeFiles-Setup-*.exe"):
-        if old.name != asset["name"]:
+    keep = {final.name, _sidecar(final).name}
+    for old in [*directory.glob("ForgeFiles-Setup-*.exe"), *directory.glob("ForgeFiles-Setup-*.exe.sha256")]:
+        if old.name not in keep:
             old.unlink(missing_ok=True)
 
 
@@ -106,9 +121,15 @@ async def refresh(repo: str, directory: Path, *, force: bool = False) -> None:
                 asset = await latest_asset(repo, http)
                 if not asset:
                     return
+                local = cached_installer(directory)
+                if local and version_of(local.name) > version_of(asset["name"]):
+                    return  # a newer build was deployed directly; never downgrade it
                 have = directory / asset["name"]
                 if have.is_file() and have.stat().st_size == asset["size"]:
-                    return
+                    sidecar = _sidecar(have)
+                    verified = sidecar.read_text(encoding="ascii").strip() if sidecar.is_file() else None
+                    if not asset["sha256"] or verified is None or verified == asset["sha256"]:
+                        return  # up to date (or nothing to compare against)
                 await _download(asset, directory, http)
                 logger.info("Mirrored Windows installer %s", asset["name"])
         except Exception:

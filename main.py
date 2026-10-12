@@ -284,7 +284,7 @@ BASE_URL = os.environ.get("BASE_URL", "https://www.forgefiles.org").rstrip("/")
 # date on every request is inaccurate and teaches crawlers to distrust the field
 # (wasting crawl budget). Bump CONTENT_LAST_MODIFIED (or set the env var on a
 # real content change) so the sitemap reflects the true last edit, not "now".
-CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-10-07").strip()
+CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-10-12").strip()
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 # Multi-file endpoints (the merge tools, images->PDF) share one budget across the
 # whole request: a per-file cap alone would let a single request write
@@ -3879,21 +3879,27 @@ WINDOWS_RELEASE_REPO = os.environ.get("WINDOWS_RELEASE_REPO", "BhurkeSiddhesh/Fo
 WINDOWS_INSTALLER_URL = os.environ.get("WINDOWS_INSTALLER_URL", "").strip()
 WINDOWS_INSTALLER_MIRROR = os.environ.get("WINDOWS_INSTALLER_MIRROR", "1") != "0"
 INSTALLER_DIR = _DATA_DIR / "installer"
-_installer_link: dict = {"at": 0.0, "url": None}
+_installer_link: dict = {"at": float("-inf"), "url": None}
 
 
 async def _release_installer_url() -> str | None:
-    """Direct link to the newest installer on GitHub (cached; None if unreachable)."""
+    """Direct link to the newest installer on GitHub (None if there is none).
+
+    Every outcome is cached for the check interval, including "no release yet" and
+    "GitHub unreachable", so a busy page cannot hammer GitHub's unauthenticated
+    rate limit (60 requests an hour per IP).
+    """
     now = time.monotonic()
-    if _installer_link["url"] and now - _installer_link["at"] < installer_mirror.CHECK_EVERY_SECONDS:
+    if now - _installer_link["at"] < installer_mirror.CHECK_EVERY_SECONDS:
         return _installer_link["url"]
+    _installer_link["at"] = now
     try:
         import httpx
 
         async with httpx.AsyncClient(timeout=5.0) as http:
             asset = await installer_mirror.latest_asset(WINDOWS_RELEASE_REPO, http)
         if asset:
-            _installer_link.update(at=now, url=asset["url"])
+            _installer_link["url"] = asset["url"]
     except Exception:
         logger.warning("Could not look up the latest Windows installer", exc_info=True)
     return _installer_link["url"]  # a stale link beats none
