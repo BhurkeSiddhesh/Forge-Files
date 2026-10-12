@@ -100,6 +100,7 @@ from scripts.ppt_utils import (
 from scripts import seo_content
 from scripts import blog_content
 from scripts import desktop_feed
+from scripts import installer_mirror
 from scripts import event_log
 from scripts import ga4_mp
 
@@ -3868,49 +3869,51 @@ async def api_track(request: Request):
 
 
 # --- Windows installer download ---
-# The installer is far too big to live in git or on the app server, so it stays a
-# release asset. /download/windows looks up the newest release and sends the
-# browser straight to the installer file: one click downloads it, and nobody ever
-# lands on a GitHub page. If the lookup fails it falls back to the releases page.
+# /download/windows serves the installer from this server's own disk, so people
+# download from forgefiles.org and never land on a GitHub page. The file is a
+# GitHub release asset: scripts/installer_mirror.py copies the newest one into
+# FF_DATA_DIR/installer in the background. Until that copy exists (or if it
+# fails) the route sends the browser straight to the release file instead.
+# Set WINDOWS_INSTALLER_URL (e.g. an R2 custom domain) to redirect there instead.
 WINDOWS_RELEASE_REPO = os.environ.get("WINDOWS_RELEASE_REPO", "BhurkeSiddhesh/Forge-Files")
-_INSTALLER_RE = re.compile(r"^ForgeFiles-Setup-[\w.\-]+\.exe$")
-_INSTALLER_CACHE_SECONDS = 600
-_installer_cache: dict = {"at": 0.0, "url": None}
-
-
-# Set to the installer's public URL (e.g. an R2 custom domain such as
-# https://downloads.forgefiles.org/ForgeFiles-Setup-latest.exe) to serve it from there.
 WINDOWS_INSTALLER_URL = os.environ.get("WINDOWS_INSTALLER_URL", "").strip()
+WINDOWS_INSTALLER_MIRROR = os.environ.get("WINDOWS_INSTALLER_MIRROR", "1") != "0"
+INSTALLER_DIR = _DATA_DIR / "installer"
+_installer_link: dict = {"at": 0.0, "url": None}
 
 
-async def _latest_installer_url() -> str | None:
-    if WINDOWS_INSTALLER_URL.startswith("https://"):
-        return WINDOWS_INSTALLER_URL
+async def _release_installer_url() -> str | None:
+    """Direct link to the newest installer on GitHub (cached; None if unreachable)."""
     now = time.monotonic()
-    if _installer_cache["url"] and now - _installer_cache["at"] < _INSTALLER_CACHE_SECONDS:
-        return _installer_cache["url"]
+    if _installer_link["url"] and now - _installer_link["at"] < installer_mirror.CHECK_EVERY_SECONDS:
+        return _installer_link["url"]
     try:
         import httpx
 
         async with httpx.AsyncClient(timeout=5.0) as http:
-            resp = await http.get(
-                f"https://api.github.com/repos/{WINDOWS_RELEASE_REPO}/releases/latest",
-                headers={"Accept": "application/vnd.github+json", "User-Agent": "ForgeFiles-Website"},
-            )
-        resp.raise_for_status()
-        for asset in resp.json().get("assets", []):
-            url = asset.get("browser_download_url", "")
-            if _INSTALLER_RE.match(asset.get("name", "")) and url.startswith("https://github.com/"):
-                _installer_cache.update(at=now, url=url)
-                return url
+            asset = await installer_mirror.latest_asset(WINDOWS_RELEASE_REPO, http)
+        if asset:
+            _installer_link.update(at=now, url=asset["url"])
     except Exception:
         logger.warning("Could not look up the latest Windows installer", exc_info=True)
-    return _installer_cache["url"]  # a stale link beats none
+    return _installer_link["url"]  # a stale link beats none
 
 
 @app.get("/download/windows")
-async def download_windows():
-    url = await _latest_installer_url()
+async def download_windows(background_tasks: BackgroundTasks):
+    if WINDOWS_INSTALLER_URL.startswith("https://"):
+        return RedirectResponse(WINDOWS_INSTALLER_URL, status_code=302, headers={"Cache-Control": "no-store"})
+    if WINDOWS_INSTALLER_MIRROR:
+        background_tasks.add_task(installer_mirror.refresh, WINDOWS_RELEASE_REPO, INSTALLER_DIR)
+        local = installer_mirror.cached_installer(INSTALLER_DIR)
+        if local:
+            return FileResponse(
+                local,
+                media_type="application/octet-stream",
+                filename=local.name,
+                headers={"Cache-Control": "public, max-age=300"},
+            )
+    url = await _release_installer_url()
     return RedirectResponse(
         url or f"https://github.com/{WINDOWS_RELEASE_REPO}/releases/latest",
         status_code=302,
