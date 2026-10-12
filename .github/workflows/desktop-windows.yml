@@ -55,6 +55,9 @@ jobs:
         with:
           name: ForgeFiles-Windows
           path: desktop/installer-out/*
+          # The installer lives on the server / in the release; a day is enough to grab
+          # a test build, and long retention filled the repo's artifact quota (3 GB).
+          retention-days: 1
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
