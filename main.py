@@ -1720,13 +1720,24 @@ def _localize(html_text: str) -> str:
 # Left out of the desktop app itself, where the person already has it. Inline <style>/<script>
 # so it does not depend on which stylesheet version a browser has cached.
 DOWNLOAD_CTA_HTML = (
-    '<style>.ff-dl-cta{display:none;gap:6px;align-items:center;font-weight:600;white-space:nowrap}'
+    '<style>.ff-dl-cta{display:none;gap:7px;align-items:center;font-weight:600;white-space:nowrap;'
+    'position:relative;overflow:hidden}'
     '.ff-dl-cta svg{flex:none}'
+    '.ff-dl-cta::after{content:"";position:absolute;inset:0;pointer-events:none;'
+    'background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%);'
+    'transform:translateX(-120%);animation:ff-dl-shine 4.5s ease-in-out 1.5s infinite}'
+    '.ff-dl-arrow{animation:ff-dl-nudge 2s ease-in-out infinite}'
+    '@keyframes ff-dl-shine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}'
+    '@keyframes ff-dl-nudge{0%,100%{transform:translateY(-1px)}50%{transform:translateY(2px)}}'
+    '@media (prefers-reduced-motion:reduce){.ff-dl-cta::after,.ff-dl-arrow{animation:none}}'
     '@media (min-width:900px){.ff-dl-cta:not([hidden]){display:inline-flex}}</style>'
     '<a class="ff-btn sm ff-dl-cta" id="ff-dl-cta" href="/download" hidden>'
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" '
-    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>'
-    'Download for Windows &mdash; free</a>'
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    '<path d="M3 5.6 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.4zM11.5 12.5H21V21l-9.5-1.4z"/></svg>'
+    '<span>Download for Windows</span>'
+    '<svg class="ff-dl-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg></a>'
     '<script>(function(){var u=navigator.userAgent;if(/Windows/.test(u)&&!/Mobi|Android|Phone/.test(u)){'
     'var a=document.getElementById("ff-dl-cta");if(a)a.hidden=false}})()</script>'
 )

@@ -37,6 +37,15 @@ class TestHeaderButton:
             assert "Download for Windows" in body, path
             assert "{{DOWNLOAD_CTA}}" not in body, path
 
+    def test_the_button_is_animated_with_icons_and_no_em_dash(self):
+        body = client.get("/").text
+        cta = body[body.index('id="ff-dl-cta"'):]
+        cta = cta[: cta.index("</a>")]
+        assert "Download for Windows" in cta and "&mdash;" not in cta and chr(0x2014) not in cta
+        assert cta.count("<svg") == 2  # Windows logo + download arrow
+        assert "@keyframes ff-dl-shine" in body and "@keyframes ff-dl-nudge" in body
+        assert "prefers-reduced-motion:reduce" in body  # motion is off for people who ask
+
     def test_it_only_shows_for_windows_desktop_visitors(self):
         body = client.get("/").text
         assert "hidden>" in body  # hidden until the script reveals it
