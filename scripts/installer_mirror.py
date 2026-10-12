@@ -5,7 +5,8 @@ when there is one, so people download from forgefiles.org instead of github.com;
 until the copy exists (or if anything here fails) the route falls back to the
 release link, so a download never breaks because of this module.
 
-Only the single newest installer is kept. The download is written to a ``.part``
+Only the single newest installer is kept, and a newer one deployed directly to the
+server (by CI) is never replaced by an older release. The download is written to a ``.part``
 file, checked against the size (and SHA-256, when GitHub reports one) and then
 renamed into place, so a half-finished or corrupt file is never served.
 """
@@ -60,6 +61,53 @@ async def latest_asset(repo: str, http: httpx.AsyncClient) -> dict | None:
     return None
 
 
+def _sidecar(installer: Path) -> Path:
+    return installer.with_name(installer.name + ".sha256")
+
+
+async def _verified_digest(installer: Path) -> str:
+    """SHA-256 of an installer, from its sidecar or (once) by hashing the file.
+
+    Files copied straight to the server by CI have no sidecar yet; hashing happens
+    off the event loop, and the result is stored so it is only done once.
+    """
+    sidecar = _sidecar(installer)
+    if sidecar.is_file():
+        return sidecar.read_text(encoding="ascii").strip()
+
+    def hash_file() -> str:
+        digest = hashlib.sha256()
+        with installer.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    value = await asyncio.to_thread(hash_file)
+    sidecar.write_text(value, encoding="ascii")
+    return value
+
+
+def version_of(name: str) -> tuple:
+    """Sortable version of 'ForgeFiles-Setup-1.2.3[-beta].exe'.
+
+    A release sorts above its own pre-releases ('1.2.3' > '1.2.3-beta') and below
+    the next version ('1.2.3-beta' < '1.2.4'); an unparseable name sorts lowest.
+    """
+    match = re.fullmatch(r"ForgeFiles-Setup-(\d+(?:\.\d+)*)(?:-([\w.\-]+))?\.exe", name)
+    if not match:
+        return ((), 0, ())
+    numbers = tuple(int(part) for part in match.group(1).split("."))
+    suffix = match.group(2) or ""
+    # Pre-release parts compare one by one, numbers numerically and below text
+    # (semver style), so 'beta.2' < 'beta.10'.
+    parts = tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.split(r"[.\-]", suffix)
+        if part
+    )
+    return (numbers, 0 if suffix else 1, parts)
+
+
 async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> None:
     if not 0 < asset["size"] <= MAX_INSTALLER_BYTES:
         raise ValueError(f"unexpected installer size {asset['size']}")
@@ -83,10 +131,14 @@ async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> No
         if asset["sha256"] and digest.hexdigest() != asset["sha256"]:
             raise ValueError("checksum does not match the release")
         os.replace(part, final)
+        # Remember what the file was verified against, so a re-uploaded asset with
+        # the same name and size is noticed later without re-hashing 500 MB.
+        _sidecar(final).write_text(digest.hexdigest(), encoding="ascii")
     finally:
         part.unlink(missing_ok=True)
-    for old in directory.glob("ForgeFiles-Setup-*.exe"):
-        if old.name != asset["name"]:
+    keep = {final.name, _sidecar(final).name}
+    for old in [*directory.glob("ForgeFiles-Setup-*.exe"), *directory.glob("ForgeFiles-Setup-*.exe.sha256")]:
+        if old.name not in keep:
             old.unlink(missing_ok=True)
 
 
@@ -106,9 +158,13 @@ async def refresh(repo: str, directory: Path, *, force: bool = False) -> None:
                 asset = await latest_asset(repo, http)
                 if not asset:
                     return
+                local = cached_installer(directory)
+                if local and version_of(local.name) > version_of(asset["name"]):
+                    return  # a newer build was deployed directly; never downgrade it
                 have = directory / asset["name"]
                 if have.is_file() and have.stat().st_size == asset["size"]:
-                    return
+                    if not asset["sha256"] or await _verified_digest(have) == asset["sha256"]:
+                        return  # up to date (or the release gives nothing to compare against)
                 await _download(asset, directory, http)
                 logger.info("Mirrored Windows installer %s", asset["name"])
         except Exception:

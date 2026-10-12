@@ -161,7 +161,10 @@ class TestInstallerMirror:
         (tmp_path / "ForgeFiles-Setup-1.0.0.exe").write_bytes(b"old")
         self._patch(monkeypatch, self._github(digest="sha256:" + hashlib.sha256(self.BODY).hexdigest()))
         asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
-        assert [p.name for p in tmp_path.iterdir()] == ["ForgeFiles-Setup-2.0.0.exe"]
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "ForgeFiles-Setup-2.0.0.exe",
+            "ForgeFiles-Setup-2.0.0.exe.sha256",
+        ]
         assert installer_mirror.cached_installer(tmp_path).read_bytes() == self.BODY
 
     def test_a_wrong_checksum_is_never_served(self, monkeypatch, tmp_path):
@@ -194,3 +197,81 @@ class TestInstallerMirror:
         self._patch(monkeypatch, httpx.MockTransport(boom))
         asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
         assert installer_mirror.cached_installer(tmp_path) is None
+
+
+class TestReviewFollowUps:
+    def test_a_missing_release_is_cached_too(self, monkeypatch):
+        calls = []
+
+        async def none_yet(repo, http):
+            calls.append(repo)
+            return None
+
+        monkeypatch.setattr(main.installer_mirror, "latest_asset", none_yet)
+        monkeypatch.setitem(main._installer_link, "at", float("-inf"))
+        monkeypatch.setitem(main._installer_link, "url", None)
+        for _ in range(3):
+            assert asyncio.run(main._release_installer_url()) is None
+        assert len(calls) == 1  # not one GitHub request per click
+
+    def test_the_page_still_links_to_the_checksum_on_the_releases_page(self):
+        body = client.get("/download").text
+        assert "releases/latest\">releases page</a>" in body
+
+    def test_a_newer_deployed_installer_is_never_replaced_by_an_older_release(self, monkeypatch, tmp_path):
+        (tmp_path / "ForgeFiles-Setup-3.0.0.exe").write_bytes(b"deployed-by-ci")
+        TestInstallerMirror()._patch(monkeypatch, TestInstallerMirror()._github(name="ForgeFiles-Setup-2.0.0.exe"))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert [p.name for p in tmp_path.iterdir()] == ["ForgeFiles-Setup-3.0.0.exe"]
+
+    def test_a_reuploaded_asset_with_the_same_name_and_size_is_fetched_again(self, monkeypatch, tmp_path):
+        body = TestInstallerMirror.BODY
+        exe = tmp_path / "ForgeFiles-Setup-2.0.0.exe"
+        exe.write_bytes(b"" * len(body))  # same size, different bytes
+        (tmp_path / "ForgeFiles-Setup-2.0.0.exe.sha256").write_text("0" * 64)
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        TestInstallerMirror()._patch(monkeypatch, TestInstallerMirror()._github(digest=digest))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert exe.read_bytes() == body
+
+    def test_a_ci_deployed_installer_without_a_sidecar_is_checked_by_hashing(self, monkeypatch, tmp_path):
+        body = TestInstallerMirror.BODY
+        exe = tmp_path / "ForgeFiles-Setup-2.0.0.exe"
+        exe.write_bytes(b"" * len(body))  # same name and size, different bytes, no sidecar
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        TestInstallerMirror()._patch(monkeypatch, TestInstallerMirror()._github(digest=digest))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert exe.read_bytes() == body
+
+    def test_a_matching_installer_without_a_sidecar_is_left_alone(self, monkeypatch, tmp_path):
+        body = TestInstallerMirror.BODY
+        exe = tmp_path / "ForgeFiles-Setup-2.0.0.exe"
+        exe.write_bytes(body)
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        TestInstallerMirror()._patch(monkeypatch, self._never_downloads(digest, body))
+        asyncio.run(installer_mirror.refresh("o/r", tmp_path, force=True))
+        assert (tmp_path / "ForgeFiles-Setup-2.0.0.exe.sha256").read_text() == hashlib.sha256(body).hexdigest()
+
+    @staticmethod
+    def _never_downloads(digest, body):
+        asset = {
+            "name": "ForgeFiles-Setup-2.0.0.exe",
+            "browser_download_url": "https://github.com/o/r/releases/download/v2/ForgeFiles-Setup-2.0.0.exe",
+            "size": len(body),
+            "digest": digest,
+        }
+
+        def handler(request):
+            assert request.url.host == "api.github.com", "must not download"
+            return httpx.Response(200, json={"assets": [asset]})
+
+        return httpx.MockTransport(handler)
+
+    def test_prerelease_versions_order_correctly(self):
+        v = installer_mirror.version_of
+        assert v("ForgeFiles-Setup-2.0.0-beta.exe") > v("ForgeFiles-Setup-1.9.0.exe")
+        assert v("ForgeFiles-Setup-2.0.0.exe") > v("ForgeFiles-Setup-2.0.0-beta.exe")
+        assert v("ForgeFiles-Setup-2.0.1.exe") > v("ForgeFiles-Setup-2.0.0.exe")
+        assert v("junk.exe") < v("ForgeFiles-Setup-0.0.0.exe")
+        assert v("ForgeFiles-Setup-2.0.0-beta.10.exe") > v("ForgeFiles-Setup-2.0.0-beta.2.exe")
+        assert v("ForgeFiles-Setup-2.0.0-rc.1.exe") > v("ForgeFiles-Setup-2.0.0-beta.10.exe")
