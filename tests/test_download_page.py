@@ -264,3 +264,5 @@ class TestReviewFollowUps:
         assert v("ForgeFiles-Setup-2.0.0.exe") > v("ForgeFiles-Setup-2.0.0-beta.exe")
         assert v("ForgeFiles-Setup-2.0.1.exe") > v("ForgeFiles-Setup-2.0.0.exe")
         assert v("junk.exe") < v("ForgeFiles-Setup-0.0.0.exe")
+        assert v("ForgeFiles-Setup-2.0.0-beta.10.exe") > v("ForgeFiles-Setup-2.0.0-beta.2.exe")
+        assert v("ForgeFiles-Setup-2.0.0-rc.1.exe") > v("ForgeFiles-Setup-2.0.0-beta.10.exe")

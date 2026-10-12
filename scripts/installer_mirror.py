@@ -95,10 +95,17 @@ def version_of(name: str) -> tuple:
     """
     match = re.fullmatch(r"ForgeFiles-Setup-(\d+(?:\.\d+)*)(?:-([\w.\-]+))?\.exe", name)
     if not match:
-        return ((), 0, "")
+        return ((), 0, ())
     numbers = tuple(int(part) for part in match.group(1).split("."))
     suffix = match.group(2) or ""
-    return (numbers, 0 if suffix else 1, suffix)
+    # Pre-release parts compare one by one, numbers numerically and below text
+    # (semver style), so 'beta.2' < 'beta.10'.
+    parts = tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.split(r"[.\-]", suffix)
+        if part
+    )
+    return (numbers, 0 if suffix else 1, parts)
 
 
 async def _download(asset: dict, directory: Path, http: httpx.AsyncClient) -> None:
