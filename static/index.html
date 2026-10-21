@@ -181,6 +181,43 @@
 </head>
 
 <body>
+    <!-- Startup Animated Intro Splash (Android & Web) -->
+    <div id="startup-splash-overlay" class="startup-splash-overlay" role="presentation" aria-hidden="true">
+        <div class="startup-splash-content">
+            <div class="startup-splash-badge">
+                <img src="/static/forge-files-logo-animation.gif" alt="Forge Files" class="startup-splash-gif" width="112" height="112">
+            </div>
+            <div class="startup-splash-brand">Forge <span class="accent">Files</span></div>
+            <div class="startup-splash-tagline">Fast, Private &amp; Open Document Engine</div>
+            <div class="startup-splash-loader" aria-hidden="true"><div class="startup-splash-progress"></div></div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            try {
+                var overlay = document.getElementById("startup-splash-overlay");
+                if (!overlay) return;
+                if (sessionStorage.getItem("ff_startup_seen") === "1" || window.navigator.webdriver || window.pywebview) {
+                    overlay.style.display = "none";
+                    return;
+                }
+                function dismissSplash() {
+                    if (!overlay || overlay.classList.contains("dismissed")) return;
+                    overlay.classList.add("dismissed");
+                    sessionStorage.setItem("ff_startup_seen", "1");
+                    setTimeout(function() {
+                        if (overlay && overlay.parentNode) {
+                            overlay.style.display = "none";
+                        }
+                    }, 500);
+                }
+                overlay.addEventListener("click", dismissSplash);
+                overlay.addEventListener("touchstart", dismissSplash, { passive: true });
+                setTimeout(dismissSplash, 1400);
+            } catch (e) {}
+        })();
+    </script>
+    <noscript><style>#startup-splash-overlay{display:none!important;}</style></noscript>
     <header class="ff-ds ff-nav ffh-nav">
         <a class="brand" href="/" onclick="showHome(); return false;" aria-label="Forge Files home"><img src="/static/forge-files-logo-animation.gif" alt="" width="32" height="32">Forge <span class="fi">Files</span></a>
         <span class="sp"></span>
