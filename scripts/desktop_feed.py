@@ -165,6 +165,19 @@ def disable_feed(data_dir: Path) -> None:
     _memory_cache.update(at=0.0, feed=None)
 
 
+def enable_feed(data_dir: Path) -> None:
+    path = Path(data_dir) / "settings.json"
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(settings, dict):
+            settings = {}
+    except (OSError, ValueError):
+        settings = {}
+    settings["feed"] = True
+    path.write_text(json.dumps(settings), encoding="utf-8")
+    _memory_cache.update(at=0.0, feed=None)
+
+
 def _read_disk_cache(data_dir: Path) -> dict | None:
     try:
         return sanitize_feed(json.loads((Path(data_dir) / "feed-cache.json").read_text(encoding="utf-8")))
@@ -187,12 +200,12 @@ async def _download(url: str, current_version: str) -> dict | None:
         return None
 
 
-async def get_response(current_version: str, data_dir: Path) -> dict:
+async def get_response(current_version: str, data_dir: Path, force: bool = False) -> dict:
     """Fetch (at most every few hours), fall back to the last good copy, never raise."""
     if not feed_enabled(data_dir):
         return {"enabled": False, "current": current_version, "update": None, "announcement": None}
     now = time.time()
-    if _memory_cache["feed"] is not None and now - _memory_cache["at"] < CACHE_TTL_SECONDS:
+    if not force and _memory_cache["feed"] is not None and now - _memory_cache["at"] < CACHE_TTL_SECONDS:
         return build_response(_memory_cache["feed"], current_version)
 
     raw = await _download(os.environ.get("FF_FEED_URL") or DEFAULT_FEED_URL, current_version)

@@ -101,3 +101,45 @@ class TestOnlyTheAppsOwnPageMayCallTheLocalServer:
         resp = TestClient(main.app).get("/", headers={"origin": "https://elsewhere.example"})
         assert resp.status_code == 200
 
+
+
+class TestDesktopModeGuardrailsAndConfiguration:
+    def test_desktop_mode_injects_window_ff_desktop_and_version(self, local_client, monkeypatch):
+        monkeypatch.setenv("FF_APP_VERSION", "1.2.3")
+        main._render_page.cache_clear()
+        try:
+            resp = local_client.get("/")
+            assert resp.status_code == 200
+            assert 'window.FF_DESKTOP=true' in resp.text
+            assert 'window.FF_LOCAL_ONLY=true' in resp.text
+            assert 'window.FF_APP_VERSION="1.2.3"' in resp.text
+            assert "desktop-shell.js" in resp.text
+        finally:
+            main._render_page.cache_clear()
+
+    def test_website_mode_does_not_inject_ff_desktop(self, monkeypatch):
+        monkeypatch.setattr(main, "LOCAL_ONLY", False)
+        main._render_page.cache_clear()
+        try:
+            resp = TestClient(main.app).get("/")
+            assert resp.status_code == 200
+            assert "window.FF_DESKTOP=true" not in resp.text
+            assert "desktop-shell.js" not in resp.text
+        finally:
+            main._render_page.cache_clear()
+
+    def test_desktop_feed_force_and_on_endpoints(self, local_client, monkeypatch, tmp_path):
+        monkeypatch.setattr(main, "_DATA_DIR", tmp_path)
+        # Enable feed
+        on_resp = local_client.post("/api/desktop/feed/on")
+        assert on_resp.status_code == 200
+        assert on_resp.json() == {"enabled": True}
+
+        # Check with force=1
+        async def mock_get_response(version, data_dir, force=False):
+            return {"enabled": True, "current": version, "update": None, "announcement": None, "forced": force}
+
+        monkeypatch.setattr(main.desktop_feed, "get_response", mock_get_response)
+        feed_resp = local_client.get("/api/desktop/feed?force=1")
+        assert feed_resp.status_code == 200
+        assert feed_resp.json()["forced"] is True

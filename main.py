@@ -1746,7 +1746,16 @@ DOWNLOAD_CTA_HTML = (
 def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
     if LOCAL_ONLY:
-        html_text = _localize(html_text).replace(
+        app_version = os.environ.get("FF_APP_VERSION", "0.0.0")
+        desktop_init = f'<script>window.FF_DESKTOP=true;window.FF_LOCAL_ONLY=true;window.FF_APP_VERSION="{app_version}";</script>'
+        html_text = _localize(html_text)
+        if "<head>" in html_text:
+            html_text = html_text.replace("<head>", f"<head>{desktop_init}", 1)
+        elif "<head " in html_text:
+            html_text = re.sub(r"(<head\b[^>]*>)", rf"\1{desktop_init}", html_text, count=1)
+        else:
+            html_text = desktop_init + html_text
+        html_text = html_text.replace(
             "</body>", '<script src="/static/local/desktop-shell.js" defer></script></body>', 1
         )
     return (
@@ -1774,11 +1783,22 @@ def _render_tool_page(slug: str) -> str:
     return _substitute(seo_content.render_tool_page(slug))
 
 @app.get("/api/desktop/feed")
-async def api_desktop_feed():
+async def api_desktop_feed(force: bool = False):
     """Update check + announcement for the Windows desktop app (404 on the website)."""
     if not LOCAL_ONLY:
         raise HTTPException(status_code=404, detail="Not found")
+    if force:
+        return await desktop_feed.get_response(os.environ.get("FF_APP_VERSION", "0.0.0"), _DATA_DIR, force=True)
     return await desktop_feed.get_response(os.environ.get("FF_APP_VERSION", "0.0.0"), _DATA_DIR)
+
+
+@app.post("/api/desktop/feed/on")
+async def api_desktop_feed_on():
+    """The person turned update checks on from the in-app card or UI."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    desktop_feed.enable_feed(_DATA_DIR)
+    return {"enabled": True}
 
 
 @app.post("/api/desktop/feed/off")

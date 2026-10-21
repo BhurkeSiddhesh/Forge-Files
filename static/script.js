@@ -282,10 +282,14 @@ window.ffStartInflight = ffStartInflight;
 // ask, so the answer is no.
 async function ffServerFetch(path, init, code) {
     let agreed = false;
-    try {
-        agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
-    } catch (e) {
-        agreed = false;
+    if (window.FF_DESKTOP || window.FF_LOCAL_ONLY) {
+        agreed = true;
+    } else {
+        try {
+            agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
+        } catch (e) {
+            agreed = false;
+        }
     }
     if (!agreed) {
         return new Response(JSON.stringify({ detail: 'Cancelled. Your file was not uploaded.', declined: true }),
@@ -1107,7 +1111,9 @@ document.getElementById('process-compress-btn').onclick = async () => {
         if (!response.ok) return;
         const data = await response.json();
         if (!data.enabled) {
-            label.textContent = 'Use AI Layout Recovery (unavailable on this server)';
+            label.textContent = (window.FF_DESKTOP || window.FF_LOCAL_ONLY)
+                ? 'Use AI Layout Recovery (unavailable on this device)'
+                : 'Use AI Layout Recovery (unavailable on this server)';
         } else if (data.supports_layout) {
             label.textContent = 'Use AI Layout Recovery (tables & columns, for scanned/image PDFs)';
         } else {
