@@ -7,6 +7,7 @@ anywhere. Run directly (``python desktop/launcher.py``) or frozen by PyInstaller
 """
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import socket
@@ -194,11 +195,136 @@ def _focus_existing_window() -> None:
         logging.getLogger("forgefiles.desktop").debug("Could not focus the window", exc_info=True)
 
 
-SPLASH_HTML = """<!doctype html><meta charset=utf-8><title>Forge Files</title>
-<body style="margin:0;height:100vh;display:grid;place-items:center;background:#16120e;
-color:#f3ece3;font:16px system-ui,sans-serif"><div style="text-align:center">
-<div style="font-size:28px;font-weight:600;letter-spacing:.02em">Forge Files</div>
-<div style="margin-top:12px;opacity:.7">Starting up&hellip;</div></div></body>"""
+def _splash_html() -> str:
+    """Generate the startup splash HTML embedding the animated logo and progress bar."""
+    logo_src = "/static/forge-files-logo-animation.gif"
+    try:
+        gif_file = _app_root() / "static" / "forge-files-logo-animation.gif"
+        if gif_file.is_file():
+            encoded = base64.b64encode(gif_file.read_bytes()).decode("ascii")
+            logo_src = f"data:image/gif;base64,{encoded}"
+    except Exception:
+        pass
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge Files</title>
+<style>
+* {{ box-sizing: border-box; }}
+html, body {{
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 45%, #1e1b4b 0%, #0f172a 70%, #090d16 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #f3ece3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+}}
+.startup-splash-content {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.5rem;
+    animation: startupFadeIn 0.35s ease-out;
+}}
+@keyframes startupFadeIn {{
+    from {{ opacity: 0; transform: scale(0.95); }}
+    to {{ opacity: 1; transform: scale(1); }}
+}}
+.startup-splash-badge {{
+    width: 112px;
+    height: 112px;
+    border-radius: 26px;
+    box-shadow: 0 16px 40px -8px rgba(99, 102, 241, 0.5), 0 0 0 1.5px rgba(129, 140, 248, 0.35);
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    background: rgba(15, 23, 42, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}}
+.startup-splash-gif {{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}}
+.startup-splash-brand {{
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.35rem;
+}}
+.startup-splash-brand .accent {{
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}}
+.startup-splash-tagline {{
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin-bottom: 1.5rem;
+}}
+.startup-splash-loader {{
+    width: 130px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+}}
+.startup-splash-progress {{
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #a855f7, #38bdf8);
+    border-radius: 999px;
+    animation: startupProgress 1.4s ease-in-out infinite;
+}}
+@keyframes startupProgress {{
+    0% {{ transform: translateX(-100%); }}
+    50% {{ transform: translateX(0); }}
+    100% {{ transform: translateX(100%); }}
+}}
+</style>
+</head>
+<body>
+<div class="startup-splash-content">
+    <div class="startup-splash-badge">
+        <img src="{logo_src}" alt="Forge Files" class="startup-splash-gif" width="112" height="112">
+    </div>
+    <div class="startup-splash-brand">Forge <span class="accent">Files</span></div>
+    <div class="startup-splash-tagline">Fast, Private &amp; Open Document Engine</div>
+    <div class="startup-splash-loader" aria-hidden="true"><div class="startup-splash-progress"></div></div>
+</div>
+</body>
+</html>"""
+
+
+def _error_html(title: str, message: str) -> str:
+    return f"""<!doctype html><meta charset=utf-8><title>Forge Files</title>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+background:radial-gradient(circle at 50% 45%, #1e1b4b 0%, #0f172a 70%, #090d16 100%);
+color:#f3ece3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:1.5rem">
+<div style="text-align:center;max-width:440px;background:rgba(15,23,42,0.85);padding:2rem;border-radius:18px;
+border:1px solid rgba(239,68,68,0.3);box-shadow:0 16px 40px -8px rgba(0,0,0,0.5)">
+<h2 style="margin:0 0 10px;font-size:1.4rem;color:#f87171">{title}</h2>
+<p style="margin:0;font-size:0.95rem;color:#94a3b8;line-height:1.5">{message}</p>
+</div></body>"""
+
+
+SPLASH_HTML = _splash_html()
 
 
 def main() -> int:
@@ -226,17 +352,15 @@ def main() -> int:
             state["server"] = _spawn_server(port)
         except Exception:
             log.exception("Failed to start the server")
-            window.load_html("<h2 style='font-family:sans-serif'>Forge Files could not start.</h2>"
-                             f"<p style='font-family:sans-serif'>See {data / 'forgefiles.log'}</p>")
+            window.load_html(_error_html("Forge Files could not start", f"See {data / 'forgefiles.log'}"))
             return
         if _wait_until_up(port, proc=state["server"]):
             window.load_url(f"http://{HOST}:{port}/")
         else:
             log.error("Server did not start within 60s")
-            window.load_html("<h2 style='font-family:sans-serif'>Forge Files took too long to start.</h2>"
-                             f"<p style='font-family:sans-serif'>See {data / 'forgefiles.log'}</p>")
+            window.load_html(_error_html("Forge Files took too long to start", f"See {data / 'forgefiles.log'}"))
 
-    code = _run_window(webview, SPLASH_HTML, boot, storage=data / "webview")
+    code = _run_window(webview, _splash_html(), boot, storage=data / "webview")
     proc = state.get("server")
     if proc is not None:
         proc.terminate()
