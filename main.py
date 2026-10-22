@@ -3145,8 +3145,16 @@ async def execute_workflow(
             yield f"data: {json.dumps({'event': 'error', 'detail': event_log.scrub_paths(str(e))})}\n\n"
         
         finally:
-            if step_started is not None:
-                return
+            # Every early-return path above already resets step_started to None,
+            # so the only way it can still be set here is a BaseException that
+            # bypasses `except Exception` — chiefly asyncio.CancelledError, which
+            # this generator's detached task (run_workflow_job, via
+            # _start_detached) receives whenever the event loop cancels
+            # outstanding tasks on shutdown, i.e. on every production deploy that
+            # catches a workflow mid-flight. A bare `return` here used to swallow
+            # that cancellation AND skip the cleanup below, leaking the upload and
+            # every intermediate for a job interrupted mid-step. Always clean up.
+            #
             # Clean up the upload plus every intermediate step output. The final
             # deliverable is never renamed into intermediate_files, so it stays
             # for the client's follow-up download; only the throwaway temps go.

@@ -66,6 +66,36 @@ def test_add_watermark_rejects_bad_position(sample_pdf, tmp_path):
         add_watermark(str(sample_pdf), str(tmp_path), "X", position="sideways")
 
 
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_horizontal_watermark_uses_exact_text_width(multi_page_pdf, tmp_path, position):
+    """top/center/bottom watermarks must be centered using the label's real
+    glyph width (fitz.get_text_length), not a per-character estimate that
+    drifts further off the longer the text or the larger the font gets."""
+    import fitz
+
+    text = "CONFIDENTIAL"
+    font_size = 36
+    out = Path(add_watermark(str(multi_page_pdf), str(tmp_path), text, position=position, font_size=font_size))
+    doc = fitz.open(str(out))
+    try:
+        page = doc[0]
+        expected_width = fitz.get_text_length(text, fontname="helv", fontsize=font_size)
+        expected_x = max(10, (page.rect.width - expected_width) / 2)
+        spans = [
+            span for block in page.get_text("dict")["blocks"]
+            for line in block.get("lines", [])
+            for span in line["spans"]
+            if span["text"] == text
+        ]
+        assert spans, f"watermark text not found for position={position}"
+        actual_x = spans[0]["bbox"][0]
+        assert abs(actual_x - expected_x) < 1.0, (
+            f"position={position}: x={actual_x} expected~={expected_x}"
+        )
+    finally:
+        doc.close()
+
+
 def test_pdf_to_images_zip_one_image_per_page(multi_page_pdf, tmp_path):
     result = pdf_to_images_zip(str(multi_page_pdf), str(tmp_path), dpi=72)
     out = Path(result["output_path"])

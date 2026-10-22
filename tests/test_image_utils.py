@@ -493,3 +493,122 @@ class TestIccProfilePreserved:
         out2 = compress_image(str(src), str(c_dir), quality=80)["output_path"]
         with Image.open(out2) as r:
             assert not r.info.get("icc_profile")
+
+
+# ── EXIF + XMP metadata survive every image operation, not just HEIC->JPEG ──
+#
+# `heic_to_jpeg` has preserved ICC/EXIF/XMP via `_preserved_save_kwargs` since
+# 2026-07-24/08-06. Every other function in this module (`rotate_image`,
+# `crop_image`, `resize_image`, `compress_image`, `convert_image_format`,
+# `watermark_image`) ran `ImageOps.exif_transpose` on the way in but never
+# forwarded EXIF/XMP on the way out — camera make/model, capture date, and any
+# XMP title/rating/copyright packet were silently dropped on every re-encode
+# to JPEG or WebP. PNG output cannot carry XMP (Pillow's PNG encoder has no
+# write-side XMP support; this is a Pillow limitation, not a regression this
+# fix can close), but EXIF still round-trips there too.
+
+_TEST_EXIF_MAKE = "TestCam"
+_TEST_XMP_PACKET = (
+    b'<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+    b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><dc:title>Probe Title</dc:title></x:xmpmeta>'
+    b'<?xpacket end="w"?>'
+)
+
+
+def _exif_xmp_tagged_jpeg(path):
+    from PIL import Image
+
+    img = Image.new("RGB", (100, 100), (200, 50, 50))
+    exif = img.getexif()
+    exif[0x010F] = _TEST_EXIF_MAKE  # Make
+    img.save(path, "JPEG", exif=exif.tobytes(), xmp=_TEST_XMP_PACKET, quality=95)
+    return path
+
+
+class TestExifXmpPreservedAcrossOps:
+    def test_rotate_image_preserves_exif_and_xmp(self, tmp_path):
+        from PIL import Image
+        from scripts.image_utils import rotate_image
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        out = rotate_image(str(src), str(tmp_path), angle=90)
+        with Image.open(out) as r:
+            assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE
+            assert r.info.get("xmp") == _TEST_XMP_PACKET
+
+    def test_crop_image_preserves_exif_and_xmp(self, tmp_path):
+        from PIL import Image
+        from scripts.image_utils import crop_image
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        out = crop_image(str(src), str(tmp_path), x=0, y=0, width=50, height=50)
+        with Image.open(out) as r:
+            assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE
+            assert r.info.get("xmp") == _TEST_XMP_PACKET
+
+    def test_resize_image_preserves_exif_and_xmp(self, tmp_path):
+        from PIL import Image
+        from scripts.image_utils import resize_image
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        out = resize_image(str(src), str(tmp_path), mode="dimensions", width=50)
+        with Image.open(out) as r:
+            assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE
+            assert r.info.get("xmp") == _TEST_XMP_PACKET
+
+    def test_compress_image_preserves_exif_and_xmp(self, tmp_path):
+        from PIL import Image
+        from scripts.image_utils import compress_image
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        out = compress_image(str(src), str(tmp_path), quality=80)["output_path"]
+        with Image.open(out) as r:
+            assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE
+            assert r.info.get("xmp") == _TEST_XMP_PACKET
+
+    def test_watermark_image_preserves_exif_and_xmp(self, tmp_path):
+        from PIL import Image
+        from scripts.image_utils import watermark_image
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        out = watermark_image(str(src), str(tmp_path), "DRAFT")
+        with Image.open(out) as r:
+            assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE
+            assert r.info.get("xmp") == _TEST_XMP_PACKET
+
+    def test_convert_image_format_preserves_exif_for_every_target(self, tmp_path):
+        """XMP round-trips for jpg/webp; PNG keeps EXIF but can't carry XMP (Pillow limitation)."""
+        from PIL import Image
+        from scripts.image_utils import convert_image_format
+
+        src = _exif_xmp_tagged_jpeg(tmp_path / "src.jpg")
+        for target in ("jpg", "png", "webp"):
+            out_dir = tmp_path / f"conv_{target}"
+            out_dir.mkdir()
+            out = convert_image_format(str(src), str(out_dir), target)
+            with Image.open(out) as r:
+                assert r.getexif().get(0x010F) == _TEST_EXIF_MAKE, f"EXIF dropped for target={target}"
+                if target == "png":
+                    assert not r.info.get("xmp")
+                else:
+                    assert r.info.get("xmp") == _TEST_XMP_PACKET, f"XMP dropped for target={target}"
+
+    def test_no_metadata_source_is_safe(self, tmp_path):
+        """A source with no EXIF/XMP must still convert cleanly (no crash, no bogus key)."""
+        from PIL import Image
+        from scripts.image_utils import rotate_image, compress_image
+
+        src = tmp_path / "plain.jpg"
+        Image.new("RGB", (60, 40), (10, 20, 30)).save(src, "JPEG", quality=90)
+
+        r_dir, c_dir = tmp_path / "r", tmp_path / "c"
+        r_dir.mkdir()
+        c_dir.mkdir()
+
+        out1 = rotate_image(str(src), str(r_dir), angle=90)
+        with Image.open(out1) as r:
+            assert not r.info.get("xmp")
+
+        out2 = compress_image(str(src), str(c_dir), quality=80)["output_path"]
+        with Image.open(out2) as r:
+            assert not r.info.get("xmp")

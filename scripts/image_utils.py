@@ -43,22 +43,6 @@ def _flatten_to_rgb(img: Image.Image, background=(255, 255, 255)) -> Image.Image
     return img
 
 
-def _icc_profile_kwargs(img: Image.Image) -> dict:
-    """
-    Return an ``Image.save`` ``icc_profile`` kwarg when the source carries a
-    color profile.
-
-    Wide-gamut (Display P3 / Adobe RGB) photos carry an embedded ICC profile;
-    if a save drops it, viewers fall back to interpreting the pixels as sRGB,
-    which visibly shifts colors. PNG's own encoder happens to forward
-    ``img.info["icc_profile"]`` on its own when the output format doesn't
-    change, but JPEG and WebP don't, and every function below can change the
-    output format — so the profile has to be threaded through explicitly.
-    """
-    icc = img.info.get("icc_profile")
-    return {"icc_profile": icc} if icc else {}
-
-
 def _prepare_image(img: Image.Image) -> Image.Image:
     """
     Prepare image for processing: normalize orientation and convert to RGB.
@@ -97,7 +81,9 @@ _EXIF_ORIENTATION = 0x0112
 def _preserved_save_kwargs(img: Image.Image) -> dict:
     """
     Collect the source ICC color profile, EXIF, and XMP metadata so they survive
-    the conversion to JPEG.
+    a save to JPEG, PNG, or WebP. (Pillow's PNG encoder has no write-side XMP
+    support, so the ``xmp`` entry is a harmless no-op there; ICC and EXIF still
+    round-trip for all three formats.)
 
     HEIC photos from modern phones are frequently authored in a wide-gamut color
     space (e.g. Display P3). If the ICC profile is dropped, viewers fall back to
@@ -346,19 +332,28 @@ _FORMAT_PIL = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP"}
 def _save_pil(img: Image.Image, output_file: Path, fmt: str, quality: int = 90) -> None:
     """Save a PIL image in the chosen format with sane defaults."""
     pil_fmt = _FORMAT_PIL[fmt]
-    icc_kwargs = _icc_profile_kwargs(img)
+    # Capture ICC/EXIF/XMP from `img` as handed in, before any flatten/quantize
+    # below replaces it with a fresh Image.new()-backed object — same ordering
+    # `heic_to_jpeg` already relies on. Every call site has already run
+    # `ImageOps.exif_transpose`, so the EXIF Orientation tag is correctly reset
+    # to 1 here too.
+    save_kwargs = _preserved_save_kwargs(img)
     if pil_fmt == "JPEG":
         img = _flatten_to_rgb(img)
-        img.save(output_file, pil_fmt, quality=quality, optimize=True, **icc_kwargs)
+        img.save(output_file, pil_fmt, quality=quality, optimize=True, **save_kwargs)
     elif pil_fmt == "PNG":
         if quality < 90 and img.mode in ("RGB", "RGBA"):
             colors = max(16, min(256, int(quality * 2.56)))
             img_to_save = img.quantize(colors=colors)
         else:
             img_to_save = img
-        img_to_save.save(output_file, pil_fmt, optimize=True, compress_level=9, **icc_kwargs)
+        # Pillow's PNG encoder has no write-side support for an `xmp` kwarg
+        # (it only reads back `XML:com.adobe.xmp` on decode); passing it here
+        # is a documented no-op, not a regression — PNG's XMP channel was
+        # already unpreserved before this change.
+        img_to_save.save(output_file, pil_fmt, optimize=True, compress_level=9, **save_kwargs)
     else:  # WEBP
-        img.save(output_file, pil_fmt, quality=quality, method=6, **icc_kwargs)
+        img.save(output_file, pil_fmt, quality=quality, method=6, **save_kwargs)
 
 
 def rotate_image(input_path: str, output_dir: str, angle: float, quality: int = 95) -> str:

@@ -52,9 +52,27 @@ def _close(a, b, tol=4.0):
     return a is not None and b is not None and all(abs(x - y) <= tol for x, y in zip(a, b))
 
 
+def _blank_pdf(path: Path, sizes: list) -> Path:
+    """Pages with no body text, so a centred watermark can't collide with it.
+
+    Unlike make_pdf(), these pages carry no "Page N" label — now that the
+    watermark's horizontal centering uses the text's real width (not a
+    per-character estimate), a wide, accurately-centered mark can land right
+    next to that label on a narrow page, and PyMuPDF's word extraction then
+    merges the two into one token (e.g. "1CONFIDENTIAL"). That's a word-
+    extraction artifact of the fixture, not a watermark placement bug.
+    """
+    doc = fitz.open()
+    for w, h in sizes:
+        doc.new_page(width=w, height=h)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
 @pytest.mark.parametrize("position", ["top", "center", "bottom"])
 def test_horizontal_positions_land_where_the_servers_do(tmp_path: Path, position: str) -> None:
-    pdf = make_pdf(tmp_path / "in.pdf", sizes=SIZES)
+    pdf = _blank_pdf(tmp_path / "in.pdf", SIZES)
     result, out = _local(tmp_path, pdf, position=position)
     assert result["status"] == 200, result
     local, server = _mark(out, "CONFIDENTIAL"), _mark(_server(tmp_path, pdf, position=position), "CONFIDENTIAL")

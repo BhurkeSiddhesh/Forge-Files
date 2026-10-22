@@ -55,9 +55,65 @@ class TestPDFPasswordRemover:
         out.mkdir()
         blank = create_blank_pdf(str(out), num_pages=1)
         protected = protect_pdf(blank, str(out), user_password="correct_pass")
-        
+
         with pytest.raises(pikepdf.PasswordError):
             remove_pdf_password(protected, "wrong_pass")
+
+    @staticmethod
+    def _make_owner_restricted_pdf(src_path, dest):
+        """Owner-restricted PDF: permission restrictions but NO open/user
+        password, so it opens with an empty password (the common "Unlock PDF"
+        case for a PDF with no open password, just print/copy/edit limits)."""
+        with pikepdf.open(src_path) as pdf:
+            pdf.save(
+                dest,
+                encryption=pikepdf.Encryption(
+                    user="",  # ggignore  — no open password
+                    owner="owner-secret",  # ggignore
+                    allow=pikepdf.Permissions(extract=False, print_highres=False),
+                ),
+            )
+        return dest
+
+    def test_remove_pdf_password_owner_restricted_with_wrong_password(self, tmp_path):
+        """Owner-restricted PDFs (no open password) unlock even when the
+        caller passes a wrong/irrelevant password, matching the app's own
+        scripts.pdf_utils.remove_pdf_password and mainstream Unlock PDF tools."""
+        out = tmp_path / "out"
+        out.mkdir()
+        blank = create_blank_pdf(str(out), num_pages=2)
+        restricted = self._make_owner_restricted_pdf(blank, tmp_path / "restricted.pdf")
+
+        unlocked = remove_pdf_password(str(restricted), "a-guess-that-is-wrong")
+
+        with pikepdf.open(unlocked) as pdf:  # opens with no password -> truly unlocked
+            assert not pdf.is_encrypted
+            assert len(pdf.pages) == 2
+
+    def test_remove_pdf_password_owner_restricted_removes_restrictions(self, tmp_path):
+        """After unlocking, the owner-level permission restrictions are gone."""
+        out = tmp_path / "out"
+        out.mkdir()
+        blank = create_blank_pdf(str(out), num_pages=1)
+        restricted = self._make_owner_restricted_pdf(blank, tmp_path / "restricted2.pdf")
+
+        unlocked = remove_pdf_password(str(restricted), "")
+
+        with pikepdf.open(unlocked) as pdf:
+            assert not pdf.is_encrypted
+            assert pdf.allow.extract and pdf.allow.print_highres
+
+    def test_remove_pdf_password_owner_restricted_with_owner_password(self, tmp_path):
+        """Supplying the correct owner password also unlocks (first-try path)."""
+        out = tmp_path / "out"
+        out.mkdir()
+        blank = create_blank_pdf(str(out), num_pages=1)
+        restricted = self._make_owner_restricted_pdf(blank, tmp_path / "restricted3.pdf")
+
+        unlocked = remove_pdf_password(str(restricted), "owner-secret")  # ggignore
+
+        with pikepdf.open(unlocked) as pdf:
+            assert not pdf.is_encrypted
 
 
 class TestPDFPasswordRemoverCLI:
