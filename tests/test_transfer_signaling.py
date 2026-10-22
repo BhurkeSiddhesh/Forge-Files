@@ -125,15 +125,17 @@ def test_pinging_does_not_keep_a_room_past_its_ttl(client, monkeypatch):
 def test_approval_near_the_deadline_extends_both_sockets(client, monkeypatch):
     """The receiver's read was armed with the short unpaired deadline; approval
     must extend it rather than expire a transfer that has just been accepted."""
-    monkeypatch.setattr(ts, "ROOM_TTL_SECONDS", 0.6)
+    # 1.0 s of slack before approval: a 0.3 s margin expired the room on a loaded
+    # self-hosted runner.
+    monkeypatch.setattr(ts, "ROOM_TTL_SECONDS", 1.5)
     monkeypatch.setattr(ts, "PAIRED_TTL_SECONDS", 30)
     with client.websocket_connect(WS, headers=ORIGIN) as sender:
         receiver, rid = _pair(client, sender)
-        time.sleep(0.3)
+        time.sleep(0.5)
         sender.send_json({"t": "approve", "rid": rid})
         assert receiver.receive_json()["t"] == "approved"
         assert sender.receive_json()["t"] == "paired"
-        time.sleep(1.0)  # well past the unpaired deadline
+        time.sleep(2.0)  # well past the unpaired deadline
         sender.send_json({"t": "signal", "data": {"sdp": "offer"}})
         assert receiver.receive_json() == {"t": "signal", "data": {"sdp": "offer"}}
         receiver.send_json({"t": "signal", "data": {"sdp": "answer"}})
