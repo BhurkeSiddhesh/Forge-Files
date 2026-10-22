@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -104,6 +105,21 @@ def test_unpaired_room_expires(client, monkeypatch):
     with client.websocket_connect(WS, headers=ORIGIN) as sender:
         assert _host(sender)["t"] == "hosted"
         assert sender.receive_json() == {"t": "error", "code": "expired"}
+
+
+def test_pinging_does_not_keep_a_room_past_its_ttl(client, monkeypatch):
+    monkeypatch.setattr(ts, "ROOM_TTL_SECONDS", 0.5)
+    with client.websocket_connect(WS, headers=ORIGIN) as sender:
+        assert _host(sender)["t"] == "hosted"
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            time.sleep(0.1)
+            sender.send_json({"t": "ping"})
+            reply = sender.receive_json()
+            if reply != {"t": "pong"}:
+                break
+        assert reply == {"t": "error", "code": "expired"}
+    assert main.transfer_router.hub.rooms == {}
 
 
 def test_oversized_message_is_refused(client):

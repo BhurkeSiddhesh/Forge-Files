@@ -24,6 +24,11 @@
     var CHUNK = 64 * 1024;
     var HIGH_WATER = 4 * 1024 * 1024;
     var LOW_WATER = 1024 * 1024;
+    // Receiver-side flow control: the receiver acknowledges bytes once its
+    // sink has actually written them, and the sender keeps at most WINDOW
+    // unacknowledged. Without it a slow disk lets chunks pile up in memory.
+    var ACK_EVERY = 1024 * 1024;
+    var WINDOW = 16 * 1024 * 1024;
     // What we are willing to assemble in memory. The mobile app writes through
     // @capacitor/filesystem in base64, so it has a lower honest ceiling (see
     // mobile/app-assets/src/native-download.js MAX_NATIVE_DOWNLOAD_BYTES).
@@ -189,6 +194,7 @@
         connect: 'Could not connect the two devices. Check both are online and try again.',
         socket: 'Could not reach the Forge Files server. Check your connection and try again.',
         hash: 'A file arrived damaged and was discarded. Please send it again.',
+        write: 'Could not save a file on this device. Check there is enough free space and try again.',
         cancelled: 'The transfer was cancelled.'
     };
 
@@ -312,9 +318,26 @@
         });
     }
 
+    /** Record a receiver acknowledgement and wake a sender waiting on the window. */
+    function ackReceived(state, n) {
+        if (typeof n === 'number' && n > (state.acked || 0)) state.acked = n;
+        wakeSender(state);
+    }
+
+    function wakeSender(state) {
+        var waiter = state.ackWaiter;
+        state.ackWaiter = null;
+        if (waiter) waiter();
+    }
+
     /** Stream every item over an open channel. `state.cancelled` aborts. */
     function sendItems(channel, items, state, onProgress) {
         var total = items.reduce(function (s, it) { return s + it.blob.size; }, 0);
+        state.acked = state.acked || 0;
+        function waitForWindow() {
+            if (state.cancelled || sent - state.acked <= WINDOW) return Promise.resolve();
+            return new Promise(function (resolve) { state.ackWaiter = resolve; }).then(waitForWindow);
+        }
         // 64 KiB fits every current browser's SCTP message limit.
         var chunk = CHUNK;
         var sent = 0;
@@ -335,7 +358,10 @@
                     return nextItem();
                 }
                 var end = Math.min(offset + chunk, item.blob.size);
-                return waitForDrain(channel).then(function () {
+                return waitForWindow().then(function () {
+                    return waitForDrain(channel);
+                }).then(function () {
+                    if (state.cancelled) throw new Error('cancelled');
                     return readSlice(item.blob, offset, end);
                 }).then(function (buf) {
                     hash.update(buf);
@@ -355,32 +381,59 @@
 
     /**
      * Reassembles items from channel messages. `sinkFor(i, meta)` returns
-     * {write(Uint8Array) → Promise, close() → Promise<result>, abort()}.
+     * {write(Uint8Array) -> Promise, close() -> Promise<result>, abort()}.
+     * Writes run one at a time; `callbacks.ack(bytesWritten)` reports what the
+     * sender may count as drained, and any sink failure ends the transfer with
+     * `callbacks.error('write')` instead of leaving both sides waiting.
      */
     function Receiver(manifest, sinkFor, callbacks) {
-        var current = null, received = 0, writes = Promise.resolve();
+        var current = null, received = 0, written = 0, lastAck = 0, failed = false;
+        var writes = Promise.resolve();
+        var openSinks = [];
         var total = manifest.items.reduce(function (s, it) { return s + it.size; }, 0);
+
+        function fail(code) {
+            if (failed) return;
+            failed = true;
+            openSinks.forEach(function (sink) { try { sink.abort(); } catch (e) { } });
+            openSinks = [];
+            callbacks.error(code);
+        }
+        function queue(step) {
+            writes = writes.then(function () {
+                if (!failed) return step();
+            }).catch(function () { fail('write'); });
+        }
+        function ack(force) {
+            if (written > lastAck && (force || written - lastAck >= ACK_EVERY)) {
+                lastAck = written;
+                if (callbacks.ack) callbacks.ack(written);
+            }
+        }
+
         this.handle = function (data) {
+            if (failed) return;
             if (typeof data === 'string') {
                 var msg;
                 try { msg = JSON.parse(data); } catch (e) { return; }
                 if (msg.t === 'start' && manifest.items[msg.i]) {
                     current = { i: msg.i, meta: manifest.items[msg.i], hash: new Sha256(), sink: sinkFor(msg.i, manifest.items[msg.i]) };
+                    openSinks.push(current.sink);
                 } else if (msg.t === 'end' && current && current.i === msg.i) {
                     var item = current;
                     current = null;
-                    writes = writes.then(function () {
-                        if (item.hash.hex() !== msg.sha256) {
-                            item.sink.abort();
-                            callbacks.error('hash');
-                            return;
-                        }
-                        return item.sink.close().then(function (result) { callbacks.item(item.i, item.meta, result); });
+                    queue(function () {
+                        if (item.hash.hex() !== msg.sha256) { fail('hash'); return; }
+                        return item.sink.close().then(function (result) {
+                            openSinks = openSinks.filter(function (x) { return x !== item.sink; });
+                            ack(true);
+                            callbacks.item(item.i, item.meta, result);
+                        });
                     });
                 } else if (msg.t === 'done') {
-                    writes.then(function () { callbacks.done(); });
+                    queue(function () { callbacks.done(); });
                 } else if (msg.t === 'cancel') {
-                    callbacks.error('cancelled');
+                    fail('cancelled');
                 }
                 return;
             }
@@ -389,7 +442,12 @@
             current.hash.update(bytes);
             received += bytes.length;
             var sink = current.sink;
-            writes = writes.then(function () { return sink.write(bytes); });
+            queue(function () {
+                return sink.write(bytes).then(function () {
+                    written += bytes.length;
+                    ack(false);
+                });
+            });
             callbacks.progress(received, total);
         };
     }
@@ -528,6 +586,7 @@
 
             function stop() {
                 state.cancelled = true;
+                wakeSender(state);
                 if (state.peer && state.peer.channel && state.peer.channel.readyState === 'open') {
                     try { state.peer.channel.send(JSON.stringify({ t: 'cancel' })); } catch (e) { }
                 }
@@ -595,7 +654,9 @@
                         message: function (data) {
                             var m;
                             try { m = JSON.parse(data); } catch (e) { return; }
-                            if (m.t === 'ready') {
+                            if (m.t === 'ack') {
+                                ackReceived(state, m.n);
+                            } else if (m.t === 'ready') {
                                 sendItems(state.peer.channel, items, state, bar.set).then(function () {
                                     bar.text('Sent. Waiting for the receiver to finish saving…');
                                 }).catch(function () { if (!state.cancelled) reset(ERRORS.connect); });
@@ -800,6 +861,9 @@
                         return meta === large && writable ? fileSink(writable) : memorySink(meta);
                     }, {
                         progress: bar.set,
+                        ack: function (n) {
+                            try { state.peer.channel.send(JSON.stringify({ t: 'ack', n: n })); } catch (e) { }
+                        },
                         item: function (i, meta, blob) { showItem(meta, blob); },
                         error: function (code) { reset(ERRORS[code]); },
                         done: function () {
@@ -874,9 +938,11 @@
             sendArea.classList.toggle('hidden', which !== 'send');
             receiveArea.classList.toggle('hidden', which !== 'receive');
             if (which === 'receive') {
-                var m = /(?:^|[#&])code=([^&]+)/.exec(window.location.hash || '');
-                if (m) {
-                    try { receive.prefill(decodeURIComponent(m[1])); } catch (e) { }
+                // index.html moved the share link's code out of the address
+                // before analytics loaded (window.FF_TRANSFER_CODE).
+                if (window.FF_TRANSFER_CODE) {
+                    receive.prefill(window.FF_TRANSFER_CODE);
+                    window.FF_TRANSFER_CODE = null;
                 }
                 var input = root.querySelector('#transfer-receive-id');
                 if (input) input.focus();
@@ -895,6 +961,8 @@
         Sha256: Sha256,
         Receiver: Receiver,
         sendItems: sendItems,
+        ackReceived: ackReceived,
+        WINDOW: WINDOW,
         generateCode: generateCode,
         normalizeIdentifier: normalizeIdentifier,
         deviceLabel: deviceLabel,

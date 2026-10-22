@@ -4,6 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Send & Receive share links carry the code (often a phone number) in the
+         fragment. Take it out of the address before any analytics script can
+         read location.href; static/local/transfer.js picks it up from here. -->
+    <script>(function(){try{var m=/(?:^|[#&])code=([^&]*)/.exec(location.hash||'');if(!m)return;window.FF_TRANSFER_CODE=decodeURIComponent(m[1]);history.replaceState(history.state,'',location.pathname+location.search);}catch(e){}})();</script>
     {{SITE_VERIFICATION}}
     <title>Forge Files: Free Online PDF, Image, Excel &amp; PPT Tools | No Signup, Open Source</title>
     <meta name="description"
@@ -1471,7 +1475,7 @@
     <script src="/static/local/ops-excel.js?v=20261006"></script>
     <script src="/static/local/ops-workflow.js?v=20261008"></script>
     <script src="/static/vendor/qrcode-generator/qrcode.js?v=1.4.4"></script>
-    <script src="/static/local/transfer.js?v=20261022b"></script>
+    <script src="/static/local/transfer.js?v=20261022c"></script>
     <script src="/static/ff-page-grid.js?v=20261013"></script>
     <script src="/static/ds/icons.js?v=20261022"></script>
     <script src="/static/ds/home.js?v=20261022"></script>

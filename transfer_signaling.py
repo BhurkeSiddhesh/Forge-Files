@@ -198,10 +198,15 @@ class TransferHub:
             return
         await ws.accept()
         client = self._client_identity(ws)
-        state = {"room": None, "role": None, "peer": None}
+        state = {"room": None, "role": None, "peer": None, "connected": time.monotonic()}
         try:
             while True:
+                # An absolute deadline, checked before every read: a client that
+                # keeps pinging must not be able to hold a room past its TTL.
                 timeout = self._timeout(state)
+                if timeout <= 0:
+                    await _send(ws, {"t": "error", "code": "expired"})
+                    break
                 try:
                     text = await asyncio.wait_for(ws.receive_text(), timeout=timeout)
                 except asyncio.TimeoutError:
@@ -227,11 +232,13 @@ class TransferHub:
             await _close(ws)
 
     def _timeout(self, state: dict) -> float:
+        """Seconds left before this socket's deadline (may be zero or negative)."""
         room: Optional[_Room] = state["room"]
         if room is None:
-            return 60.0  # a socket that never hosts or joins
+            # A socket that never hosts or joins gets a minute, pings or not.
+            return state["connected"] + 60.0 - time.monotonic()
         limit = PAIRED_TTL_SECONDS if room.receiver is not None else ROOM_TTL_SECONDS
-        return max(1.0, room.created + limit - time.monotonic())
+        return room.created + limit - time.monotonic()
 
     async def _dispatch(self, ws: WebSocket, client: str, state: dict, msg: dict) -> bool:
         kind = msg.get("t")

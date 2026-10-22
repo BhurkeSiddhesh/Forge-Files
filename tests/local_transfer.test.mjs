@@ -154,3 +154,86 @@ test('the desktop app signals through the website', () => {
     const t = load({ FF_DESKTOP: true, location: { origin: 'http://127.0.0.1:8765', hash: '' } });
     assert.ok(t.shareLink('maple-otter-42').startsWith('https://www.forgefiles.org/'));
 });
+
+// Sender and receiver wired both ways: data forward, acks back.
+async function flowControlled(size, sinkWrite, holdUntilSenderIdle = false) {
+    const items = [{ name: 'big.bin', type: '', kind: 'file', blob: new Blob([new Uint8Array(size)]) }];
+    const manifest = { items: [{ name: 'big.bin', type: '', size, kind: 'file' }] };
+    const state = { cancelled: false };
+    let sent = 0, written = 0, maxPending = 0, aborted = false;
+    // Writes stay blocked until the sender has produced nothing for 100 ms,
+    // i.e. until it has either sent everything or stopped itself.
+    let gate = Promise.resolve();
+    if (holdUntilSenderIdle) {
+        gate = new Promise((open) => {
+            let last = -1;
+            const poll = setInterval(() => {
+                if (sent === last) { clearInterval(poll); open(); }
+                last = sent;
+            }, 100);
+        });
+    }
+    const outcome = await new Promise((resolve) => {
+        const receiver = new T.Receiver(manifest, () => ({
+            write: async (bytes) => { await gate; await sinkWrite(bytes); written += bytes.length; },
+            close: async () => null,
+            abort() { aborted = true; },
+        }), {
+            progress() {},
+            ack: (n) => setTimeout(() => T.ackReceived(state, n), 0),
+            item() {},
+            error: (code) => { state.cancelled = true; T.ackReceived(state, 0); resolve({ error: code }); },
+            done: () => resolve({ ok: true }),
+        });
+        const channel = {
+            bufferedAmount: 0,
+            send(data) {
+                if (typeof data !== 'string') {
+                    sent += data.byteLength;
+                    maxPending = Math.max(maxPending, sent - written);
+                }
+                receiver.handle(typeof data === 'string' ? data : data.slice(0));
+            },
+            addEventListener() {}, removeEventListener() {},
+        };
+        T.sendItems(channel, items, state, () => {}).catch(() => {});
+    });
+    return { outcome, maxPending, aborted };
+}
+
+test('a stalled receiver stops the sender at the ack window', async () => {
+    // Nothing is written until the sender goes idle. Without flow control it
+    // pushes all 24 MB into the receiver's queue; with it, it stops at WINDOW.
+    const { outcome, maxPending } = await flowControlled(24 * 1024 * 1024, async () => {}, true);
+    assert.deepEqual(outcome, { ok: true });
+    assert.equal(T.WINDOW, 16 * 1024 * 1024);
+    assert.ok(maxPending <= 16 * 1024 * 1024 + 64 * 1024, `pending peaked at ${maxPending}`);
+});
+
+test('a failing sink ends the transfer with an error and aborts the file', async () => {
+    let calls = 0;
+    const failing = async () => { if (++calls === 3) throw new Error('disk full'); };
+    const { outcome, aborted } = await flowControlled(1024 * 1024, failing);
+    assert.deepEqual(outcome, { error: 'write' });
+    assert.equal(aborted, true);
+});
+
+test('index.html removes the share code from the address before analytics loads', () => {
+    const html = readFileSync(join(STATIC, 'index.html'), 'utf8');
+    const strip = html.indexOf('window.FF_TRANSFER_CODE=');
+    assert.ok(strip > 0);
+    for (const tracker of ['{{CF_ANALYTICS}}', '{{GA_ANALYTICS}}', 'datafa.st', '/static/script.js']) {
+        assert.ok(strip < html.indexOf(tracker), tracker);
+    }
+    const source = html.slice(html.lastIndexOf('<script>', strip) + 8, html.indexOf('</script>', strip));
+    const replaced = [];
+    const s = {
+        location: { hash: '#code=%2B91%2098200%2012345', pathname: '/', search: '?tool=transfer&op=receive-files' },
+        history: { state: null, replaceState: (_st, _t, url) => replaced.push(url) },
+    };
+    s.window = s;
+    vm.createContext(s);
+    vm.runInContext(source, s);
+    assert.equal(s.FF_TRANSFER_CODE, '+91 98200 12345');
+    assert.deepEqual(replaced, ['/?tool=transfer&op=receive-files']);
+});
