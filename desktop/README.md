@@ -1,8 +1,11 @@
 # Forge Files for Windows
 
 The full Forge Files app in a native window. Everything runs on the user's own computer: the
-server listens on `127.0.0.1` only, files never leave the machine, and the page is locked down
-with a Content-Security-Policy so it cannot contact any other host.
+server listens on `127.0.0.1` only, files are never uploaded, and the page is locked down
+with a Content-Security-Policy so it cannot contact any other host. The one exception is Send &
+Receive: after a one-time consent prompt it opens a WebSocket to the website's signaling hub
+(`wss://www.forgefiles.org/api/transfer/ws`, override with `FF_TRANSFER_ORIGIN`) to find the other
+device, and the files then travel peer to peer, never through our servers.
 
 | File | What it is |
 |---|---|

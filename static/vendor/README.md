@@ -17,6 +17,7 @@ content-security policy. Vendoring keeps the bundle self-contained.
 | `pptxgen.min.js` | [`pptxgenjs`](https://www.npmjs.com/package/pptxgenjs) | 4.0.1 | MIT (`pptxgenjs.LICENSE.md`) |
 | `tesseract/` | [`tesseract.js`](https://www.npmjs.com/package/tesseract.js) + [`tesseract.js-core`](https://www.npmjs.com/package/tesseract.js-core) + English model | 7.0.0 / 7.0.0 / `4.0.0_best_int` | Apache-2.0 (`tesseract/LICENSE.*.md`) |
 | `lo-wasm/2.7.2/` | [`@matbee/libreoffice-converter`](https://www.npmjs.com/package/@matbee/libreoffice-converter) (LibreOffice compiled to WebAssembly) | 2.7.2 | MPL-2.0, unmodified |
+| `qrcode-generator/qrcode.js` | [`qrcode-generator`](https://www.npmjs.com/package/qrcode-generator) | 1.4.4 | MIT (`qrcode-generator/LICENSE`) |
 
 `exceljs.min.js` is the untouched `dist/exceljs.min.js`; it defines `window.ExcelJS` and is loaded on demand
 by `static/local/ff-local.js` (`loadExcelJs`) the first time an Excel/spreadsheet tool runs on-device.
@@ -122,3 +123,7 @@ and `abd933f4ccace4f732999381b21aec8b7e3726f18a5b167fafd57f88dd440876`.
 libheif 1.23.5, and is loaded only for HEIC/HEIF conversion. Its SHA-256 is
 `c94d3bce5d9886be1989c270e53c98585ba67af1863fc156b4c72a27c4a18bc1`.
 The LGPL-covered file remains separate so it can be replaced independently.
+
+`qrcode-generator/qrcode.js` is the untouched `qrcode.js` from the `qrcode-generator@1.4.4` npm tarball (tarball SHA-1
+`63f771224854759329a99048806a53ed278740e7`); it defines `window.qrcode` and draws the receive-link QR code in Send & Receive
+(`static/local/transfer.js`). Its SHA-256 is `18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780`.

@@ -784,7 +784,27 @@ TOOL_PAGES: Dict[str, dict] = {'unlock-pdf': {'title': 'Unlock PDF: Remove PDF P
  'steps': ['Upload your Word document (.docx).',
  'Choose <strong>Word → PPTX</strong> and pick a quality (96, 150 or 200 DPI).',
  'Download the result and compare it with your original before sharing.'],
- 'related': ['word-to-pdf', 'pdf-to-powerpoint', 'powerpoint-to-pdf', 'merge-ppt', 'pdf-to-word']}}
+ 'related': ['word-to-pdf', 'pdf-to-powerpoint', 'powerpoint-to-pdf', 'merge-ppt', 'pdf-to-word']},
+ 'send-files': {'title': 'Send Files and Text to Another Device Free | Forge Files',
+ 'h1': 'Send Files &amp; Text: Device to Device, Nothing Uploaded',
+ 'tool': 'transfer',
+ 'app': 'Send Files',
+ 'cta': 'Send files or text, free',
+ 'how': 'How to send files to another device',
+ 'steps': ['Open <strong>Send &amp; Receive</strong> and choose <strong>Send</strong>.',
+ 'Paste text and/or add files, then type a code such as your mobile number, or generate one.',
+ 'Accept the receiver once they see the same two words as you, and keep the page open until it says Delivered.'],
+ 'related': ['receive-files', 'compress-pdf', 'image-to-pdf', 'merge-pdf', 'compress-image']},
+ 'receive-files': {'title': 'Receive Files and Text With a Code Free | Forge Files',
+ 'h1': 'Receive Files &amp; Text With the Sender&#39;s Code',
+ 'tool': 'transfer',
+ 'app': 'Receive Files',
+ 'cta': 'Receive files or text, free',
+ 'how': 'How to receive files sent to you',
+ 'steps': ['Open <strong>Send &amp; Receive</strong> and choose <strong>Receive</strong>.',
+ 'Enter the sender&#39;s code and tell them the two words you see.',
+ 'Accept the incoming items and save each one.'],
+ 'related': ['send-files', 'heic-to-jpeg', 'pdf-to-word', 'compress-pdf', 'image-to-pdf']}}
 
 
 # --- rendering -------------------------------------------------------------
@@ -803,6 +823,9 @@ for _slug, _page in TOOL_PAGES.items():
     _page["steps"][-1] = "Download the result and compare it with your original before sharing."
 TOOL_PAGES["pdf-to-text"]["steps"][1] = "Choose <strong>Extract Text</strong> and set <strong>Preserve layout structure</strong> if needed."
 TOOL_PAGES["ocr-pdf"]["steps"][1] = "Choose <strong>OCR PDF</strong> and select the matching available language."
+# Send & Receive produce no converted result to compare; keep their own last step.
+TOOL_PAGES["send-files"]["steps"][-1] = "Accept the receiver once they see the same two words as you, and keep the page open until it says Delivered."
+TOOL_PAGES["receive-files"]["steps"][-1] = "Accept the incoming items and save each one."
 
 # This is another name for the same tool, not a separate search landing page.
 CANONICAL_ALIASES = {slug: "ocr-pdf" for slug in

@@ -1698,13 +1698,19 @@ def validate_quality(quality: int):
 # request to any host except this server. Analytics is stripped from every page and
 # a Content-Security-Policy makes the browser refuse (and report) anything else.
 LOCAL_ONLY = os.environ.get("FF_LOCAL_ONLY") == "1"
+# The one exception to "only this server": Send & Receive needs the website's
+# signaling hub to find the other device (the file bytes then go peer to peer,
+# which CSP connect-src does not govern). It is opened only when the person
+# starts a transfer, after a one-time consent prompt in static/local/transfer.js.
+TRANSFER_ORIGIN = os.environ.get("FF_TRANSFER_ORIGIN", "https://www.forgefiles.org").rstrip("/")
+_TRANSFER_WS_ORIGIN = re.sub(r"^http", "ws", TRANSFER_ORIGIN)
 _THIRD_PARTY_SCRIPT = re.compile(r"<script\b[^>]*\bsrc=\"https?://[^\"]+\"[^>]*>\s*</script>", re.I)
 _LOCAL_ONLY_CSP = (
     "default-src 'self' blob: data:; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; font-src 'self' data:; "
-    "connect-src 'self' blob: data:; worker-src 'self' blob:; "
+    f"connect-src 'self' blob: data: {_TRANSFER_WS_ORIGIN}; worker-src 'self' blob:; "
     "frame-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; "
     "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 )
@@ -1747,7 +1753,10 @@ def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
     if LOCAL_ONLY:
         app_version = os.environ.get("FF_APP_VERSION", "0.0.0")
-        desktop_init = f'<script>window.FF_DESKTOP=true;window.FF_LOCAL_ONLY=true;window.FF_APP_VERSION="{app_version}";</script>'
+        desktop_init = (
+            f'<script>window.FF_DESKTOP=true;window.FF_LOCAL_ONLY=true;window.FF_APP_VERSION="{app_version}";'
+            f'window.FF_TRANSFER_ORIGIN={json.dumps(TRANSFER_ORIGIN)};</script>'
+        )
         html_text = _localize(html_text)
         if "<head>" in html_text:
             html_text = html_text.replace("<head>", f"<head>{desktop_init}", 1)
@@ -4133,6 +4142,19 @@ async def serve_blog_guide(slug: str):
     if slug in blog_content.GUIDES:
         return HTMLResponse(_substitute(blog_content.render_guide(slug)))
     raise HTTPException(status_code=404, detail="Guide not found")
+
+
+# --- Send & Receive (peer-to-peer) -------------------------------------------
+# WebRTC signaling only: the hub pairs two browsers and relays their handshake;
+# file bytes never pass through this app (see transfer_signaling.py). The
+# desktop app has no hub of its own, it signals through www.forgefiles.org.
+if not LOCAL_ONLY:
+    from transfer_signaling import create_transfer_router, site_origins_from  # noqa: E402
+
+    transfer_router = create_transfer_router(
+        client_identity, site_origins_from(BASE_URL, _CORS_ORIGINS)
+    )
+    app.include_router(transfer_router)
 
 
 @app.get("/{slug}", response_class=HTMLResponse)

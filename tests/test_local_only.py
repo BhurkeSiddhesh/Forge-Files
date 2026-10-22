@@ -64,6 +64,18 @@ def test_local_only_sends_a_csp_that_blocks_outside_connections(local_client):
     assert "default-src 'self'" in csp
 
 
+def test_the_only_outside_connection_is_the_send_and_receive_hub(local_client):
+    """Send & Receive signals through the website; nothing else may be reached,
+    and the hub is a WebSocket origin only (no https fetches)."""
+    csp = local_client.get("/").headers["content-security-policy"]
+    connect = next(d for d in csp.split(";") if d.strip().startswith("connect-src")).split()[1:]
+    assert set(connect) == {"'self'", "blob:", "data:", "wss://www.forgefiles.org"}
+
+
+def test_desktop_pages_point_send_and_receive_at_the_website(local_client):
+    assert 'window.FF_TRANSFER_ORIGIN="https://www.forgefiles.org"' in local_client.get("/").text
+
+
 def test_no_stylesheet_or_script_imports_a_font_cdn():
     """Fonts are self-hosted (static/vendor/fonts); a CDN import would break the
     desktop app's no-third-party guarantee and its offline use."""

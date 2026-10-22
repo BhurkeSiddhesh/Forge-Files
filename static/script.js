@@ -650,7 +650,8 @@ window.ffUpdateStepTracker = ffUpdateStepTracker;
 // just dead time between their click and a usable upload box.
 const FF_TOOL_TITLES = {
     pdf: 'PDF Tools', image: 'Image Tools', excel: 'Excel Tools',
-    ppt: 'PPT Tools', word: 'Word Tools', workflow: 'Workflow'
+    ppt: 'PPT Tools', word: 'Word Tools', workflow: 'Workflow',
+    transfer: 'Send & Receive'
 };
 const FF_HOME_TITLE = document.title;
 
@@ -673,6 +674,7 @@ function showDrillDown(tool, instant, fromHistory = false) {
     else if (tool === 'ppt') pageId = 'ppt-page';
     else if (tool === 'word') pageId = 'word-page';
     else if (tool === 'workflow') pageId = 'workflow-page';
+    else if (tool === 'transfer') pageId = 'transfer-page';
     else return;
 
     if (!fromHistory && new URLSearchParams(location.search).get('tool') !== tool) {
@@ -4077,10 +4079,13 @@ const DEEP_LINK_OPS = {
     // Word
     'word-to-pdf': { card: 'word-to-pdf-btn' },
     'word-to-powerpoint': { card: 'word-to-pptx-btn' },
+    // Send & Receive
+    'send-files': { card: 'send-files-btn' },
+    'receive-files': { card: 'receive-files-btn' },
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn', 'send-files-btn', 'receive-files-btn'];
 
 // Home-grid tools with no SEO landing page (none today); same resolution rule as above.
 const DEEP_LINK_EXTRA_OPS = {};
@@ -4139,7 +4144,7 @@ const FF_CATEGORY_INPUTS = {
 (function () {
     const params = new URLSearchParams(window.location.search);
     const requestedTool = params.get('tool');
-    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word'].includes(requestedTool)) return;
+    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word', 'transfer'].includes(requestedTool)) return;
 
     showDrillDown(requestedTool, true, true);
 

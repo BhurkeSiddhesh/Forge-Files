@@ -112,7 +112,9 @@
             { "@type": "ListItem", "position": 38, "name": "Create PDF", "url": "{{BASE_URL}}/create-pdf" },
             { "@type": "ListItem", "position": 39, "name": "Annotate PDF", "url": "{{BASE_URL}}/annotate-pdf" },
             { "@type": "ListItem", "position": 40, "name": "Edit PDF Metadata", "url": "{{BASE_URL}}/edit-pdf-metadata" },
-            { "@type": "ListItem", "position": 41, "name": "Word to PowerPoint", "url": "{{BASE_URL}}/word-to-powerpoint" }
+            { "@type": "ListItem", "position": 41, "name": "Word to PowerPoint", "url": "{{BASE_URL}}/word-to-powerpoint" },
+            { "@type": "ListItem", "position": 42, "name": "Send Files", "url": "{{BASE_URL}}/send-files" },
+            { "@type": "ListItem", "position": 43, "name": "Receive Files", "url": "{{BASE_URL}}/receive-files" }
         ]
     }
     </script>
@@ -148,6 +150,7 @@
     <link rel="stylesheet" href="/static/ds/pages/ppt.css?v=20261009">
     <link rel="stylesheet" href="/static/ds/pages/word.css?v=20261009">
     <link rel="stylesheet" href="/static/ds/pages/workflow.css?v=20261009">
+    <link rel="stylesheet" href="/static/ds/pages/transfer.css?v=20261022">
     <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
     <!-- Cropper.js (CSS + JS) is lazy-loaded by script.js only when the crop tool is opened, to protect LCP/INP. -->
     {{CF_ANALYTICS}}
@@ -1319,6 +1322,50 @@
                 </div>
             </div>
         </section>
+
+        <!-- Send & Receive Page (peer-to-peer, static/local/transfer.js) -->
+        <section id="transfer-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">Send &amp; Receive</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title">Send &amp; Receive</h2><p class="ffp-desc">Send text, photos, PDFs or any file straight to another device. Nothing is uploaded or stored on our servers.</p></div>
+
+            <div class="drill-down-content">
+                <div class="actions-panel">
+                    <div class="action-buttons">
+                        <div class="action-card ff-tool" id="send-files-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-zip);--d:0s"><svg class="ff-icon-svg" data-icon="send" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path pathLength="1" d="m21.854 2.147-10.94 10.939"/></svg></span><span class="action-text"><h4>Send</h4><p>Share text or files with a code you choose.</p></span></div>
+                        <div class="action-card ff-tool" id="receive-files-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-zip);--d:-1.1s"><svg class="ff-icon-svg" data-icon="download" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline pathLength="1" points="7 10 12 15 17 10"/><line pathLength="1" x1="12" x2="12" y1="15" y2="3"/></svg></span><span class="action-text"><h4>Receive</h4><p>Enter the sender's code to get their items.</p></span></div>
+                    </div>
+
+                    <p id="transfer-unsupported" class="helper-text" hidden>This browser can't connect directly to another device. Please use a recent version of Chrome, Edge, Firefox or Safari.</p>
+
+                    <div id="transfer-send-area" class="password-area hidden">
+                        <label for="transfer-text">Text to send (optional)</label>
+                        <textarea id="transfer-text" rows="4" placeholder="Paste a message, link or note"></textarea>
+                        <div id="transfer-drop-zone" class="drop-zone ff-drop transfer-drop" role="button" tabindex="0" aria-label="Add files to send">
+                            <span class="t">Drop photos, PDFs or any files</span><span class="s">or <span class="browse-text">choose files</span></span>
+                        </div>
+                        <input type="file" id="transfer-file-input" multiple hidden>
+                        <ul id="transfer-file-list" class="transfer-file-list" aria-label="Files to send"></ul>
+                        <label for="transfer-send-id">Your code: a mobile number or any phrase (6+ characters)</label>
+                        <div class="transfer-id-row">
+                            <input type="text" id="transfer-send-id" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="e.g. +91 98200 12345 or maple-otter-42">
+                            <button type="button" id="transfer-generate" class="secondary-btn">Generate code</button>
+                        </div>
+                        <button type="button" id="transfer-send-start" class="primary-btn">Wait for receiver</button>
+                        <p class="helper-text">You approve who receives, and your items go directly to their device, encrypted.</p>
+                        <div id="transfer-send-status"></div>
+                    </div>
+
+                    <div id="transfer-receive-area" class="password-area hidden">
+                        <label for="transfer-receive-id">Sender's code</label>
+                        <div class="transfer-id-row">
+                            <input type="text" id="transfer-receive-id" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="64" placeholder="Mobile number or code from the sender">
+                            <button type="button" id="transfer-receive-start" class="primary-btn">Receive</button>
+                        </div>
+                        <div id="transfer-receive-status"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
         <footer class="site-footer ff-ds ff-foot">
             <div class="cols">
                 <div class="col">
@@ -1375,6 +1422,8 @@
                     <a href="/merge-excel">Merge Excel</a>
                     <a href="/ppt-to-images">PPT to Images</a>
                     <a href="/merge-ppt">Merge PowerPoint</a>
+                    <a href="/send-files">Send Files</a>
+                    <a href="/receive-files">Receive Files</a>
                 </div>
                 <div class="col">
                     <h4>Forge Files</h4>
@@ -1421,11 +1470,13 @@
     <script src="/static/local/ops-heic.js?v=20261006"></script>
     <script src="/static/local/ops-excel.js?v=20261006"></script>
     <script src="/static/local/ops-workflow.js?v=20261008"></script>
+    <script src="/static/vendor/qrcode-generator/qrcode.js?v=1.4.4"></script>
+    <script src="/static/local/transfer.js?v=20261022b"></script>
     <script src="/static/ff-page-grid.js?v=20261013"></script>
-    <script src="/static/ds/icons.js?v=20261009"></script>
-    <script src="/static/ds/home.js?v=20261018"></script>
+    <script src="/static/ds/icons.js?v=20261022"></script>
+    <script src="/static/ds/home.js?v=20261022"></script>
     <script src="/static/ds/toolpage.js?v=20261009"></script>
-    <script src="/static/script.js?v=20261015"></script>
+    <script src="/static/script.js?v=20261022"></script>
     {{CONSENT_BANNER}}
 </body>
 
