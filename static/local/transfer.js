@@ -411,6 +411,14 @@
             }
         }
 
+        /** Stop for good (the session was cancelled): drop queued work, abort open files. */
+        this.cancel = function () {
+            if (failed) return;
+            failed = true;
+            openSinks.forEach(function (sink) { try { sink.abort(); } catch (e) { } });
+            openSinks = [];
+        };
+
         this.handle = function (data) {
             if (failed) return;
             if (typeof data === 'string') {
@@ -427,7 +435,7 @@
                         return item.sink.close().then(function (result) {
                             openSinks = openSinks.filter(function (x) { return x !== item.sink; });
                             ack(true);
-                            callbacks.item(item.i, item.meta, result);
+                            if (!failed) callbacks.item(item.i, item.meta, result);
                         });
                     });
                 } else if (msg.t === 'done') {
@@ -450,6 +458,21 @@
             });
             callbacks.progress(received, total);
         };
+    }
+
+    /**
+     * Which item (if any) streams to disk, and whether the rest fits in memory.
+     * Every item not streamed is held as a Blob until the next receive, so the
+     * limit applies to their combined size, not to each one.
+     */
+    function memoryPlan(items, limit, canStream) {
+        var total = items.reduce(function (s, it) { return s + it.size; }, 0);
+        var streamed = null;
+        if (total > limit && canStream) {
+            streamed = items.reduce(function (a, b) { return b.size > a.size ? b : a; });
+        }
+        var inMemory = total - (streamed ? streamed.size : 0);
+        return { ok: inMemory <= limit, streamed: streamed, inMemory: inMemory };
     }
 
     function memorySink(meta) {
@@ -773,6 +796,9 @@
 
             function stop() {
                 state.cancelled = true;
+                // Before closing the connection: queued writes must not run on,
+                // and a half-written file must be aborted, not left open.
+                if (state.receiver) state.receiver.cancel();
                 if (state.peer && state.peer.channel && state.peer.channel.readyState === 'open') {
                     try { state.peer.channel.send(JSON.stringify({ t: 'cancel' })); } catch (e) { }
                 }
@@ -828,11 +854,11 @@
                 manifest = { items: items };
                 var limit = isNativeApp() ? NATIVE_LIMIT : MEMORY_LIMIT;
                 var canStream = typeof window.showSaveFilePicker === 'function' && !isNativeApp();
-                var large = items.filter(function (it) { return it.size > limit; });
-                if (large.length && (!canStream || large.length > 1)) {
+                var plan = memoryPlan(items, limit, canStream);
+                if (!plan.ok) {
                     reset(canStream
-                        ? 'Ask the sender to send files larger than ' + formatBytes(limit) + ' one at a time.'
-                        : 'A file is larger than ' + formatBytes(limit) + ', too big to receive in this browser. Try Chrome or Edge on a computer.');
+                        ? 'These items add up to more than ' + formatBytes(limit) + '. Ask the sender to send the largest files one at a time.'
+                        : 'These items add up to more than ' + formatBytes(limit) + ', too much to receive here at once. Ask the sender to send fewer at a time, or use Chrome or Edge on a computer.');
                     return;
                 }
                 var total = items.reduce(function (s, it) { return s + it.size; }, 0);
@@ -842,7 +868,7 @@
                         return el('li', { text: (it.kind === 'text' ? 'Text' : it.name) + ' · ' + formatBytes(it.size) });
                     })),
                     el('div', { className: 'transfer-actions' }, [
-                        el('button', { type: 'button', className: 'primary-btn', text: 'Accept', onclick: function () { accept(manifest, large[0]); } }),
+                        el('button', { type: 'button', className: 'primary-btn', text: 'Accept', onclick: function () { accept(manifest, plan.streamed); } }),
                         el('button', { type: 'button', className: 'secondary-btn', text: 'Decline', onclick: function () { reset(); } })
                     ])
                 ]);
@@ -962,6 +988,7 @@
         Receiver: Receiver,
         sendItems: sendItems,
         ackReceived: ackReceived,
+        memoryPlan: memoryPlan,
         WINDOW: WINDOW,
         generateCode: generateCode,
         normalizeIdentifier: normalizeIdentifier,

@@ -122,6 +122,25 @@ def test_pinging_does_not_keep_a_room_past_its_ttl(client, monkeypatch):
     assert main.transfer_router.hub.rooms == {}
 
 
+def test_approval_near_the_deadline_extends_both_sockets(client, monkeypatch):
+    """The receiver's read was armed with the short unpaired deadline; approval
+    must extend it rather than expire a transfer that has just been accepted."""
+    monkeypatch.setattr(ts, "ROOM_TTL_SECONDS", 0.6)
+    monkeypatch.setattr(ts, "PAIRED_TTL_SECONDS", 30)
+    with client.websocket_connect(WS, headers=ORIGIN) as sender:
+        receiver, rid = _pair(client, sender)
+        time.sleep(0.3)
+        sender.send_json({"t": "approve", "rid": rid})
+        assert receiver.receive_json()["t"] == "approved"
+        assert sender.receive_json()["t"] == "paired"
+        time.sleep(1.0)  # well past the unpaired deadline
+        sender.send_json({"t": "signal", "data": {"sdp": "offer"}})
+        assert receiver.receive_json() == {"t": "signal", "data": {"sdp": "offer"}}
+        receiver.send_json({"t": "signal", "data": {"sdp": "answer"}})
+        assert sender.receive_json() == {"t": "signal", "data": {"sdp": "answer"}}
+        receiver.close()
+
+
 def test_oversized_message_is_refused(client):
     with client.websocket_connect(WS, headers=ORIGIN) as ws:
         ws.send_text("x" * (ts.MAX_MESSAGE_BYTES + 1))

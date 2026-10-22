@@ -210,6 +210,10 @@ class TransferHub:
                 try:
                     text = await asyncio.wait_for(ws.receive_text(), timeout=timeout)
                 except asyncio.TimeoutError:
+                    # The wait was armed with the deadline at the time; an
+                    # approval since then extends it (PAIRED_TTL_SECONDS).
+                    if self._timeout(state) > 0:
+                        continue
                     await _send(ws, {"t": "error", "code": "expired"})
                     break
                 if len(text) > MAX_MESSAGE_BYTES:

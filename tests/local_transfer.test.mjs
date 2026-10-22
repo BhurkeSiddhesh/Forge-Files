@@ -118,6 +118,43 @@ test('a hash mismatch from the sender reports an error', async () => {
     assert.equal(result, 'hash');
 });
 
+test('the memory limit applies to the items combined, not to each one', () => {
+    const MB = 1024 * 1024;
+    const ten = Array.from({ length: 10 }, (_, i) => ({ name: `f${i}`, size: 100 * MB }));
+    assert.equal(T.memoryPlan(ten, 120 * MB, false).ok, false);
+    // Streaming saves only the largest; the other nine still exceed the limit.
+    assert.equal(T.memoryPlan(ten, 500 * MB, true).ok, false);
+    const fits = [{ name: 'a', size: 50 * MB }, { name: 'b', size: 60 * MB }];
+    const small = T.memoryPlan(fits, 120 * MB, false);
+    assert.equal(small.ok, true);
+    assert.equal(small.streamed, null);
+    assert.equal(small.inMemory, 110 * MB);
+    const oneBig = [{ name: 'movie', size: 4000 * MB }, { name: 'note', size: 1 }];
+    const plan = T.memoryPlan(oneBig, 500 * MB, true);
+    assert.equal(plan.ok, true);
+    assert.equal(plan.streamed.name, 'movie');
+});
+
+test('cancelling a receiver aborts the open file and runs no queued work', async () => {
+    let aborted = false, saved = false, done = false;
+    const manifest = { items: [{ name: 'x', type: '', size: 6, kind: 'file' }] };
+    const r = new T.Receiver(manifest, () => ({
+        write: () => new Promise((res) => setTimeout(res, 20)),
+        close: async () => { saved = true; return null; },
+        abort() { aborted = true; },
+    }), { progress() {}, item() {}, error() {}, done: () => { done = true; } });
+    r.handle(JSON.stringify({ t: 'start', i: 0 }));
+    r.handle(new Uint8Array([1, 2, 3]).buffer);
+    r.cancel();
+    r.handle(new Uint8Array([4, 5, 6]).buffer);
+    r.handle(JSON.stringify({ t: 'end', i: 0, sha256: 'x' }));
+    r.handle(JSON.stringify({ t: 'done' }));
+    await new Promise((res) => setTimeout(res, 80));
+    assert.equal(aborted, true);
+    assert.equal(saved, false);
+    assert.equal(done, false);
+});
+
 test('identifier normalization matches the server', () => {
     assert.equal(T.normalizeIdentifier('+91 98200-12345'), '919820012345');
     assert.equal(T.normalizeIdentifier('(022) 555 0199'), '0225550199');
