@@ -179,6 +179,9 @@
      * is no.
      */
     async function consentOrDecline(path, code, extra) {
+        if (window.FF_DESKTOP || window.FF_LOCAL_ONLY) {
+            return null;
+        }
         var gate = window.ffConsent;
         var agreed = false;
         try {

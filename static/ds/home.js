@@ -45,11 +45,13 @@
         ['merge-excel', 'excel', 'Spreadsheets', 'Merge Excel', 'combine', 'excel', 'Combine multiple .xlsx files.', 'workbooks combine'],
         ['ppt-to-images', 'ppt', 'Presentations', 'PPT → Images', 'image', 'ppt', 'Each slide as PNG or JPG (zip).', 'slides png jpg'],
         ['merge-ppt', 'ppt', 'Presentations', 'Merge PowerPoint', 'combine', 'ppt', 'Combine multiple presentations.', 'pptx combine'],
+        ['send-files', 'transfer', 'Share', 'Send files & text', 'send', 'zip', 'Send text or files straight to another device with a code.', 'share transfer send phone mobile number airdrop nearby text clipboard paste photos', 1],
+        ['receive-files', 'transfer', 'Share', 'Receive files & text', 'download', 'zip', 'Enter a code to receive what someone sent you.', 'receive get download code transfer share'],
         ['', 'workflow', 'Workflows', 'Workflow builder', 'workflow', 'zip', 'Chain several operations on one file and run them in order.', 'chain steps automate pipeline multiple operations']
     ].map(function (r) {
         return { slug: r[0], cat: r[1], chip: r[2], title: r[3], icon: r[4], ft: r[5], desc: r[6], kw: r[7], popular: !!r[8] };
     });
-    var CHIPS = ['All', 'PDF', 'Images', 'Documents', 'Spreadsheets', 'Presentations', 'Workflows'];
+    var CHIPS = ['All', 'PDF', 'Images', 'Documents', 'Spreadsheets', 'Presentations', 'Share', 'Workflows'];
     var VERBS = ['Compress', 'Merge', 'Convert', 'Resize', 'Split'];
 
     function esc(s) {

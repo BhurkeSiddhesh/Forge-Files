@@ -118,6 +118,61 @@ async def test_workflow_failure_is_stable_after_disconnect(tmp_path, monkeypatch
     assert "deliberate workflow failure" in job["event"]["detail"]
 
 
+@pytest.mark.anyio
+async def test_cancelled_workflow_job_still_cleans_up(tmp_path, monkeypatch):
+    """A workflow's detached task (run_workflow_job, via _start_detached) is not
+    tied to the client's SSE connection, but it IS an ordinary asyncio task — so
+    asyncio.run()'s own shutdown sequence cancels it like any other still-pending
+    task when the event loop closes. That happens on every production deploy
+    that restarts the server mid-workflow (deploy-oracle.yml redeploys `main` on
+    every push). asyncio.CancelledError is a BaseException, not an Exception, so
+    it bypasses generate_progress()'s `except Exception` handler and lands
+    straight in `finally`. Before the fix, `finally` opened with `if
+    step_started is not None: return`, which both swallowed the cancellation and
+    skipped cleanup whenever a step was mid-flight — leaking the upload and every
+    intermediate forever. Cleanup must run (and the cancellation must still
+    propagate) even when a step is cancelled mid-flight.
+    """
+    uploads = tmp_path / "uploads"
+    outputs = tmp_path / "outputs"
+    uploads.mkdir()
+    outputs.mkdir()
+    monkeypatch.setattr(main, "UPLOAD_DIR", uploads)
+    monkeypatch.setattr(main, "OUTPUT_DIR", outputs)
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_rotate(input_path, output_dir, angle, pages, password):
+        started.set()
+        release.wait(2)
+        return input_path
+
+    monkeypatch.setattr(main, "rotate_pdf", slow_rotate)
+    upload = UploadFile(filename="shared.pdf", file=io.BytesIO(b"%PDF-1.4 test"))
+    before_tasks = set(main._DETACHED_TASKS)
+    response = await main.execute_workflow(
+        file=upload,
+        steps=json.dumps([{"type": "rotate_pdf", "config": {"angle": 90}}]),
+    )
+    stream = response.body_iterator
+    await anext(stream)  # the 'start' event
+
+    new_tasks = set(main._DETACHED_TASKS) - before_tasks
+    assert len(new_tasks) == 1, "execute_workflow should start exactly one detached job task"
+    job_task = new_tasks.pop()
+
+    assert await asyncio.to_thread(started.wait, 2), "workflow step never started"
+    job_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await job_task
+    release.set()  # unblock the background thread so it doesn't linger
+    await asyncio.sleep(0.05)
+
+    assert list(uploads.iterdir()) == [], "cancellation leaked the upload temp file"
+    assert list(outputs.iterdir()) == [], "cancellation leaked the run's result directory"
+
+
 def test_workflow_client_polls_the_job_registry_after_stream_loss():
     source = (Path(__file__).parents[1] / "static" / "script.js").read_text(
         encoding="utf-8"

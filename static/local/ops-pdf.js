@@ -824,10 +824,11 @@
                 var fromTop = position === 'top' ? crop.height * 0.1
                     : position === 'center' ? crop.height / 2
                         : crop.height * 0.9;
-                // The server's own rough width estimate, kept so placement matches.
-                var estimated = fontSize * 0.5 * text.length;
+                // Exact glyph width (mirrors pdf_utils.py's fitz.get_text_length fix),
+                // not the per-character estimate the server used to use.
+                var measured = font.widthOfTextAtSize(text, fontSize);
                 page.drawText(text, {
-                    x: crop.x + Math.max(10, (crop.width - estimated) / 2),
+                    x: crop.x + Math.max(10, (crop.width - measured) / 2),
                     y: crop.y + crop.height - fromTop,
                     size: fontSize, font: font, color: grey, opacity: opacity,
                 });

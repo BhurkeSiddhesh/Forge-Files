@@ -651,3 +651,22 @@ test('each result gets its own token', async () => {
     const second = await (await sandbox.window.ffProcess('/api/test/ok', new FormData())).json();
     assert.notEqual(first.download_token, second.download_token);
 });
+
+test('in desktop mode (window.FF_DESKTOP=true), unsupported input bypasses consent and proceeds to local server', async () => {
+    const { sandbox, L, fetchCalls, consentAsked } = load();
+    sandbox.window.FF_DESKTOP = true;
+    L.register('/api/test/fail', async () => {
+        throw new L.Unsupported('scanned pages need OCR', 'ocr_required');
+    });
+    const res = await sandbox.window.ffProcess('/api/test/fail', new FormData());
+    assert.equal(res.ok, true);
+    assert.equal(consentAsked.length, 0, 'desktop mode never asks server consent');
+    assert.equal(fetchCalls.length, 1, 'proceeds to local server');
+});
+
+test('in desktop mode, ffConsent.request resolves true immediately with no dialog', async () => {
+    const { sandbox } = load();
+    sandbox.window.FF_DESKTOP = true;
+    const agreed = await sandbox.window.ffConsent.request({ path: '/api/pdf/convert-to-word' });
+    assert.equal(agreed, true);
+});

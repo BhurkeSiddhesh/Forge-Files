@@ -282,10 +282,14 @@ window.ffStartInflight = ffStartInflight;
 // ask, so the answer is no.
 async function ffServerFetch(path, init, code) {
     let agreed = false;
-    try {
-        agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
-    } catch (e) {
-        agreed = false;
+    if (window.FF_DESKTOP || window.FF_LOCAL_ONLY) {
+        agreed = true;
+    } else {
+        try {
+            agreed = !!(window.ffConsent && await window.ffConsent.request({ path: path, code: code }));
+        } catch (e) {
+            agreed = false;
+        }
     }
     if (!agreed) {
         return new Response(JSON.stringify({ detail: 'Cancelled. Your file was not uploaded.', declined: true }),
@@ -646,7 +650,8 @@ window.ffUpdateStepTracker = ffUpdateStepTracker;
 // just dead time between their click and a usable upload box.
 const FF_TOOL_TITLES = {
     pdf: 'PDF Tools', image: 'Image Tools', excel: 'Excel Tools',
-    ppt: 'PPT Tools', word: 'Word Tools', workflow: 'Workflow'
+    ppt: 'PPT Tools', word: 'Word Tools', workflow: 'Workflow',
+    transfer: 'Send & Receive'
 };
 const FF_HOME_TITLE = document.title;
 
@@ -669,6 +674,7 @@ function showDrillDown(tool, instant, fromHistory = false) {
     else if (tool === 'ppt') pageId = 'ppt-page';
     else if (tool === 'word') pageId = 'word-page';
     else if (tool === 'workflow') pageId = 'workflow-page';
+    else if (tool === 'transfer') pageId = 'transfer-page';
     else return;
 
     if (!fromHistory && new URLSearchParams(location.search).get('tool') !== tool) {
@@ -1107,7 +1113,9 @@ document.getElementById('process-compress-btn').onclick = async () => {
         if (!response.ok) return;
         const data = await response.json();
         if (!data.enabled) {
-            label.textContent = 'Use AI Layout Recovery (unavailable on this server)';
+            label.textContent = (window.FF_DESKTOP || window.FF_LOCAL_ONLY)
+                ? 'Use AI Layout Recovery (unavailable on this device)'
+                : 'Use AI Layout Recovery (unavailable on this server)';
         } else if (data.supports_layout) {
             label.textContent = 'Use AI Layout Recovery (tables & columns, for scanned/image PDFs)';
         } else {
@@ -1852,10 +1860,10 @@ function ensureCropperLoaded() {
     cropperLibPromise = new Promise((resolve, reject) => {
         const css = document.createElement('link');
         css.rel = 'stylesheet';
-        css.href = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css';
+        css.href = '/static/vendor/cropperjs/cropper.min.css';
         document.head.appendChild(css);
         const js = document.createElement('script');
-        js.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js';
+        js.src = '/static/vendor/cropperjs/cropper.min.js';
         js.onload = () => resolve();
         js.onerror = () => { cropperLibPromise = null; reject(new Error('Failed to load image cropper')); };
         document.head.appendChild(js);
@@ -4071,10 +4079,13 @@ const DEEP_LINK_OPS = {
     // Word
     'word-to-pdf': { card: 'word-to-pdf-btn' },
     'word-to-powerpoint': { card: 'word-to-pptx-btn' },
+    // Send & Receive
+    'send-files': { card: 'send-files-btn' },
+    'receive-files': { card: 'receive-files-btn' },
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn', 'send-files-btn', 'receive-files-btn'];
 
 // Home-grid tools with no SEO landing page (none today); same resolution rule as above.
 const DEEP_LINK_EXTRA_OPS = {};
@@ -4133,7 +4144,7 @@ const FF_CATEGORY_INPUTS = {
 (function () {
     const params = new URLSearchParams(window.location.search);
     const requestedTool = params.get('tool');
-    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word'].includes(requestedTool)) return;
+    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word', 'transfer'].includes(requestedTool)) return;
 
     showDrillDown(requestedTool, true, true);
 

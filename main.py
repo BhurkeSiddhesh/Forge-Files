@@ -99,6 +99,8 @@ from scripts.ppt_utils import (
 )
 from scripts import seo_content
 from scripts import blog_content
+from scripts import desktop_feed
+from scripts import installer_mirror
 from scripts import event_log
 from scripts import ga4_mp
 
@@ -220,11 +222,31 @@ _ISOLATED_PREFIXES = (
 _ENGINE_PREFIX = "/static/vendor/lo-wasm/"
 
 
+def _local_origin_blocked(request: Request) -> bool:
+    """Local-only mode: refuse requests that did not come from the app's own page.
+
+    The server sits on a predictable 127.0.0.1 port, and any website open in the
+    person's browser can fire requests at it (CORS stops it *reading* replies, not
+    *sending*). A wrong Host header is DNS rebinding; a foreign Origin is a cross-site
+    request. The app's own window sends neither.
+    """
+    netloc = urlsplit(BASE_URL).netloc.lower()
+    hosts = {netloc, netloc.replace("127.0.0.1", "localhost")}
+    if request.headers.get("host", "").lower() not in hosts:
+        return True
+    origin = request.headers.get("origin")
+    return origin is not None and origin.lower() not in {f"http://{h}" for h in hosts}
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
+    if LOCAL_ONLY and _local_origin_blocked(request):
+        return JSONResponse({"detail": "Forbidden"}, status_code=403)
     response = await call_next(request)
     for name, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    if LOCAL_ONLY:
+        response.headers["Content-Security-Policy"] = _LOCAL_ONLY_CSP
     path = request.url.path
     if path.startswith(_ISOLATED_PREFIXES):
         response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
@@ -262,7 +284,7 @@ BASE_URL = os.environ.get("BASE_URL", "https://www.forgefiles.org").rstrip("/")
 # date on every request is inaccurate and teaches crawlers to distrust the field
 # (wasting crawl budget). Bump CONTENT_LAST_MODIFIED (or set the env var on a
 # real content change) so the sitemap reflects the true last edit, not "now".
-CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-10-07").strip()
+CONTENT_LAST_MODIFIED = os.environ.get("CONTENT_LAST_MODIFIED", "2026-10-12").strip()
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 # Multi-file endpoints (the merge tools, images->PDF) share one budget across the
 # whole request: a per-file cap alone would let a single request write
@@ -567,11 +589,14 @@ async def _warmup_ai():
 
 # Ensure directories exist
 BASE_DIR = Path(__file__).parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-OUTPUT_DIR = BASE_DIR / "outputs"
+# FF_DATA_DIR relocates writable state. The Windows desktop build installs the
+# app read-only-ish under Program Files, so it points this at %LOCALAPPDATA%.
+_DATA_DIR = Path(os.environ.get("FF_DATA_DIR") or BASE_DIR)
+UPLOAD_DIR = _DATA_DIR / "uploads"
+OUTPUT_DIR = _DATA_DIR / "outputs"
 
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mount static files
 class _StaticFilesWithModuleTypes(StaticFiles):
@@ -1669,8 +1694,79 @@ def validate_quality(quality: int):
     validate_range("quality", quality, 1, 95)
 
 
+# Local-only mode (the Windows desktop app sets FF_LOCAL_ONLY=1): the page makes no
+# request to any host except this server. Analytics is stripped from every page and
+# a Content-Security-Policy makes the browser refuse (and report) anything else.
+LOCAL_ONLY = os.environ.get("FF_LOCAL_ONLY") == "1"
+# The one exception to "only this server": Send & Receive needs the website's
+# signaling hub to find the other device (the file bytes then go peer to peer,
+# which CSP connect-src does not govern). It is opened only when the person
+# starts a transfer, after a one-time consent prompt in static/local/transfer.js.
+TRANSFER_ORIGIN = os.environ.get("FF_TRANSFER_ORIGIN", "https://www.forgefiles.org").rstrip("/")
+_TRANSFER_WS_ORIGIN = re.sub(r"^http", "ws", TRANSFER_ORIGIN)
+_THIRD_PARTY_SCRIPT = re.compile(r"<script\b[^>]*\bsrc=\"https?://[^\"]+\"[^>]*>\s*</script>", re.I)
+_LOCAL_ONLY_CSP = (
+    "default-src 'self' blob: data:; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; font-src 'self' data:; "
+    f"connect-src 'self' blob: data: {_TRANSFER_WS_ORIGIN}; worker-src 'self' blob:; "
+    "frame-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; "
+    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+)
+
+
+def _localize(html_text: str) -> str:
+    """Drop every externally-hosted <script> so local-only pages stay local."""
+    return _THIRD_PARTY_SCRIPT.sub("", html_text)
+
+
+# "Download for Windows" header button (the {{DOWNLOAD_CTA}} placeholder in every page header).
+# Shown only to Windows visitors on a desktop-width screen; the .exe is useless anywhere else.
+# Left out of the desktop app itself, where the person already has it. Inline <style>/<script>
+# so it does not depend on which stylesheet version a browser has cached.
+DOWNLOAD_CTA_HTML = (
+    '<style>.ff-dl-cta{display:none;gap:7px;align-items:center;font-weight:600;white-space:nowrap;'
+    'position:relative;overflow:hidden}'
+    '.ff-dl-cta svg{flex:none}'
+    '.ff-dl-cta::after{content:"";position:absolute;inset:0;pointer-events:none;'
+    'background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%);'
+    'transform:translateX(-120%);animation:ff-dl-shine 4.5s ease-in-out 1.5s infinite}'
+    '.ff-dl-arrow{animation:ff-dl-nudge 2s ease-in-out infinite}'
+    '@keyframes ff-dl-shine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}'
+    '@keyframes ff-dl-nudge{0%,100%{transform:translateY(-1px)}50%{transform:translateY(2px)}}'
+    '@media (prefers-reduced-motion:reduce){.ff-dl-cta::after,.ff-dl-arrow{animation:none}}'
+    '@media (min-width:900px){.ff-dl-cta:not([hidden]){display:inline-flex}}</style>'
+    '<a class="ff-btn sm ff-dl-cta" id="ff-dl-cta" href="/download" hidden>'
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    '<path d="M3 5.6 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.4zM11.5 12.5H21V21l-9.5-1.4z"/></svg>'
+    '<span>Download for Windows</span>'
+    '<svg class="ff-dl-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg></a>'
+    '<script>(function(){var u=navigator.userAgent;if(/Windows/.test(u)&&!/Mobi|Android|Phone/.test(u)){'
+    'var a=document.getElementById("ff-dl-cta");if(a)a.hidden=false}})()</script>'
+)
+
+
 def _substitute(html_text: str) -> str:
     """Replace server-side template tokens shared by every page."""
+    if LOCAL_ONLY:
+        app_version = os.environ.get("FF_APP_VERSION", "0.0.0")
+        desktop_init = (
+            f'<script>window.FF_DESKTOP=true;window.FF_LOCAL_ONLY=true;window.FF_APP_VERSION="{app_version}";'
+            f'window.FF_TRANSFER_ORIGIN={json.dumps(TRANSFER_ORIGIN)};</script>'
+        )
+        html_text = _localize(html_text)
+        if "<head>" in html_text:
+            html_text = html_text.replace("<head>", f"<head>{desktop_init}", 1)
+        elif "<head " in html_text:
+            html_text = re.sub(r"(<head\b[^>]*>)", rf"\1{desktop_init}", html_text, count=1)
+        else:
+            html_text = desktop_init + html_text
+        html_text = html_text.replace(
+            "</body>", '<script src="/static/local/desktop-shell.js" defer></script></body>', 1
+        )
     return (
         html_text
         .replace("{{BASE_URL}}", BASE_URL)
@@ -1679,6 +1775,7 @@ def _substitute(html_text: str) -> str:
         .replace("{{CONSENT_BANNER}}", CONSENT_BANNER_HTML)
         .replace("{{SITE_VERIFICATION}}", SITE_VERIFICATION_HTML)
         .replace("{{CF_ANALYTICS}}", CF_ANALYTICS_HTML)
+        .replace("{{DOWNLOAD_CTA}}", "" if LOCAL_ONLY else DOWNLOAD_CTA_HTML)
         .replace("{{GA_ANALYTICS}}", GA_ANALYTICS_HTML)
     )
 
@@ -1693,6 +1790,34 @@ def _render_page(relative_path: str) -> str:
 def _render_tool_page(slug: str) -> str:
     """Server-render a tool landing page (full HTML, no JS needed for crawlers)."""
     return _substitute(seo_content.render_tool_page(slug))
+
+@app.get("/api/desktop/feed")
+async def api_desktop_feed(force: bool = False):
+    """Update check + announcement for the Windows desktop app (404 on the website)."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    if force:
+        return await desktop_feed.get_response(os.environ.get("FF_APP_VERSION", "0.0.0"), _DATA_DIR, force=True)
+    return await desktop_feed.get_response(os.environ.get("FF_APP_VERSION", "0.0.0"), _DATA_DIR)
+
+
+@app.post("/api/desktop/feed/on")
+async def api_desktop_feed_on():
+    """The person turned update checks on from the in-app card or UI."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    desktop_feed.enable_feed(_DATA_DIR)
+    return {"enabled": True}
+
+
+@app.post("/api/desktop/feed/off")
+async def api_desktop_feed_off():
+    """The person turned update checks off from the in-app card."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    desktop_feed.disable_feed(_DATA_DIR)
+    return {"enabled": False}
+
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def read_index():
@@ -3020,8 +3145,16 @@ async def execute_workflow(
             yield f"data: {json.dumps({'event': 'error', 'detail': event_log.scrub_paths(str(e))})}\n\n"
         
         finally:
-            if step_started is not None:
-                return
+            # Every early-return path above already resets step_started to None,
+            # so the only way it can still be set here is a BaseException that
+            # bypasses `except Exception` — chiefly asyncio.CancelledError, which
+            # this generator's detached task (run_workflow_job, via
+            # _start_detached) receives whenever the event loop cancels
+            # outstanding tasks on shutdown, i.e. on every production deploy that
+            # catches a workflow mid-flight. A bare `return` here used to swallow
+            # that cancellation AND skip the cleanup below, leaking the upload and
+            # every intermediate for a job interrupted mid-step. Always clean up.
+            #
             # Clean up the upload plus every intermediate step output. The final
             # deliverable is never renamed into intermediate_files, so it stays
             # for the client's follow-up download; only the throwaway temps go.
@@ -3783,11 +3916,70 @@ async def api_track(request: Request):
     return Response(status_code=204)
 
 
+# --- Windows installer download ---
+# /download/windows serves the installer from this server's own disk, so people
+# download from forgefiles.org and never land on a GitHub page. The file is a
+# GitHub release asset: scripts/installer_mirror.py copies the newest one into
+# FF_DATA_DIR/installer in the background. Until that copy exists (or if it
+# fails) the route sends the browser straight to the release file instead.
+# Set WINDOWS_INSTALLER_URL (e.g. an R2 custom domain) to redirect there instead.
+WINDOWS_RELEASE_REPO = os.environ.get("WINDOWS_RELEASE_REPO", "BhurkeSiddhesh/Forge-Files")
+WINDOWS_INSTALLER_URL = os.environ.get("WINDOWS_INSTALLER_URL", "").strip()
+WINDOWS_INSTALLER_MIRROR = os.environ.get("WINDOWS_INSTALLER_MIRROR", "1") != "0"
+INSTALLER_DIR = _DATA_DIR / "installer"
+_installer_link: dict = {"at": float("-inf"), "url": None}
+
+
+async def _release_installer_url() -> str | None:
+    """Direct link to the newest installer on GitHub (None if there is none).
+
+    Every outcome is cached for the check interval, including "no release yet" and
+    "GitHub unreachable", so a busy page cannot hammer GitHub's unauthenticated
+    rate limit (60 requests an hour per IP).
+    """
+    now = time.monotonic()
+    if now - _installer_link["at"] < installer_mirror.CHECK_EVERY_SECONDS:
+        return _installer_link["url"]
+    _installer_link["at"] = now
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            asset = await installer_mirror.latest_asset(WINDOWS_RELEASE_REPO, http)
+        if asset:
+            _installer_link["url"] = asset["url"]
+    except Exception:
+        logger.warning("Could not look up the latest Windows installer", exc_info=True)
+    return _installer_link["url"]  # a stale link beats none
+
+
+@app.get("/download/windows")
+async def download_windows(background_tasks: BackgroundTasks):
+    if WINDOWS_INSTALLER_URL.startswith("https://"):
+        return RedirectResponse(WINDOWS_INSTALLER_URL, status_code=302, headers={"Cache-Control": "no-store"})
+    if WINDOWS_INSTALLER_MIRROR:
+        background_tasks.add_task(installer_mirror.refresh, WINDOWS_RELEASE_REPO, INSTALLER_DIR)
+        local = installer_mirror.cached_installer(INSTALLER_DIR)
+        if local:
+            return FileResponse(
+                local,
+                media_type="application/octet-stream",
+                filename=local.name,
+                headers={"Cache-Control": "public, max-age=300"},
+            )
+    url = await _release_installer_url()
+    return RedirectResponse(
+        url or f"https://github.com/{WINDOWS_RELEASE_REPO}/releases/latest",
+        status_code=302,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # --- SEO Routes ---
 # Content pages are static files in static/pages/. Tool pages are server-rendered
 # from scripts/seo_content.py (full HTML — no JS required, so JS-less AI crawlers
 # read the title/meta/body directly). Both kinds appear in sitemap.xml.
-CONTENT_PAGES = ["about", "faq", "contact", "privacy", "terms"]
+CONTENT_PAGES = ["about", "faq", "contact", "privacy", "terms", "download"]
 TOOL_PAGES = seo_content.TOOL_PAGES
 
 # Back-compat: every indexable slug (tests and tooling expect this iterable).
@@ -3958,6 +4150,19 @@ async def serve_blog_guide(slug: str):
     if slug in blog_content.GUIDES:
         return HTMLResponse(_substitute(blog_content.render_guide(slug)))
     raise HTTPException(status_code=404, detail="Guide not found")
+
+
+# --- Send & Receive (peer-to-peer) -------------------------------------------
+# WebRTC signaling only: the hub pairs two browsers and relays their handshake;
+# file bytes never pass through this app (see transfer_signaling.py). The
+# desktop app has no hub of its own, it signals through www.forgefiles.org.
+if not LOCAL_ONLY:
+    from transfer_signaling import create_transfer_router, site_origins_from  # noqa: E402
+
+    transfer_router = create_transfer_router(
+        client_identity, site_origins_from(BASE_URL, _CORS_ORIGINS)
+    )
+    app.include_router(transfer_router)
 
 
 @app.get("/{slug}", response_class=HTMLResponse)

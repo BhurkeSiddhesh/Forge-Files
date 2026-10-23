@@ -23,6 +23,12 @@ NON_UPLOAD_SUPPORT = {
 }
 
 
+# Send & Receive never uploads: its only route is the WebRTC signaling socket,
+# and file bytes go peer to peer. These tools must say so, not borrow the gate.
+PEER_TO_PEER_TOOLS = {"send_files", "receive_files"}
+SIGNALING_ROUTE = "/api/transfer/ws"
+
+
 def _consent_paths() -> set[str]:
     return set(re.findall(r"^\s*'(/[^']+)': \[", CONSENT_JS, flags=re.M))
 
@@ -31,13 +37,28 @@ def test_every_tool_declares_an_execution_policy_requiring_consent() -> None:
     for tool in REGISTRY["tools"]:
         execution = tool.get("execution")
         assert execution, f"{tool['id']} has no execution policy"
+        if tool["id"] in PEER_TO_PEER_TOOLS:
+            continue
         assert execution["requires_server_consent"] is True
         assert execution["preferred"] in {"browser", "server"}
+
+
+def test_peer_to_peer_tools_cannot_upload() -> None:
+    tools = [tool for tool in REGISTRY["tools"] if tool["id"] in PEER_TO_PEER_TOOLS]
+    assert {tool["id"] for tool in tools} == PEER_TO_PEER_TOOLS
+    for tool in tools:
+        assert tool["processing"] == "local"
+        assert tool["execution"] == {**tool["execution"], "preferred": "browser", "requires_server_consent": False}
+        assert tool["api_paths"] == [SIGNALING_ROUTE]
+    transfer_js = (ROOT / "static" / "local" / "transfer.js").read_text(encoding="utf-8")
+    assert "fetch(" not in transfer_js and "XMLHttpRequest" not in transfer_js and "ffProcess" not in transfer_js
 
 
 def test_every_upload_route_has_a_consent_description() -> None:
     paths = _consent_paths()
     for tool in REGISTRY["tools"]:
+        if tool["id"] in PEER_TO_PEER_TOOLS:
+            continue
         for api_path in tool["api_paths"]:
             assert api_path in paths, f"{api_path} ({tool['id']}) has no consent reason"
     for support in REGISTRY["support_api_routes"]:

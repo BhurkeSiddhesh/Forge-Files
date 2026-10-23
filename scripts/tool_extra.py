@@ -232,6 +232,16 @@ HELP.update({
         "Choose 150 DPI for a balanced result. Each page becomes a slide image, so use 200 DPI when small print must stay readable on screen.",
         "Slides are page images, so text and tables are not editable shapes in PowerPoint. Higher quality makes a larger file. Document animations and comments do not carry over.",
         "Check slide count, order and small text in slideshow mode. Use Word to PDF when you only need a faithful fixed-layout copy."),
+    "send-files": (
+        "Send pasted text, photos, PDFs or any other files straight to another device. You choose a code, such as a mobile number, and approve who receives.",
+        "Paste a link and add three photos, type your mobile number as the code and tap Wait for receiver. When the other person enters it, check they see the same two words you do, then tap Accept.",
+        "Both devices must be online with the page open at the same time; nothing is stored for later. Very large files are received fastest in Chrome or Edge on a computer.",
+        "Wait for the Delivered message before closing the page, and ask the receiver to open each file once it is saved."),
+    "receive-files": (
+        "Receive text or files someone is sending you by entering their code, such as their mobile number. Everything arrives directly from their device.",
+        "Type the sender's code and tap Receive. Read out the two words you see so the sender knows it is you, then accept the list of items when it appears.",
+        "The sender's page must stay open until the transfer ends. Phones can save files up to about 120 MB; larger files need Chrome or Edge on a computer.",
+        "Each item is checked with a SHA-256 hash on arrival, and a damaged one is discarded. Open the saved files before telling the sender everything arrived."),
 })
 
 

@@ -22,7 +22,22 @@ for (const f of files) {
     });
 }
 
+// Scripts the Windows desktop server injects into pages itself (main.py, LOCAL_ONLY); the website never loads them.
+const DESKTOP_ONLY = ['desktop-shell.js'];
+
 test('every script the page needs is actually loaded by index.html', () => {
     const html = readFileSync(join(LOCAL, '..', 'index.html'), 'utf8');
-    for (const f of files) assert.ok(html.includes('/static/local/' + f), `${f} is not referenced by index.html`);
+    for (const f of files.filter((name) => !DESKTOP_ONLY.includes(name))) {
+        assert.ok(html.includes('/static/local/' + f), `${f} is not referenced by index.html`);
+    }
+});
+
+test('desktop-only scripts are injected by the desktop server and kept out of index.html', () => {
+    const html = readFileSync(join(LOCAL, '..', 'index.html'), 'utf8');
+    const main = readFileSync(join(LOCAL, '..', '..', 'main.py'), 'utf8');
+    for (const f of DESKTOP_ONLY) {
+        assert.ok(files.includes(f), `${f} is listed as desktop-only but does not exist`);
+        assert.ok(main.includes('/static/local/' + f), `${f} is not injected by main.py`);
+        assert.ok(!html.includes('/static/local/' + f), `${f} must not be loaded by the website's index.html`);
+    }
 });

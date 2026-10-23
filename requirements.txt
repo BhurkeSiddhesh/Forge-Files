@@ -4,6 +4,9 @@ pikepdf>=10.13.0.post1
 # deploy-oracle.yml reinstalls requirements on every push to main.
 fastapi>=0.141.1,<1
 uvicorn>=0.53.0,<1
+# uvicorn's WebSocket protocol: without it the Send & Receive signaling socket
+# (/api/transfer/ws) is refused at the handshake.
+websockets>=13,<17
 python-multipart
 pdf2docx
 # >=7 for the `pythonpath` ini option, which is what lets a bare `pytest`

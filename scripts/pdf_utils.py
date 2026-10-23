@@ -1213,8 +1213,10 @@ def add_watermark(
                         y = rect.height / 2
                     else:  # bottom
                         y = rect.height * 0.9
-                    # Rough horizontal centering.
-                    text_width = size * 0.5 * len(text)
+                    # Exact horizontal centering (actual glyph width, not a
+                    # per-character estimate — mirrors the fix already applied
+                    # to add_page_numbers' label width).
+                    text_width = fitz.get_text_length(text, fontname="helv", fontsize=size)
                     x = max(10, (rect.width - text_width) / 2)
                     page.insert_text(
                         fitz.Point(x, y),
@@ -3357,14 +3359,17 @@ def annotate_pdf(
             elif ann_type == "text":
                 page.insert_textbox(rect, content, fontname="helv", fontsize=11, color=(0, 0, 0))
             elif ann_type == "redact":
-                # `fill=(0, 0, 0)` is load-bearing: apply_redactions() on the pinned
-                # PyMuPDF<1.24 (no `graphics` param yet — added 1.23.27) strips text and
-                # blanks overlapping raster images, but leaves vector content (drawn
-                # rects/lines, form-field borders) under the rect fully visible with no
-                # fill. The black box covers that gap at the render/extraction level even
-                # though the underlying vector path stays in the content stream.
+                # `fill=(0, 0, 0)` covers any vector content (drawn rects/lines,
+                # form-field borders) fully inside the rect at the render/extraction
+                # level. `graphics=PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED` (PyMuPDF
+                # >=1.24, available since the pin moved off <1.24) additionally
+                # strips any vector path from the content stream as soon as it
+                # touches the rect at all — the implicit default (REMOVE_IF_COVERED,
+                # graphics=1) left the part of such a path *outside* the user's box
+                # fully visible, unredacted, because the fill only paints the box
+                # itself, not wherever an only-partially-covered path happens to run.
                 page.add_redact_annot(rect, fill=(0, 0, 0))
-                page.apply_redactions()
+                page.apply_redactions(graphics=fitz.PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED)
 
         doc.save(str(output_file), garbage=3, deflate=True)
         doc.close()

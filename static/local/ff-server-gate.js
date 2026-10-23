@@ -268,6 +268,7 @@
      */
     function request(req) {
         req = req || {};
+        if (window.FF_DESKTOP || window.FF_LOCAL_ONLY) return Promise.resolve(true);
         if (active) return Promise.resolve(false);
         var info = describe(req.path, req.code, req.reason);
         return new Promise(function (resolve) {

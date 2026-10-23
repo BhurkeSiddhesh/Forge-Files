@@ -1,0 +1,30 @@
+/* Send & Receive (#transfer-page). The two tool cards lead; the open panel follows. */
+#transfer-page .action-buttons{order:1}
+#transfer-page .password-area{order:2}
+#transfer-page textarea{width:100%;min-height:96px;padding:var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-panel);color:var(--text-primary);font:400 var(--text-base)/1.5 var(--font-sans);resize:vertical;box-sizing:border-box}
+#transfer-page textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-ring)}
+#transfer-page .drop-zone.transfer-drop{min-height:120px;padding:var(--space-5)}
+#transfer-page .drop-zone.transfer-drop.dragover{border-color:var(--accent);background:var(--accent-soft)}
+#transfer-page .transfer-id-row{display:flex;gap:var(--space-2);align-items:stretch}
+#transfer-page .transfer-id-row input{flex:1;min-width:0}
+#transfer-page .transfer-id-row button{width:auto;flex:none;height:44px;padding:0 var(--space-4);white-space:nowrap}
+#transfer-page .transfer-file-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+#transfer-page .transfer-file-list:empty{display:none}
+#transfer-page .transfer-file-list li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:6px 10px;border-radius:var(--radius-md);background:var(--bg-subtle);border:1px solid var(--border-subtle);font:500 var(--text-sm) var(--font-mono);color:var(--text-primary);overflow-wrap:anywhere}
+#transfer-page .transfer-file-list li button{width:28px;height:28px;padding:0;flex:none}
+#transfer-page .transfer-card{display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-subtle)}
+#transfer-page .transfer-card h4{margin:0;font-size:var(--text-base);font-weight:600;color:var(--text-primary)}
+#transfer-page .transfer-code{font:600 var(--text-xl)/1.2 var(--font-mono);color:var(--accent);overflow-wrap:anywhere}
+#transfer-page .transfer-qr{width:168px;max-width:100%;padding:6px;background:#fff;border-radius:var(--radius-md)}
+#transfer-page .transfer-qr svg{display:block;width:100%;height:auto}
+#transfer-page .transfer-words{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+#transfer-page .transfer-words span{padding:6px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font:600 var(--text-base) var(--font-mono)}
+#transfer-page .transfer-actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+#transfer-page .transfer-actions > button{width:auto;flex:1 1 140px}
+#transfer-page .transfer-request{display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--border-subtle)}
+#transfer-page .transfer-progress{height:8px;border-radius:999px;background:var(--border-subtle);overflow:hidden}
+#transfer-page .transfer-progress span{display:block;height:100%;width:0;background:var(--accent);transition:width var(--duration-fast) var(--ease-standard)}
+#transfer-page .transfer-results{display:flex;flex-direction:column;gap:var(--space-3)}
+#transfer-page .transfer-result{display:flex;flex-direction:column;gap:var(--space-2)}
+#transfer-page .transfer-result .download-btn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:480px){#transfer-page .transfer-id-row{flex-direction:column}#transfer-page .transfer-id-row button{width:100%}}

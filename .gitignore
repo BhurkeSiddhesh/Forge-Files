@@ -34,3 +34,5 @@ reports/
 coverage*.json
 *.coverage
 missing_lines.txt
+# Windows installer copied here by CI / the mirror (can be hundreds of MB)
+installer/

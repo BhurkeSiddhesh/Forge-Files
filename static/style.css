@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('vendor/fonts/fonts.css');
 
 /* ============================================================
    Forge Files — design system (Vercel-inspired: stark ink-on-near-white,
@@ -2102,6 +2102,12 @@ body.seo-page {
     color: #ffffff;
     letter-spacing: -0.03em;
     margin-bottom: 0.35rem;
+}
+
+.startup-splash-brand .accent {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .startup-splash-tagline {

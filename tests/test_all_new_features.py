@@ -1193,6 +1193,36 @@ class TestAnnotatePDF:
         assert pix.pixel(40, 30) == (0, 0, 0)
         doc2.close()
 
+    def test_redact_removes_vector_graphics_that_only_straddle_the_box(self, tmp_path):
+        """A vector path that only partially overlaps the redaction rect must not
+        survive outside the box. The fill-box from the test above only paints the
+        rect itself, so a shape that extends past the rect's edge stays fully
+        visible there unless apply_redactions() is told to strip any touched path
+        (graphics=PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED), not just one fully
+        covered by it (the default, graphics=1/REMOVE_IF_COVERED)."""
+        import fitz
+
+        src = tmp_path / "straddle.pdf"
+        doc = fitz.open()
+        page = doc.new_page(width=400, height=400)
+        # Rect that extends well past the redaction box's right/bottom edge.
+        page.draw_rect(fitz.Rect(250, 150, 350, 250), color=(1, 0, 0), fill=(1, 0, 0))
+        doc.save(str(src))
+        doc.close()
+
+        out = tmp_path / "out"
+        out.mkdir()
+        ann = self._make_annot("redact", rect=[100, 100, 300, 200])
+        result = annotate_pdf(str(src), str(out), [ann])
+
+        doc2 = fitz.open(result)
+        pix = doc2[0].get_pixmap()
+        # Just outside the redaction box, where the straddling vector rect still
+        # draws today without this fix (304, 190 is inside the rect but outside
+        # the redaction box's x1=300 edge).
+        assert pix.pixel(304, 190) == (255, 255, 255)
+        doc2.close()
+
     def test_multiple_annotations(self, simple_pdf, tmp_path):
         out = tmp_path / "out"
         out.mkdir()

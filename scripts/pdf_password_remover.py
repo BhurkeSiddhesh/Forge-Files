@@ -45,10 +45,24 @@ def remove_pdf_password(input_path: str, password: str, output_path: str = None)
         # Let the caller handle this or fail with standard ImportError
         raise
 
-    # Open the PDF with password and save without encryption
-    with pikepdf.open(input_file, password=password) as pdf:
+    # Open the PDF with the supplied password and save without encryption.
+    # Owner-restricted PDFs (permission restrictions, no open password) open
+    # with an *empty* password, so a wrong/irrelevant guess is retried once
+    # with "" before giving up — matching scripts.pdf_utils.remove_pdf_password
+    # (the app's own unlock path) and mainstream "Unlock PDF" tools. A PDF with
+    # a genuine open (user) password still fails on a wrong password, since the
+    # empty-password retry can't open it either, so this never false-unlocks.
+    try:
+        pdf = pikepdf.open(input_file, password=password)
+    except pikepdf.PasswordError:
+        try:
+            pdf = pikepdf.open(input_file, password="")
+        except pikepdf.PasswordError:
+            raise
+
+    with pdf:
         pdf.save(output_file)
-    
+
     return str(output_file)
 
 
