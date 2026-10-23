@@ -2,12 +2,17 @@
 Performance benchmarks for pdf_utils operations.
 Each test uses time.perf_counter() and asserts completion within reasonable limits.
 """
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import time
 import pytest
+
+# Wall-clock limits are tuned for a quiet GitHub-hosted runner. CI sets PERF_TIME_SCALE
+# (e.g. 3) on shared self-hosted machines, where unrelated load can add seconds.
+PERF_TIME_SCALE = float(os.environ.get("PERF_TIME_SCALE", "1"))
 
 from scripts.pdf_utils import (
     create_pdf_from_text,
@@ -55,7 +60,7 @@ def test_perf_create_pdf_from_text_1000_lines(tmp_path):
 
     print(f"\n  create_pdf_from_text (1000 lines): {elapsed:.3f}s")
     assert Path(pdf_path).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_create_blank_pdf_50_pages(tmp_path):
@@ -69,7 +74,7 @@ def test_perf_create_blank_pdf_50_pages(tmp_path):
 
     print(f"\n  create_blank_pdf (50 pages): {elapsed:.3f}s")
     assert Path(pdf_path).exists()
-    assert elapsed < 2.0, f"Took {elapsed:.2f}s (limit 2s)"
+    assert elapsed < 2.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 2s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_images_to_pdf_5_images(tmp_path):
@@ -84,7 +89,7 @@ def test_perf_images_to_pdf_5_images(tmp_path):
 
     print(f"\n  images_to_pdf (5 images): {elapsed:.3f}s")
     assert Path(pdf_path).exists()
-    assert elapsed < 10.0, f"Took {elapsed:.2f}s (limit 10s)"
+    assert elapsed < 10.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 10s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_add_page_numbers_10_pages(tmp_path):
@@ -99,7 +104,7 @@ def test_perf_add_page_numbers_10_pages(tmp_path):
 
     print(f"\n  add_page_numbers (10 pages): {elapsed:.3f}s")
     assert Path(result).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_extract_text_10_pages(tmp_path):
@@ -116,7 +121,7 @@ def test_perf_extract_text_10_pages(tmp_path):
 
     print(f"\n  extract_text_from_pdf (10-page equivalent): {elapsed:.3f}s")
     assert Path(result["output_path"]).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_pdf_to_excel_5_pages(tmp_path):
@@ -131,7 +136,7 @@ def test_perf_pdf_to_excel_5_pages(tmp_path):
 
     print(f"\n  pdf_to_excel (5 pages): {elapsed:.3f}s")
     assert Path(result["output_path"]).exists()
-    assert elapsed < 10.0, f"Took {elapsed:.2f}s (limit 10s)"
+    assert elapsed < 10.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 10s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_protect_pdf(tmp_path):
@@ -146,7 +151,7 @@ def test_perf_protect_pdf(tmp_path):
 
     print(f"\n  protect_pdf: {elapsed:.3f}s")
     assert Path(result).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_organize_pdf_20_pages(tmp_path):
@@ -162,7 +167,7 @@ def test_perf_organize_pdf_20_pages(tmp_path):
 
     print(f"\n  organize_pdf (20 pages reversed): {elapsed:.3f}s")
     assert Path(result).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_annotate_pdf_10_annotations(tmp_path):
@@ -183,7 +188,7 @@ def test_perf_annotate_pdf_10_annotations(tmp_path):
 
     print(f"\n  annotate_pdf (10 annotations): {elapsed:.3f}s")
     assert Path(result).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
 
 
 def test_perf_rotate_pdf_10_pages(tmp_path):
@@ -198,4 +203,4 @@ def test_perf_rotate_pdf_10_pages(tmp_path):
 
     print(f"\n  rotate_pdf (10 pages, 90°): {elapsed:.3f}s")
     assert Path(result).exists()
-    assert elapsed < 5.0, f"Took {elapsed:.2f}s (limit 5s)"
+    assert elapsed < 5.0 * PERF_TIME_SCALE, f"Took {elapsed:.2f}s (limit 5s x {PERF_TIME_SCALE:g})"
