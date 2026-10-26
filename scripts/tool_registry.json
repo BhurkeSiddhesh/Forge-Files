@@ -733,6 +733,23 @@
       "seo_slugs": ["receive-files"]
     },
     {
+      "id": "url_shortener",
+      "label": "URL Shortener",
+      "category": "utility",
+      "surface_kind": "action_card",
+      "web_card": "url-shortener-btn",
+      "mobile": true,
+      "mobile_mode": "shared",
+      "mobile_surface": "url-shortener-btn",
+      "processing": "server",
+      "execution": {"preferred": "server", "requires_server_consent": true, "note": "No file upload; sends the destination URL and stores a code→URL mapping server-side, redirecting /s/{code}."},
+      "api_paths": ["/api/url/shorten"],
+      "output": "Short link",
+      "auth": false,
+      "premium": false,
+      "seo_slugs": ["url-shortener"]
+    },
+    {
       "id": "workflows",
       "label": "Workflows",
       "category": "workflow",
@@ -796,6 +813,7 @@
     {"path": "/api/track", "reason": "Analytics support endpoint"},
     {"path": "/api/download/{token}", "reason": "Shared result download endpoint"},
     {"path": "/premium/jobs/{job_id}", "reason": "Premium job status endpoint"},
-    {"path": "/premium/jobs/{job_id}/files/{name}", "reason": "Premium result download endpoint"}
+    {"path": "/premium/jobs/{job_id}/files/{name}", "reason": "Premium result download endpoint"},
+    {"path": "/s/{code}", "reason": "Public short-link redirect; not a POST processing route"}
   ]
 }

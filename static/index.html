@@ -118,7 +118,8 @@
             { "@type": "ListItem", "position": 40, "name": "Edit PDF Metadata", "url": "{{BASE_URL}}/edit-pdf-metadata" },
             { "@type": "ListItem", "position": 41, "name": "Word to PowerPoint", "url": "{{BASE_URL}}/word-to-powerpoint" },
             { "@type": "ListItem", "position": 42, "name": "Send Files", "url": "{{BASE_URL}}/send-files" },
-            { "@type": "ListItem", "position": 43, "name": "Receive Files", "url": "{{BASE_URL}}/receive-files" }
+            { "@type": "ListItem", "position": 43, "name": "Receive Files", "url": "{{BASE_URL}}/receive-files" },
+            { "@type": "ListItem", "position": 44, "name": "URL Shortener", "url": "{{BASE_URL}}/url-shortener" }
         ]
     }
     </script>
@@ -155,6 +156,7 @@
     <link rel="stylesheet" href="/static/ds/pages/word.css?v=20261009">
     <link rel="stylesheet" href="/static/ds/pages/workflow.css?v=20261009">
     <link rel="stylesheet" href="/static/ds/pages/transfer.css?v=20261022">
+    <link rel="stylesheet" href="/static/ds/pages/url-shortener.css?v=20261027">
     <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
     <!-- Cropper.js (CSS + JS) is lazy-loaded by script.js only when the crop tool is opened, to protect LCP/INP. -->
     {{CF_ANALYTICS}}
@@ -1370,6 +1372,35 @@
                 </div>
             </div>
         </section>
+
+        <!-- URL Shortener (static/local/url-shortener.js) -->
+        <section id="url-shortener-page" class="view ff-ds ffp">
+            <nav class="ff-bc" aria-label="Breadcrumb"><a href="/" onclick="showHome(); return false;">Forge Files</a><span aria-hidden="true">/</span><span aria-current="page" class="ffp-crumb">URL Shortener</span></nav>
+            <div class="ffp-head"><h2 class="ffp-title" tabindex="-1">URL Shortener</h2><p class="ffp-desc">Turn a long http or https link into a short redirect you can copy and share.</p></div>
+
+            <div class="drill-down-content">
+                <div class="actions-panel">
+                    <div class="action-buttons">
+                        <div class="action-card ff-tool" id="url-shortener-btn" role="button" tabindex="0"><span class="ic" style="--ft:var(--file-zip);--d:0s"><svg class="ff-icon-svg" data-icon="link" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path pathLength="1" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path pathLength="1" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="action-text"><h4>Shorten URL</h4><p>Paste a long link and get a short one.</p></span></div>
+                    </div>
+
+                    <div id="url-shortener-area" class="password-area hidden">
+                        <label for="url-shortener-input">Long URL</label>
+                        <input type="url" id="url-shortener-input" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="2048" placeholder="https://example.com/a/very/long/path">
+                        <button type="button" id="url-shortener-submit" class="primary-btn">Shorten</button>
+                        <p class="helper-text">Only http and https links are accepted. Short links expire after about a year.</p>
+                        <div id="url-shortener-status" aria-live="polite"></div>
+                        <div id="url-shortener-result" class="url-shortener-result hidden" hidden>
+                            <label for="url-shortener-output">Short link</label>
+                            <div class="url-shortener-row">
+                                <input type="text" id="url-shortener-output" readonly>
+                                <button type="button" id="url-shortener-copy" class="secondary-btn">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
         <footer class="site-footer ff-ds ff-foot">
             <div class="cols">
                 <div class="col">
@@ -1428,6 +1459,7 @@
                     <a href="/merge-ppt">Merge PowerPoint</a>
                     <a href="/send-files">Send Files</a>
                     <a href="/receive-files">Receive Files</a>
+                    <a href="/url-shortener">URL Shortener</a>
                 </div>
                 <div class="col">
                     <h4>Forge Files</h4>
@@ -1476,6 +1508,7 @@
     <script src="/static/local/ops-workflow.js?v=20261008"></script>
     <script src="/static/vendor/qrcode-generator/qrcode.js?v=1.4.4"></script>
     <script src="/static/local/transfer.js?v=20261022d"></script>
+    <script src="/static/local/url-shortener.js?v=20261027"></script>
     <script src="/static/ff-page-grid.js?v=20261013"></script>
     <script src="/static/ds/icons.js?v=20261022"></script>
     <script src="/static/ds/home.js?v=20261022"></script>

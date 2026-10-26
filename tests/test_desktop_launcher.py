@@ -42,3 +42,43 @@ def test_error_html_formatting():
     assert "Launch Failed" in err
     assert "Could not bind to port" in err
     assert "radial-gradient" in err
+
+
+def test_error_html_retry_button_is_opt_in():
+    assert "pywebview.api.retry()" in _error_html("t", "m", retry=True)
+    assert "Try again" not in _error_html("t", "m")
+
+
+def test_desktop_api_retry_runs_callback():
+    import threading
+
+    from desktop.launcher import DesktopApi
+
+    api = DesktopApi()
+    assert api.retry() is False
+    done = threading.Event()
+    api.on_retry = done.set
+    assert api.retry() is True
+    assert done.wait(2)
+
+
+def test_single_instance_mutex_detects_second_holder():
+    import sys
+
+    import pytest
+
+    if sys.platform != "win32":
+        pytest.skip("named mutex is Windows only")
+    from desktop.launcher import _acquire_single_instance
+
+    first, first_running = _acquire_single_instance()
+    second, second_running = _acquire_single_instance()
+    assert first_running is False
+    assert second_running is True
+    assert first and second
+
+
+def test_startup_timeout_covers_slow_cold_starts():
+    from desktop.launcher import STARTUP_TIMEOUT
+
+    assert STARTUP_TIMEOUT >= 180

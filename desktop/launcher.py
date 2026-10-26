@@ -83,6 +83,16 @@ def _app_version() -> str:
 class DesktopApi:
     """Methods the page may call as ``window.pywebview.api.<name>``."""
 
+    def __init__(self) -> None:
+        self.on_retry = None  # set by main(): restarts the server and reloads the window
+
+    def retry(self) -> bool:
+        """Restart the server after a failed start (the error page's button)."""
+        if self.on_retry is None:
+            return False
+        threading.Thread(target=self.on_retry, daemon=True).start()
+        return True
+
     def open_external(self, url: str) -> bool:
         """Open a web link in the person's normal browser (never inside the app)."""
         from urllib.parse import urlparse
@@ -170,7 +180,30 @@ def _spawn_server(port: int):
     )
 
 
-def _wait_until_up(port: int, timeout: float = 60.0, proc=None) -> bool:
+def _acquire_single_instance():
+    """Take a per-user named mutex; return (handle, already_running).
+
+    Two launches in quick succession would otherwise both pass the port check
+    before either server is up, leaving a stray window with no server. The handle
+    must stay referenced for the life of the process.
+    """
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        handle = kernel32.CreateMutexW(None, False, "Local\\ForgeFilesDesktopSingleInstance")
+        return handle, kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+    except Exception:  # not Windows or ctypes unavailable: fall back to the port check alone
+        return None, False
+
+
+# A cold first launch can spend minutes importing a frozen build while antivirus
+# scans it, so wait as long as the server process is alive instead of giving up early.
+STARTUP_TIMEOUT = 240.0
+
+
+def _wait_until_up(port: int, timeout: float = STARTUP_TIMEOUT, proc=None) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc is not None and proc.poll() is not None:
@@ -312,7 +345,13 @@ html, body {{
 </html>"""
 
 
-def _error_html(title: str, message: str) -> str:
+def _error_html(title: str, message: str, retry: bool = False) -> str:
+    button = (
+        '<button onclick="window.pywebview.api.retry()" style="margin-top:16px;padding:8px 20px;'
+        'border:0;border-radius:10px;background:#6366f1;color:#fff;font-size:0.95rem;cursor:pointer">'
+        "Try again</button>"
+        if retry else ""
+    )
     return f"""<!doctype html><meta charset=utf-8><title>Forge Files</title>
 <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
 background:radial-gradient(circle at 50% 45%, #1e1b4b 0%, #0f172a 70%, #090d16 100%);
@@ -320,7 +359,7 @@ color:#f3ece3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,san
 <div style="text-align:center;max-width:440px;background:rgba(15,23,42,0.85);padding:2rem;border-radius:18px;
 border:1px solid rgba(239,68,68,0.3);box-shadow:0 16px 40px -8px rgba(0,0,0,0.5)">
 <h2 style="margin:0 0 10px;font-size:1.4rem;color:#f87171">{title}</h2>
-<p style="margin:0;font-size:0.95rem;color:#94a3b8;line-height:1.5">{message}</p>
+<p style="margin:0;font-size:0.95rem;color:#94a3b8;line-height:1.5">{message}</p>{button}
 </div></body>"""
 
 
@@ -333,6 +372,14 @@ def main() -> int:
     data = _data_dir()
     _configure_logging(data)
     log = logging.getLogger("forgefiles.desktop")
+
+    # Held for the life of the process; a second launch (even one racing the first
+    # server's startup) just brings the existing window forward.
+    _mutex, already_running = _acquire_single_instance()
+    if already_running:
+        log.info("Another instance is starting or running; focusing its window")
+        _focus_existing_window()
+        return 0
 
     # Reuse a running instance rather than starting a second server.
     for candidate in PREFERRED_PORTS:
@@ -357,21 +404,40 @@ def main() -> int:
         if _wait_until_up(port, proc=state["server"]):
             window.load_url(f"http://{HOST}:{port}/")
         else:
-            log.error("Server did not start within 60s")
-            window.load_html(_error_html("Forge Files took too long to start", f"See {data / 'forgefiles.log'}"))
+            log.error("Server did not start within %ss", int(STARTUP_TIMEOUT))
+            window.load_html(_error_html("Forge Files took too long to start",
+                                         f"See {data / 'forgefiles.log'}", retry=True))
 
-    code = _run_window(webview, _splash_html(), boot, storage=data / "webview")
+    def retry() -> None:
+        old = state.pop("server", None)
+        if old is not None:
+            old.terminate()
+            try:
+                old.wait(timeout=10)  # let it release the port before the new server binds
+            except Exception:
+                old.kill()
+        state["window"].load_html(_splash_html())
+        boot(state["window"])
+
+    api = DesktopApi()
+    api.on_retry = retry
+
+    def on_ready(window) -> None:
+        state["window"] = window
+        boot(window)
+
+    code = _run_window(webview, _splash_html(), on_ready, storage=data / "webview", api=api)
     proc = state.get("server")
     if proc is not None:
         proc.terminate()
     return code
 
 
-def _run_window(webview, html: str, on_ready, storage: Path | None = None) -> int:
+def _run_window(webview, html: str, on_ready, storage: Path | None = None, api=None) -> int:
     webview.settings["ALLOW_DOWNLOADS"] = True
     window = webview.create_window(
         "Forge Files", html=html, width=1280, height=860, min_size=(900, 640),
-        js_api=DesktopApi(),
+        js_api=api or DesktopApi(),
     )
     # storage_path persists cookies/localStorage between launches.
     webview.start(on_ready, window, private_mode=False,

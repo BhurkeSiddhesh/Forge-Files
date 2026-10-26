@@ -242,6 +242,11 @@ HELP.update({
         "Type the sender's code and tap Receive. Read out the two words you see so the sender knows it is you, then accept the list of items when it appears.",
         "The sender's page must stay open until the transfer ends. Phones can save files up to about 120 MB; larger files need Chrome or Edge on a computer.",
         "Each item is checked with a SHA-256 hash on arrival, and a damaged one is discarded. Open the saved files before telling the sender everything arrived."),
+    "url-shortener": (
+        "Turn a long http or https link into a short Forge Files redirect you can copy and share.",
+        "Paste https://example.com/a/very/long/path, tap Shorten, then copy the short link shown below the form.",
+        "Only http and https destinations are accepted. javascript, data and other schemes are rejected. Links expire after the configured retention period.",
+        "Open the short link in a private window and confirm it lands on the original page before sharing it widely."),
 })
 
 

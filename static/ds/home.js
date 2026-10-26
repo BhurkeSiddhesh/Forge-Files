@@ -47,6 +47,7 @@
         ['merge-ppt', 'ppt', 'Presentations', 'Merge PowerPoint', 'combine', 'ppt', 'Combine multiple presentations.', 'pptx combine'],
         ['send-files', 'transfer', 'Share', 'Send files & text', 'send', 'zip', 'Send text or files straight to another device with a code.', 'share transfer send phone mobile number airdrop nearby text clipboard paste photos', 1],
         ['receive-files', 'transfer', 'Share', 'Receive files & text', 'download', 'zip', 'Enter a code to receive what someone sent you.', 'receive get download code transfer share'],
+        ['url-shortener', 'utility', 'Share', 'URL Shortener', 'link', 'zip', 'Turn a long link into a short redirect you can copy and share.', 'shorten url link short tiny redirect share http https', 1],
         ['', 'workflow', 'Workflows', 'Workflow builder', 'workflow', 'zip', 'Chain several operations on one file and run them in order.', 'chain steps automate pipeline multiple operations']
     ].map(function (r) {
         return { slug: r[0], cat: r[1], chip: r[2], title: r[3], icon: r[4], ft: r[5], desc: r[6], kw: r[7], popular: !!r[8] };
