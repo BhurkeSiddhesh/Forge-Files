@@ -169,3 +169,32 @@ def test_seo_landing_page_exists(client):
     resp = client.get("/url-shortener")
     assert resp.status_code == 200
     assert b"URL Shortener" in resp.content
+
+
+def test_host_must_be_present(client):
+    assert client.post("/api/url/shorten", json={"url": "http://:80/path"}).status_code == 400
+    # an explicit localhost host is still allowed
+    assert client.post("/api/url/shorten", json={"url": "http://localhost:8000/x"}).status_code == 200
+
+
+def test_oversized_body_is_rejected_before_parsing(client):
+    big = '{"url": "https://example.com", "pad": "' + "x" * 20_000 + '"}'
+    resp = client.post("/api/url/shorten", content=big, headers={"Content-Type": "application/json"})
+    assert resp.status_code == 413
+    # chunked bodies carry no Content-Length, so the cap must also hold while streaming
+    chunks = (b"x" * 4096 for _ in range(4))
+    resp = client.post("/api/url/shorten", content=chunks, headers={"Content-Type": "application/json"})
+    assert resp.status_code == 413
+
+
+def test_loopback_base_url_refuses_unshareable_links(client, monkeypatch):
+    monkeypatch.setattr(main, "BASE_URL", "http://127.0.0.1:8123")
+    resp = client.post("/api/url/shorten", json={"url": "https://example.com"})
+    assert resp.status_code == 503
+    assert "forgefiles.org" in resp.json()["detail"]
+
+
+def test_landing_page_describes_url_retention_not_file_upload(client):
+    body = client.get("/url-shortener").text
+    assert "destination URL" in body and "365 days" in body
+    assert "uploads your file" not in body

@@ -20,6 +20,7 @@ NON_UPLOAD_SUPPORT = {
     "/api/download/{token}",
     "/premium/jobs/{job_id}",
     "/premium/jobs/{job_id}/files/{name}",
+    "/s/{code}",  # short-link redirect: a GET that carries no user data
 }
 
 

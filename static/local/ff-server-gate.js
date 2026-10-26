@@ -63,6 +63,16 @@
         '/api/word/to-pdf': ['Word to PDF', 'this conversion needs a full office layout engine to preserve pages, fonts and tables'],
         '/api/word/to-pptx': ['Word to PowerPoint', 'this conversion needs a full office layout engine'],
         '/api/workflow/execute': ['Workflow', 'at least one step of this workflow runs on the server'],
+        // No file is uploaded: only the destination URL is sent, so the dialog says that
+        // instead of the file wording. The third element overrides the lead and the points.
+        '/api/url/shorten': ['Shorten URL', 'a short link is stored on the server so it can redirect to your URL', {
+            lead: 'Shorten URL sends the URL you entered to our server so the short link can redirect to it.',
+            points: [
+                ['Only the URL is sent. ', 'No file is uploaded.'],
+                ['Stored so the link keeps working. ', 'The destination URL is kept for 365 days by default.'],
+                ['Avoid private URLs. ', 'Do not shorten addresses that contain tokens, passwords or other secrets.']
+            ]
+        }],
         '/premium/batch-ocr': ['Batch OCR', 'batch text recognition runs on the server\'s OCR models'],
     };
 
@@ -92,6 +102,7 @@
         var entry = lookup(path);
         return {
             known: !!entry,
+            copy: (entry && entry[2]) || null,
             tool: entry ? entry[0] : 'This tool',
             reason: customReason || (code && CODES[code]) || (entry ? entry[1] : 'this operation needs the server'),
         };
@@ -168,7 +179,8 @@
 
         var lead = doc.createElement('p');
         lead.className = 'ff-consent-lead';
-        lead.textContent = info.tool + ' needs our server engine for this file. It completes the job accurately where on-device processing cannot.';
+        lead.textContent = (info.copy && info.copy.lead)
+            || (info.tool + ' needs our server engine for this file. It completes the job accurately where on-device processing cannot.');
 
         var why = doc.createElement('div');
         why.className = 'ff-consent-why';
@@ -179,11 +191,11 @@
 
         var points = doc.createElement('ul');
         points.className = 'ff-consent-points';
-        [
+        (info.copy && info.copy.points || [
             ['A complete result. ', 'The server engine handles the cases your device cannot, so the output reflects your whole file.'],
             ['Used only for this task. ', 'Your file is uploaded for this conversion and nothing else.'],
             ['Temporary by design. ', 'Your upload is deleted once processing finishes. The result is deleted as soon as you download it, or after 10 minutes if you do not.']
-        ].forEach(function (pt) {
+        ]).forEach(function (pt) {
             var li = doc.createElement('li');
             var span = doc.createElement('span');
             var strong = doc.createElement('b');

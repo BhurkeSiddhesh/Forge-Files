@@ -4198,8 +4198,26 @@ async def api_url_shorten(request: Request):
                 status_code=429,
                 headers={"Retry-After": str(retry)},
             )
+    # A short link on the desktop app's loopback origin only resolves on that machine
+    # while its server runs, so it cannot be shared. Short links belong to the public site.
+    if (urlsplit(BASE_URL).hostname or "").lower() in ("127.0.0.1", "localhost", "::1"):
+        raise HTTPException(
+            status_code=503,
+            detail="Short links are only available on forgefiles.org, because a link to this device cannot be shared.",
+        )
+    # Bound the body before parsing: only a URL (<= 2048 chars) is ever needed, and the
+    # proxy would otherwise let a 55 MB body (even chunked) be buffered per request.
+    limit = 8 * 1024
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail="Request body too large.")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            raise HTTPException(status_code=413, detail="Request body too large.")
     try:
-        payload = await request.json()
+        payload = json.loads(bytes(body))
     except Exception:
         raise HTTPException(status_code=400, detail="Expected a JSON body with a url field.") from None
     if not isinstance(payload, dict):

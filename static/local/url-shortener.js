@@ -43,11 +43,23 @@
         box.classList.remove('hidden');
     }
 
+    function hideResult() {
+        var box = $('url-shortener-result');
+        var out = $('url-shortener-output');
+        if (out) out.value = '';
+        if (box) {
+            box.hidden = true;
+            box.classList.add('hidden');
+        }
+    }
+
     async function shorten() {
         var input = $('url-shortener-input');
         var status = $('url-shortener-status');
         var btn = $('url-shortener-submit');
         var url = (input && input.value || '').trim();
+        // A failed attempt must not leave the previous link copyable next to its error.
+        hideResult();
         if (!url) {
             setStatus(status, 'Paste an http or https URL first.', true);
             if (input) input.focus();
@@ -56,12 +68,17 @@
         setStatus(status, 'Creating short link…', false);
         if (btn) btn.disabled = true;
         try {
-            var resp = await fetch(api(SHORTEN_PATH), {
+            // Sending the URL to the server needs the person's consent first, like every
+            // other server operation; ffServerFetch answers 499 if they decline.
+            var init = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
                 body: JSON.stringify({ url: url })
-            });
+            };
+            var resp = (typeof window.ffServerFetch === 'function')
+                ? await window.ffServerFetch(SHORTEN_PATH, init)
+                : new Response(JSON.stringify({ detail: 'Cancelled. Your URL was not sent.', declined: true }), { status: 499 });
             var data = null;
             try { data = await resp.json(); } catch (e) { data = null; }
             if (!resp.ok) {

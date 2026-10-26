@@ -137,10 +137,9 @@ def validate_url(raw: str) -> str:
         raise ValueError("URL must include a host.")
     if parts.username is not None or parts.password is not None:
         raise ValueError("URLs with embedded credentials are not allowed.")
-    host = parts.hostname or ""
-    if not host or host.lower() in ("localhost",):
-        # localhost is fine for local/dev tests; keep as allowed.
-        pass
+    # "http://:80/x" has a netloc but no hostname; an explicit localhost is allowed.
+    if not parts.hostname:
+        raise ValueError("URL must include a host.")
     # Reject control characters that survived stripping.
     if any(ord(ch) < 32 for ch in url):
         raise ValueError("URL contains invalid characters.")

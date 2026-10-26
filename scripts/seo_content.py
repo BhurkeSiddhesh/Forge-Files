@@ -925,6 +925,11 @@ def _security_section(page: dict) -> str:
     """Explain the actual processing path without promising absolute privacy."""
     slug = next(s for s, p in TOOL_PAGES.items() if p is page)
     mode = TOOLS_BY_SEO_SLUG[slug]["processing"]
+    if slug == "url-shortener":
+        return ('<aside class="processing-note ffc-note"><h2>URL handling</h2><p>The full destination URL you enter is sent to the server '
+                'over HTTPS and stored so the short link can redirect, for 365 days by default. No file is uploaded. '
+                'Do not shorten URLs that contain private tokens or credentials in the address. '
+                '<a href="/privacy">Processing, retention and analytics details</a>.</p></aside>')
     handling = ("Supported files are processed on your device. Unsupported cases may be uploaded to the server as a fallback."
                 if mode == "local_or_server" else
                 "This operation uploads your file over HTTPS for automated server processing.")

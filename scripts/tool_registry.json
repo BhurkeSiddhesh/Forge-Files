@@ -742,7 +742,7 @@
       "mobile_mode": "shared",
       "mobile_surface": "url-shortener-btn",
       "processing": "server",
-      "execution": {"preferred": "server", "requires_server_consent": false, "note": "No file upload; stores a code→URL mapping server-side and redirects /s/{code}."},
+      "execution": {"preferred": "server", "requires_server_consent": true, "note": "No file upload; sends the destination URL and stores a code→URL mapping server-side, redirecting /s/{code}."},
       "api_paths": ["/api/url/shorten"],
       "output": "Short link",
       "auth": false,
