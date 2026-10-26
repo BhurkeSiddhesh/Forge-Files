@@ -651,7 +651,7 @@ window.ffUpdateStepTracker = ffUpdateStepTracker;
 const FF_TOOL_TITLES = {
     pdf: 'PDF Tools', image: 'Image Tools', excel: 'Excel Tools',
     ppt: 'PPT Tools', word: 'Word Tools', workflow: 'Workflow',
-    transfer: 'Send & Receive'
+    transfer: 'Send & Receive', utility: 'URL Shortener'
 };
 const FF_HOME_TITLE = document.title;
 
@@ -675,6 +675,7 @@ function showDrillDown(tool, instant, fromHistory = false) {
     else if (tool === 'word') pageId = 'word-page';
     else if (tool === 'workflow') pageId = 'workflow-page';
     else if (tool === 'transfer') pageId = 'transfer-page';
+    else if (tool === 'utility') pageId = 'url-shortener-page';
     else return;
 
     if (!fromHistory && new URLSearchParams(location.search).get('tool') !== tool) {
@@ -4082,10 +4083,12 @@ const DEEP_LINK_OPS = {
     // Send & Receive
     'send-files': { card: 'send-files-btn' },
     'receive-files': { card: 'receive-files-btn' },
+    // Utilities
+    'url-shortener': { card: 'url-shortener-btn' },
 };
 
 // Cards that don't need a file selected first (they collect their own files).
-const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn', 'send-files-btn', 'receive-files-btn'];
+const DEEP_LINK_NO_FILE_CARDS = ['merge-pdf-btn', 'merge-excel-btn', 'merge-ppt-btn', 'create-pdf-btn', 'send-files-btn', 'receive-files-btn', 'url-shortener-btn'];
 
 // Home-grid tools with no SEO landing page (none today); same resolution rule as above.
 const DEEP_LINK_EXTRA_OPS = {};
@@ -4144,7 +4147,7 @@ const FF_CATEGORY_INPUTS = {
 (function () {
     const params = new URLSearchParams(window.location.search);
     const requestedTool = params.get('tool');
-    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word', 'transfer'].includes(requestedTool)) return;
+    if (!requestedTool || !['pdf', 'image', 'workflow', 'excel', 'ppt', 'word', 'transfer', 'utility'].includes(requestedTool)) return;
 
     showDrillDown(requestedTool, true, true);
 

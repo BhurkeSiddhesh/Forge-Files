@@ -804,7 +804,17 @@ TOOL_PAGES: Dict[str, dict] = {'unlock-pdf': {'title': 'Unlock PDF: Remove PDF P
  'steps': ['Open <strong>Send &amp; Receive</strong> and choose <strong>Receive</strong>.',
  'Enter the sender&#39;s code and tell them the two words you see.',
  'Accept the incoming items and save each one.'],
- 'related': ['send-files', 'heic-to-jpeg', 'pdf-to-word', 'compress-pdf', 'image-to-pdf']}}
+ 'related': ['send-files', 'heic-to-jpeg', 'pdf-to-word', 'compress-pdf', 'image-to-pdf']},
+ 'url-shortener': {'title': 'URL Shortener: Short Links Free Online | Forge Files',
+ 'h1': 'URL Shortener: Create Short Links Free',
+ 'tool': 'utility',
+ 'app': 'URL Shortener',
+ 'cta': 'Shorten a URL, free',
+ 'how': 'How to shorten a URL',
+ 'steps': ['Open <strong>URL Shortener</strong>.',
+ 'Paste an http or https link and choose <strong>Shorten</strong>.',
+ 'Copy the short link and share it.'],
+ 'related': ['send-files', 'receive-files', 'compress-pdf', 'merge-pdf', 'image-to-pdf']}}
 
 
 # --- rendering -------------------------------------------------------------
@@ -823,9 +833,10 @@ for _slug, _page in TOOL_PAGES.items():
     _page["steps"][-1] = "Download the result and compare it with your original before sharing."
 TOOL_PAGES["pdf-to-text"]["steps"][1] = "Choose <strong>Extract Text</strong> and set <strong>Preserve layout structure</strong> if needed."
 TOOL_PAGES["ocr-pdf"]["steps"][1] = "Choose <strong>OCR PDF</strong> and select the matching available language."
-# Send & Receive produce no converted result to compare; keep their own last step.
+# Send & Receive / URL shortener produce no converted file to compare; keep their own last step.
 TOOL_PAGES["send-files"]["steps"][-1] = "Accept the receiver once they see the same two words as you, and keep the page open until it says Delivered."
 TOOL_PAGES["receive-files"]["steps"][-1] = "Accept the incoming items and save each one."
+TOOL_PAGES["url-shortener"]["steps"][-1] = "Copy the short link and open it once to confirm it reaches the original URL."
 
 # This is another name for the same tool, not a separate search landing page.
 CANONICAL_ALIASES = {slug: "ocr-pdf" for slug in

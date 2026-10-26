@@ -133,6 +133,11 @@ async def lifespan(app: FastAPI):
             await sweeper
         # The event log holds one long-lived SQLite write connection.
         event_log.close_connections()
+        try:
+            from scripts import short_urls as _short_urls
+        except ImportError:
+            import short_urls as _short_urls  # type: ignore
+        _short_urls.close_connections()
 
 
 app = FastAPI(
@@ -669,6 +674,11 @@ async def cleanup_stale_files_loop():
         # consumer never reconnects never calls jobs.get() for its own id, so
         # without this it grows one entry per job for the life of the process.
         app.state.jobs.prune()
+        try:
+            from scripts import short_urls as _short_urls_sweep
+        except ImportError:
+            import short_urls as _short_urls_sweep  # type: ignore
+        await run_in_threadpool(_short_urls_sweep.prune_expired)
         # Enforce the 90-day retention policy on funnel_events and operation_events.
         # That is a database pass, so it runs about every 15 minutes, not every sweep.
         if sweeps % max(1, 900 // SWEEP_INTERVAL_SECONDS) == 0:
@@ -4163,6 +4173,66 @@ if not LOCAL_ONLY:
         client_identity, site_origins_from(BASE_URL, _CORS_ORIGINS)
     )
     app.include_router(transfer_router)
+
+
+# --- URL shortener (free public utility) ------------------------------------
+try:
+    from scripts import short_urls as short_urls
+except ImportError:
+    import short_urls  # type: ignore
+
+
+@app.post("/api/url/shorten")
+async def api_url_shorten(request: Request):
+    """Create a short link that redirects to a validated http(s) URL."""
+    # Extra per-client create budget on top of the light /api/ middleware tier.
+    state = request.app.state
+    if getattr(state, "rate_limit_enabled", False):
+        ok, retry = state.rate_limiter.check(
+            f"{client_identity(request)}:url-shorten",
+            int(os.environ.get("SHORT_URL_CREATE_LIMIT", "30")),
+        )
+        if not ok:
+            return JSONResponse(
+                {"detail": "Too many short links. Try again shortly."},
+                status_code=429,
+                headers={"Retry-After": str(retry)},
+            )
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Expected a JSON body with a url field.") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Expected a JSON object.")
+    raw_url = payload.get("url")
+    if not isinstance(raw_url, str):
+        raise HTTPException(status_code=400, detail="URL is required.")
+    try:
+        code, url, expires_at = await run_in_threadpool(
+            short_urls.create_short_url, raw_url
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    short_path = f"/s/{code}"
+    return {
+        "code": code,
+        "url": url,
+        "short_path": short_path,
+        "short_url": f"{BASE_URL}{short_path}",
+        "expires_at": expires_at,
+        "message": "Short link created.",
+    }
+
+
+@app.get("/s/{code}")
+async def redirect_short_url(code: str):
+    """302 redirect to the stored destination, or a branded 404."""
+    target = await run_in_threadpool(short_urls.resolve, code)
+    if not target:
+        raise HTTPException(status_code=404, detail="Short link not found")
+    return RedirectResponse(url=target, status_code=302)
 
 
 @app.get("/{slug}", response_class=HTMLResponse)

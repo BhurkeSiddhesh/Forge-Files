@@ -1,0 +1,55 @@
+/* URL Shortener (#url-shortener-page). */
+#url-shortener-page .action-buttons{order:1}
+#url-shortener-page .password-area{order:2}
+#url-shortener-page #url-shortener-input,
+#url-shortener-page #url-shortener-output{
+    width:100%;
+    min-height:44px;
+    padding:var(--space-3);
+    border:1px solid var(--border-default);
+    border-radius:var(--radius-md);
+    background:var(--bg-panel);
+    color:var(--text-primary);
+    font:400 var(--text-base)/1.4 var(--font-mono);
+    box-sizing:border-box;
+}
+#url-shortener-page #url-shortener-input:focus,
+#url-shortener-page #url-shortener-output:focus{
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--focus-ring);
+}
+#url-shortener-page .url-shortener-row{
+    display:flex;
+    gap:var(--space-2);
+    align-items:stretch;
+}
+#url-shortener-page .url-shortener-row input{flex:1;min-width:0}
+#url-shortener-page .url-shortener-row button{
+    width:auto;
+    flex:none;
+    height:44px;
+    padding:0 var(--space-4);
+    white-space:nowrap;
+}
+#url-shortener-page .url-shortener-result{
+    margin-top:var(--space-4);
+    padding:var(--space-4);
+    border:1px solid var(--border-subtle);
+    border-radius:var(--radius-lg);
+    background:var(--bg-subtle);
+    display:flex;
+    flex-direction:column;
+    gap:var(--space-2);
+}
+#url-shortener-page #url-shortener-status{
+    margin-top:var(--space-3);
+    font:500 var(--text-sm)/1.4 var(--font-sans);
+    color:var(--text-secondary);
+    min-height:1.2em;
+}
+#url-shortener-page #url-shortener-status.error{color:var(--danger, #b42318)}
+@media (max-width:480px){
+    #url-shortener-page .url-shortener-row{flex-direction:column}
+    #url-shortener-page .url-shortener-row button{width:100%}
+}
