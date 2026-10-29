@@ -234,7 +234,7 @@ HELP.update({
         "Check slide count, order and small text in slideshow mode. Use Word to PDF when you only need a faithful fixed-layout copy."),
     "send-files": (
         "Send pasted text, photos, PDFs or any other files straight to another device. You choose a code, such as a mobile number, and approve who receives.",
-        "Paste a link and add three photos, type your mobile number as the code and tap Wait for receiver. When the other person enters it, check they see the same two words you do, then tap Accept.",
+        "Paste a link and add three photos, type your mobile number as the code and tap Send. When the other person enters it, check they see the same two words you do, then tap Accept. If several items arrive, the receiver can also download them as one ZIP.",
         "Both devices must be online with the page open at the same time; nothing is stored for later. Very large files are received fastest in Chrome or Edge on a computer.",
         "Wait for the Delivered message before closing the page, and ask the receiver to open each file once it is saved."),
     "receive-files": (

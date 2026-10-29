@@ -274,3 +274,31 @@ test('index.html removes the share code from the address before analytics loads'
     assert.equal(s.FF_TRANSFER_CODE, '+91 98200 12345');
     assert.deepEqual(replaced, ['/?tool=transfer&op=receive-files']);
 });
+
+test('several received items pack into one valid ZIP with safe, unique names', async () => {
+    const { createRequire } = await import('node:module');
+    const JSZip = createRequire(import.meta.url)(join(STATIC, 'vendor', 'jszip.min.js'));
+    const photo = randomBytes(70000);
+    const zip = await T.buildZip([
+        { name: 'Text.txt', blob: new Blob(['héllo — नमस्ते']) },
+        { name: 'photo.jpg', blob: new Blob([photo]) },
+        { name: 'photo.jpg', blob: new Blob([photo]) },
+        { name: '../../etc/passwd', blob: new Blob(['x']) },
+        { name: 'empty.pdf', blob: new Blob([]) },
+    ]);
+    assert.equal(zip.type, 'application/zip');
+    const back = await JSZip.loadAsync(Buffer.from(await zip.arrayBuffer()), { checkCRC32: true });
+    assert.deepEqual(Object.keys(back.files).sort(),
+        ['_.._etc_passwd', 'Text.txt', 'empty.pdf', 'photo (2).jpg', 'photo.jpg'].sort());
+    assert.equal(await back.file('Text.txt').async('string'), 'héllo — नमस्ते');
+    assert.equal(sha(await back.file('photo (2).jpg').async('nodebuffer')), sha(photo));
+    assert.equal((await back.file('empty.pdf').async('nodebuffer')).length, 0);
+});
+
+test('the Send button and duplicate-ID message read plainly', () => {
+    const html = readFileSync(join(STATIC, 'index.html'), 'utf8');
+    assert.match(html, /id="transfer-send-start" class="primary-btn">Send<\/button>/);
+    assert.doesNotMatch(html, />Wait for receiver</);
+    const js = readFileSync(join(STATIC, 'local', 'transfer.js'), 'utf8');
+    assert.match(js, /taken: 'That ID is already in use by someone else online\. Please use a different ID\.'/);
+});

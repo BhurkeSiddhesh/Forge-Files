@@ -182,7 +182,7 @@
     }
 
     var ERRORS = {
-        taken: 'That identifier is already waiting for a receiver. Pick a different one.',
+        taken: 'That ID is already in use by someone else online. Please use a different ID.',
         invalid: 'Use at least 6 characters, or a full mobile number.',
         not_found: 'Nothing is waiting under that identifier. Check it, and make sure the sender still has the page open.',
         busy: 'That sender is already busy with someone else. Try again in a moment.',
@@ -492,6 +492,90 @@
         };
     }
 
+    // ── ZIP of several received items ─────────────────────────────────────
+    // Store-only (no compression): photos, PDFs and archives are already
+    // compressed, and a writer this small needs no library on the phone.
+
+    var CRC_TABLE = null;
+    function crc32(bytes) {
+        if (!CRC_TABLE) {
+            CRC_TABLE = new Uint32Array(256);
+            for (var n = 0; n < 256; n++) {
+                var c = n;
+                for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                CRC_TABLE[n] = c >>> 0;
+            }
+        }
+        var crc = 0xFFFFFFFF;
+        for (var i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    /** A file name safe to put in an archive: no paths, no control characters, unique. */
+    function zipEntryName(raw, used) {
+        var name = String(raw || 'file').replace(/[\x00-\x1f\x7f]/g, '').replace(/[\\/:*?"<>|]/g, '_').replace(/^\.+/, '').trim().slice(0, 150) || 'file';
+        var dot = name.lastIndexOf('.');
+        var stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+        var candidate = name, n = 2;
+        while (used[candidate.toLowerCase()]) candidate = stem + ' (' + (n++) + ')' + ext;
+        used[candidate.toLowerCase()] = true;
+        return candidate;
+    }
+
+    /** entries: [{name, blob}] → Promise<Blob> (a .zip). */
+    function buildZip(entries) {
+        var enc = new TextEncoder();
+        var used = {};
+        var now = new Date();
+        var dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+        var dosDate = ((Math.max(now.getFullYear(), 1980) - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+        var parts = [], central = [], offset = 0;
+        return entries.reduce(function (chain, entry) {
+            return chain.then(function () {
+                return readSlice(entry.blob, 0, entry.blob.size).then(function (buf) {
+                    var data = new Uint8Array(buf);
+                    var name = enc.encode(zipEntryName(entry.name, used));
+                    var crc = crc32(data);
+                    var head = new DataView(new ArrayBuffer(30));
+                    head.setUint32(0, 0x04034b50, true);
+                    head.setUint16(4, 20, true);
+                    head.setUint16(6, 0x0800, true);          // UTF-8 names
+                    head.setUint16(8, 0, true);               // stored
+                    head.setUint16(10, dosTime, true);
+                    head.setUint16(12, dosDate, true);
+                    head.setUint32(14, crc, true);
+                    head.setUint32(18, data.length, true);
+                    head.setUint32(22, data.length, true);
+                    head.setUint16(26, name.length, true);
+                    var cen = new DataView(new ArrayBuffer(46));
+                    cen.setUint32(0, 0x02014b50, true);
+                    cen.setUint16(4, 20, true);
+                    cen.setUint16(6, 20, true);
+                    cen.setUint16(8, 0x0800, true);
+                    cen.setUint16(12, dosTime, true);
+                    cen.setUint16(14, dosDate, true);
+                    cen.setUint32(16, crc, true);
+                    cen.setUint32(20, data.length, true);
+                    cen.setUint32(24, data.length, true);
+                    cen.setUint16(28, name.length, true);
+                    cen.setUint32(42, offset, true);
+                    central.push(new Uint8Array(cen.buffer), name);
+                    parts.push(new Uint8Array(head.buffer), name, data);
+                    offset += 30 + name.length + data.length;
+                });
+            });
+        }, Promise.resolve()).then(function () {
+            var cdSize = central.reduce(function (sum, part) { return sum + part.length; }, 0);
+            var end = new DataView(new ArrayBuffer(22));
+            end.setUint32(0, 0x06054b50, true);
+            end.setUint16(8, entries.length, true);
+            end.setUint16(10, entries.length, true);
+            end.setUint32(12, cdSize, true);
+            end.setUint32(16, offset, true);
+            return new Blob(parts.concat(central, [new Uint8Array(end.buffer)]), { type: 'application/zip' });
+        });
+    }
+
     // ── UI ────────────────────────────────────────────────────────────────
 
     function el(tag, attrs, children) {
@@ -575,12 +659,14 @@
         drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('dragover'); addFiles(e.dataTransfer.files); });
         root.querySelector('#transfer-generate').addEventListener('click', function () { idInput.value = generateCode(); });
 
-        function reset(message) {
+        function reset(message, inline) {
             if (session) session.stop();
             session = null;
+            startBtn.classList.remove('hidden');
             startBtn.disabled = false;
             idInput.disabled = false;
             status.textContent = '';
+            if (inline) status.appendChild(el('p', { className: 'helper-text', role: 'alert', text: inline }));
             if (message) notify(message);
         }
 
@@ -593,7 +679,9 @@
             var identifier = idInput.value;
             if (!normalizeIdentifier(identifier)) { notify(ERRORS.invalid); idInput.focus(); return; }
             if (!desktopConsent()) return;
-            startBtn.disabled = true;
+            // Send gives way to the live status: waiting for the receiver, then
+            // the progress once the sender has checked their words and accepted.
+            startBtn.classList.add('hidden');
             idInput.disabled = true;
             session = startSending(identifier.trim(), items);
         });
@@ -639,7 +727,17 @@
 
             function onMessage(msg) {
                 if (msg.t === 'hosted') { showWaiting(); return; }
-                if (msg.t === 'error') { reset(ERRORS[msg.code] || ERRORS.socket); return; }
+                if (msg.t === 'error') {
+                    var text = ERRORS[msg.code] || ERRORS.socket;
+                    if (msg.code === 'taken') {
+                        // Fixed by editing the field, so say it right under it.
+                        reset(null, text);
+                        idInput.focus();
+                    } else {
+                        reset(text);
+                    }
+                    return;
+                }
                 if (msg.t === 'request') {
                     var row = el('div', { className: 'transfer-request', 'data-rid': msg.rid }, [
                         el('p', { text: (msg.device || 'A device') + ' wants to receive. Ask them which words they see:' }),
@@ -713,6 +811,7 @@
                         reset();
                     } })
                 ]));
+                startBtn.classList.remove('hidden');
                 startBtn.disabled = false;
                 idInput.disabled = false;
                 session = null;
@@ -786,7 +885,7 @@
         this.prefill = function (code) { if (code && !session) idInput.value = code; };
 
         function startReceiving(identifier) {
-            var state = { cancelled: false, peer: null, finished: false, receiver: null };
+            var state = { cancelled: false, peer: null, finished: false, receiver: null, expected: 0 };
             var signal = new Signal(onMessage, function () {
                 if (!state.finished && !state.cancelled && !state.peer) reset(ERRORS.socket);
             });
@@ -852,6 +951,7 @@
                     };
                 });
                 manifest = { items: items };
+                state.expected = items.length;
                 var limit = isNativeApp() ? NATIVE_LIMIT : MEMORY_LIMIT;
                 var canStream = typeof window.showSaveFilePicker === 'function' && !isNativeApp();
                 var plan = memoryPlan(items, limit, canStream);
@@ -901,6 +1001,7 @@
                             setTimeout(function () { signal.close(); if (state.peer) state.peer.close(); }, 1000);
                             var cancelBtn = status.querySelector('.transfer-card > .secondary-btn');
                             if (cancelBtn) cancelBtn.remove();
+                            offerZip();
                             status.querySelector('.transfer-card').appendChild(el('button', {
                                 type: 'button', className: 'secondary-btn', text: 'Receive something else',
                                 onclick: function () { session = null; reset(); }
@@ -913,7 +1014,31 @@
                 }).catch(function () { /* save dialog dismissed: stay on the manifest */ });
             }
 
+            // Everything held in memory, in arrival order, for "Download all".
+            var saved = [];
+
+            /** Several items arrive as separate saves; offer them as one ZIP too. */
+            function offerZip() {
+                if (saved.length < 2) return;
+                var card = status.querySelector('.transfer-card');
+                if (!card) return;
+                var onDisk = state.expected - saved.length;
+                buildZip(saved).then(function (zip) {
+                    var url = URL.createObjectURL(zip);
+                    urls.push(url);
+                    var link = el('a', { className: 'primary-btn download-btn', href: url, download: 'forgefiles-transfer.zip',
+                        text: 'Download all as ZIP (' + saved.length + ' items, ' + formatBytes(zip.size) + ')' });
+                    card.insertBefore(link, results.nextSibling);
+                    if (onDisk > 0) {
+                        card.insertBefore(el('p', { className: 'helper-text', text: onDisk === 1
+                            ? '1 large file was saved straight to disk, so it is not in the ZIP.'
+                            : onDisk + ' large files were saved straight to disk, so they are not in the ZIP.' }), link.nextSibling);
+                    }
+                }).catch(function () { /* the individual saves above still work */ });
+            }
+
             function showItem(meta, blob) {
+                if (blob) saved.push({ name: meta.kind === 'text' ? 'Text.txt' : meta.name, blob: blob });
                 if (meta.kind === 'text' && blob) {
                     blob.text().then(function (text) {
                         var ta = el('textarea', { className: 'transfer-text-out', readonly: 'readonly', 'aria-label': 'Received text', rows: '6' });
@@ -994,7 +1119,9 @@
         normalizeIdentifier: normalizeIdentifier,
         deviceLabel: deviceLabel,
         formatBytes: formatBytes,
-        shareLink: shareLink
+        shareLink: shareLink,
+        buildZip: buildZip,
+        zipEntryName: zipEntryName
     };
 
     // index.html loads this after the page markup and before script.js, whose
