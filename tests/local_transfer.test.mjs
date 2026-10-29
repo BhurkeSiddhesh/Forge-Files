@@ -302,3 +302,9 @@ test('the Send button and duplicate-ID message read plainly', () => {
     const js = readFileSync(join(STATIC, 'local', 'transfer.js'), 'utf8');
     assert.match(js, /taken: 'That ID is already in use by someone else online\. Please use a different ID\.'/);
 });
+
+test('a scanned QR link joins on its own and the sender page offers the QR', () => {
+    const js = readFileSync(join(STATIC, 'local', 'transfer.js'), 'utf8');
+    assert.match(js, /receive\.prefill\(window\.FF_TRANSFER_CODE\);\s*window\.FF_TRANSFER_CODE = null;\s*receive\.join\(\);/);
+    assert.match(js, /scan this QR code/);
+});

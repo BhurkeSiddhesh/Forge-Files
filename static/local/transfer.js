@@ -713,6 +713,7 @@
                     el('h4', { text: 'Waiting for the receiver' }),
                     el('p', { className: 'helper-text', text: 'On the other device, open Send & Receive, choose Receive and enter:' }),
                     el('p', { className: 'transfer-code', text: identifier }),
+                    qr ? el('p', { className: 'helper-text', text: 'Or scan this QR code with a phone camera to receive.' }) : null,
                     qr,
                     el('div', { className: 'transfer-actions' }, [
                         el('button', { type: 'button', className: 'secondary-btn', text: 'Copy link', onclick: function () {
@@ -883,6 +884,8 @@
         idInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); begin(); } });
 
         this.prefill = function (code) { if (code && !session) idInput.value = code; };
+        // A scanned QR code carries the sender's code: join without another tap.
+        this.join = function () { if (!session && idInput.value) begin(); };
 
         function startReceiving(identifier) {
             var state = { cancelled: false, peer: null, finished: false, receiver: null, expected: 0 };
@@ -1094,6 +1097,7 @@
                 if (window.FF_TRANSFER_CODE) {
                     receive.prefill(window.FF_TRANSFER_CODE);
                     window.FF_TRANSFER_CODE = null;
+                    receive.join();
                 }
                 var input = root.querySelector('#transfer-receive-id');
                 if (input) input.focus();
