@@ -42,6 +42,32 @@ def test_shorten_happy_path_and_redirect(client):
     assert redir.headers["location"] == dest
 
 
+def test_short_link_is_published_on_bare_domain_with_five_char_code(client, monkeypatch):
+    monkeypatch.setattr(main, "BASE_URL", "https://www.forgefiles.org")
+    resp = client.post("/api/url/shorten", json={"url": "https://example.com/x"})
+    data = resp.json()
+    assert len(data["code"]) == 5
+    assert data["short_url"] == f"https://forgefiles.org/s/{data['code']}"
+
+
+def test_legacy_seven_char_code_still_resolves(client):
+    code, _, _ = short_urls.create_short_url("https://example.com/old", code="6VvTFfL")
+    resp = client.get(f"/s/{code}", follow_redirects=False)
+    assert resp.status_code == 302
+
+
+def test_apex_short_link_redirects_directly_without_www_hop(client):
+    code, _, _ = short_urls.create_short_url("https://example.com/direct")
+    resp = client.get(
+        f"/s/{code}", headers={"host": "forgefiles.org"}, follow_redirects=False
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "https://example.com/direct"
+    # Everything else on the apex still canonicalises to www.
+    other = client.get("/", headers={"host": "forgefiles.org"}, follow_redirects=False)
+    assert other.status_code == 308
+
+
 def test_invalid_url_rejection(client):
     for bad in ("", "   ", "not-a-url", "ftp://example.com", "/relative"):
         resp = client.post("/api/url/shorten", json={"url": bad})
