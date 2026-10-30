@@ -329,6 +329,10 @@ def _install_fake_fitz(monkeypatch, doc):
         csRGB="RGB",
         csGRAY="GRAY",
     )
+    # pdf_utils imports `pymupdf as fitz`, so the module cache has to be
+    # seeded under its real name for the local `import pymupdf as fitz`
+    # inside the function under test to pick up the fake.
+    monkeypatch.setitem(sys.modules, "pymupdf", fake_fitz)
     monkeypatch.setitem(sys.modules, "fitz", fake_fitz)
 
 

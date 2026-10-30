@@ -17,7 +17,7 @@ from scripts.utils import branded_filename, original_stem, libreoffice_to_pdf
 logger = logging.getLogger(__name__)
 
 try:
-    import fitz
+    import pymupdf as fitz
 except ImportError:
     fitz = None
 try:
@@ -547,7 +547,7 @@ def compress_pdf(input_path: str, output_dir: str, level: str = 'medium', passwo
     """
     import io
     import shutil
-    import fitz
+    import pymupdf as fitz
     from PIL import Image as PILImage
 
     input_file = Path(input_path)
@@ -1126,7 +1126,7 @@ def add_watermark(
     repeats the text across the page (rotated 45 degrees when position is
     ``diagonal``); layer ``under`` places it beneath the page content.
     """
-    import fitz
+    import pymupdf as fitz
 
     if logo_bytes is None and (not text or not text.strip()):
         raise ValueError("Watermark text cannot be empty.")
@@ -1278,7 +1278,7 @@ def pdf_to_images_zip(
     """Render every PDF page to an image (mode="pages") or extract the images
     embedded in the PDF without re-encoding them (mode="embedded"), as a zip."""
     import zipfile
-    import fitz
+    import pymupdf as fitz
 
     if mode not in ("pages", "embedded"):
         raise ValueError("mode must be 'pages' or 'embedded'.")
@@ -1336,7 +1336,7 @@ MAX_EMBEDDED_DECODED_BYTES = 400 * 1024 * 1024
 def _pdf_extract_embedded_images_zip(input_path: str, output_dir: str, password: str = None) -> dict:
     """Zip every image XObject referenced by a page, in object-number order."""
     import zipfile
-    import fitz
+    import pymupdf as fitz
 
     input_file = Path(input_path)
     output_file = Path(output_dir) / branded_filename(input_file, "zip")
@@ -1398,7 +1398,7 @@ def sign_pdf(
     x, y, width are normalized (0-1) relative to page size. (x, y) is the top-left
     of the signature box.
     """
-    import fitz
+    import pymupdf as fitz
 
     try:
         page = int(page)
@@ -1600,7 +1600,7 @@ def _safe_progress(progress_callback, done: int, total: int) -> None:
 def _pdf_to_word_paddle_impl(decrypted_path: str, temp_dir: Path, output_file: Path,
                              progress_callback=None) -> None:
     """PPStructure layout-recovery conversion (Paddle backend, x86 only)."""
-    import fitz
+    import pymupdf as fitz
 
     # Deferred imports for utility functions that depend on paddleocr
     try:
@@ -1760,7 +1760,7 @@ def _pdf_to_word_ocr_fallback(engine, decrypted_path: str, output_file: Path,
     Used when the configured backend (e.g. RapidOCR on ARM64) has no layout
     recovery. Preserves reading order but not tables/columns/figures.
     """
-    import fitz
+    import pymupdf as fitz
 
     if Document_docx is None:
         raise ImportError("python-docx is required for OCR-based PDF to Word conversion")
@@ -1798,7 +1798,7 @@ def _pdf_to_word_hybrid_impl(engine, decrypted_path: str, output_file: Path,
                              report: dict, progress_callback=None) -> None:
     """Mixed-content PDF: extract native text where a page already has a
     usable text layer, and only rasterize+OCR the pages that don't."""
-    import fitz
+    import pymupdf as fitz
 
     if Document_docx is None:
         raise ImportError("python-docx is required for OCR-based PDF to Word conversion")
@@ -1870,7 +1870,7 @@ def pdf_to_word_ai(input_path: str, output_dir: str, password: str = None,
             as soon as the routing decision is made, so callers can report
             an accurate result message.
     """
-    import fitz
+    import pymupdf as fitz
 
     input_file = Path(input_path)
     output_file = Path(output_dir) / branded_filename(input_file, "docx")
