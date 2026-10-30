@@ -133,6 +133,35 @@ def pdf_with_table(tmp_path):
 
 
 @pytest.fixture
+def pdf_with_decimal_table(tmp_path):
+    """Table whose cells are decimal numbers, built with PyMuPDF (fitz)."""
+    import fitz
+    p = tmp_path / "decimal_table.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for row in range(4):
+        y = 700 - row * 40
+        shape.draw_line(fitz.Point(50, y), fitz.Point(350, y))
+    for col in range(3):
+        x = 50 + col * 150
+        shape.draw_line(fitz.Point(x, 700), fitz.Point(x, 580))
+    shape.finish(color=(0, 0, 0))
+    shape.commit()
+    rows = [["Item", "Price"], ["Widget", "1.71"], ["Gadget", "100.00"]]
+    for row_idx, row in enumerate(rows):
+        for col_idx, text in enumerate(row):
+            page.insert_text(
+                fitz.Point(55 + col_idx * 150, 690 - row_idx * 40),
+                text,
+                fontsize=10,
+            )
+    doc.save(str(p))
+    doc.close()
+    return p
+
+
+@pytest.fixture
 def borderless_table_pdf(tmp_path):
     """PDF whose table separates columns by whitespace only — no ruling lines.
 
@@ -449,6 +478,23 @@ class TestPDFToExcel:
         result = pdf_to_excel(str(pdf_with_table), str(out))
         wb = openpyxl.load_workbook(result["output_path"])
         assert len(wb.sheetnames) >= 1
+
+    def test_decimal_numbers_preserved_exactly(self, pdf_with_decimal_table, tmp_path):
+        """Regression: PyMuPDF 2.0 (released 2026-10-19) makes a bare `import
+        fitz` eagerly import pymupdf4llm/pymupdf.layout, which corrupts decimal
+        numbers extracted via page.find_tables() (e.g. "1.71" -> "171\\n.").
+        public/requirements.txt pins PyMuPDF<2.0 to avoid this; this test
+        catches a regression if that pin is ever loosened or an equivalent bug
+        reappears in another release."""
+        import openpyxl
+        out = tmp_path / "out"
+        out.mkdir()
+        result = pdf_to_excel(str(pdf_with_decimal_table), str(out))
+        wb = openpyxl.load_workbook(result["output_path"])
+        ws = wb[wb.sheetnames[0]]
+        rows = [tuple(r) for r in ws.iter_rows(values_only=True)]
+        assert ("Widget", "1.71") in rows
+        assert ("Gadget", "100.00") in rows
 
     def test_multi_page_pdf_processes_all(self, multi_page_pdf, tmp_path):
         out = tmp_path / "out"

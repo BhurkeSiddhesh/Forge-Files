@@ -21,7 +21,13 @@ opencv-python-headless
 docxcompose==1.4.0; python_version < "3.10"
 docxcompose==2.2.0; python_version >= "3.10"
 setuptools>=84.0.0
-PyMuPDF>=1.28.2
+# Upper-bounded: PyMuPDF 2.0 (2026-10-19) makes a bare `import fitz` eagerly
+# import pymupdf4llm/pymupdf.layout (a large ONNX table/layout stack), which
+# reproducibly corrupts numeric table-cell text from `page.find_tables()`
+# (pdf_to_excel) — e.g. "1.71" extracts as "171\n.". 1.28.2 does not have this
+# behavior. Lifting this ceiling is a deliberate upgrade once pymupdf4llm's
+# bug is fixed upstream, not a side effect of the next deploy.
+PyMuPDF>=1.28.2,<2.0
 reportlab
 requests>=2.34.2
 filetype>=1.2.0
