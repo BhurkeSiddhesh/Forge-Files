@@ -135,6 +135,12 @@ def validate_url(raw: str) -> str:
         raise ValueError("Only http and https URLs are allowed.")
     if not parts.netloc:
         raise ValueError("URL must include a host.")
+    try:
+        port = parts.port  # raises ValueError for a non-numeric or out-of-range port
+    except ValueError:
+        raise ValueError("URL has an invalid port.") from None
+    if port == 0:
+        raise ValueError("URL has an invalid port.")
     if parts.username is not None or parts.password is not None:
         raise ValueError("URLs with embedded credentials are not allowed.")
     # "http://:80/x" has a netloc but no hostname; an explicit localhost is allowed.

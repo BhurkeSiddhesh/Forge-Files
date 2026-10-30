@@ -198,3 +198,34 @@ def test_landing_page_describes_url_retention_not_file_upload(client):
     body = client.get("/url-shortener").text
     assert "destination URL" in body and "365 days" in body
     assert "uploads your file" not in body
+
+
+@pytest.mark.parametrize("bad", ["https://example.com:99999/p", "https://example.com:abc/p", "https://example.com:0/p"])
+def test_invalid_ports_are_rejected(client, bad):
+    assert client.post("/api/url/shorten", json={"url": bad}).status_code == 400
+    assert client.post("/api/url/shorten", json={"url": "https://example.com:8443/p"}).status_code == 200
+
+
+def test_a_failing_prune_does_not_stop_the_sweeper(monkeypatch):
+    import asyncio
+
+    calls = {"prune": 0, "sleep": 0}
+
+    def boom():
+        calls["prune"] += 1
+        raise RuntimeError("sqlite unavailable")
+
+    class Stop(Exception):
+        pass
+
+    async def fake_sleep(_):
+        calls["sleep"] += 1
+        raise Stop
+
+    monkeypatch.setattr(short_urls, "prune_expired", boom)
+    monkeypatch.setattr(main, "_delete_stale_files", lambda *a, **k: None)
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(main.event_log, "prune_expired_events", lambda: None)
+    with pytest.raises(Stop):
+        asyncio.run(main.cleanup_stale_files_loop())
+    assert calls == {"prune": 1, "sleep": 1}, "the loop must reach its sleep after a prune failure"

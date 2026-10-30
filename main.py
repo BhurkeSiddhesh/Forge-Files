@@ -678,7 +678,12 @@ async def cleanup_stale_files_loop():
             from scripts import short_urls as _short_urls_sweep
         except ImportError:
             import short_urls as _short_urls_sweep  # type: ignore
-        await run_in_threadpool(_short_urls_sweep.prune_expired)
+        try:
+            await run_in_threadpool(_short_urls_sweep.prune_expired)
+        except Exception:
+            # Optional housekeeping: a transient SQLite failure must not end this loop,
+            # or stale-file and event-log cleanup would stop until the process restarts.
+            logger.warning("Short-link pruning failed; the sweeper continues", exc_info=True)
         # Enforce the 90-day retention policy on funnel_events and operation_events.
         # That is a database pass, so it runs about every 15 minutes, not every sweep.
         if sweeps % max(1, 900 // SWEEP_INTERVAL_SECONDS) == 0:
