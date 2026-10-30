@@ -92,6 +92,13 @@ class TestPdf2docxRetryIsNarrow:
     the fork/spawn failures it was written for. A missing libGL.so.1 behind
     pdf2docx's cv2 import used to double an already-slow run before failing."""
 
+    @pytest.fixture(autouse=True)
+    def _fresh_fork_state(self, monkeypatch):
+        """_multiprocessing_broken is process-wide and sticky by design: any earlier test in the same
+        xdist worker that hit a real fork failure leaves it True, and these tests assume a first
+        attempt with multiprocessing on."""
+        monkeypatch.setattr(importlib.import_module("scripts.pdf_utils"), "_multiprocessing_broken", False)
+
     def _run_with_converter(self, monkeypatch, converter_cls):
         module = importlib.import_module("scripts.pdf_utils")
         fake_pdf2docx = type(sys)("pdf2docx")
