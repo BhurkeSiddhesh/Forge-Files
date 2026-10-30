@@ -316,7 +316,7 @@ async function runConversion() {
         } else if (err && err.code === 'storage') {
             showProblem('There is not enough free browser storage for the on-device engine (about 300 MB needed).');
         } else if (err && /engine_hash_mismatch|engine_unavailable/.test(String(err.message))) {
-            showProblem('The on-device engine could not be loaded or verified, so nothing was run.');
+            showProblem('The on-device engine could not be loaded or verified, so nothing was run. In the Windows app, check that the Office engine has finished downloading (a card in the corner shows its progress).');
         } else {
             console.warn('[on-device-office] conversion failed:', err);
             showProblem('This file could not be converted on this device.');

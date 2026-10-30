@@ -40,8 +40,20 @@ a = Analysis(
     excludes=["pytest", "tkinter", "paddle", "paddleocr", "matplotlib", "IPython",
               # RapidOCR can use these as alternative backends; we ship ONNX Runtime only.
               "torch", "torchvision", "torchaudio", "tensorflow", "tensorrt", "openvino",
-              "rapidocr.inference_engine.torch", "rapidocr.inference_engine.paddle"],
+              "rapidocr.inference_engine.torch", "rapidocr.inference_engine.paddle",
+              # Nothing in requirements.txt uses these. They only arrive when the build machine's Python has
+              # unrelated projects installed (a shared interpreter pulled in about 300 MB of them), so keep
+              # them out explicitly. Excel, PDF to Word and OCR were verified with all of them blocked.
+              "scipy", "numba", "llvmlite", "pyarrow", "botocore", "boto3", "s3transfer",
+              "grpc", "grpc_tools", "sklearn", "skimage"],
 )
+# The on-device Office engine (soffice.wasm + soffice.data, 247 MB) stays out of the installer; the app downloads
+# it after the person agrees (scripts/desktop_engine.py), checked against MANIFEST.json.
+_ENGINE_FILES = ("soffice.wasm", "soffice.data")
+a.datas = [d for d in a.datas if not (str(d[0]).replace("\\", "/").startswith("static/vendor/lo-wasm/")
+                                      and Path(str(d[0])).name in _ENGINE_FILES)]
+# OpenCV ships two ffmpeg DLLs (about 54 MB) for reading video; the app only decodes still images.
+a.binaries = [b for b in a.binaries if not Path(b[0]).name.lower().startswith("opencv_videoio_ffmpeg")]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

@@ -146,3 +146,46 @@ class TestEndpoints:
     def test_website_pages_do_not_load_the_shell_script(self):
         main._render_page.cache_clear()
         assert "desktop-shell.js" not in TestClient(main.app).get("/").text
+
+
+class TestReleasePrep:
+    """desktop/release.py keeps the installer version and the update feed announcing the same release."""
+
+    def test_the_committed_version_and_feed_agree(self):
+        from pathlib import Path
+
+        root = Path(main.__file__).resolve().parent
+        version = (root / "desktop" / "VERSION").read_text(encoding="utf-8").strip()
+        announced = json.loads((root / "static" / "desktop" / "feed.json").read_text(encoding="utf-8"))["latest_version"]
+        assert announced == version
+
+    def _tree(self, tmp_path, version="0.1.0"):
+        (tmp_path / "desktop").mkdir()
+        (tmp_path / "static" / "desktop").mkdir(parents=True)
+        (tmp_path / "desktop" / "VERSION").write_text(version + "\n")
+        (tmp_path / "static" / "desktop" / "feed.json").write_text(
+            json.dumps({"schema": 1, "latest_version": version, "download_url": "https://www.forgefiles.org/download", "announcements": []})
+        )
+        return tmp_path
+
+    def test_prepare_updates_both_files_and_keeps_the_rest(self, tmp_path):
+        from desktop import release
+
+        root = self._tree(tmp_path)
+        assert release.prepare("v0.2.0", "Faster.", root=root) == "0.2.0"
+        assert (root / "desktop" / "VERSION").read_text().strip() == "0.2.0"
+        feed_json = json.loads((root / "static" / "desktop" / "feed.json").read_text())
+        assert feed_json["latest_version"] == "0.2.0" and feed_json["notes"] == "Faster."
+        assert feed_json["download_url"] == "https://www.forgefiles.org/download"
+        # what it writes is a feed the app reads as an update for 0.1.0
+        update = feed.build_response(feed.sanitize_feed(feed_json), "0.1.0", today=TODAY)["update"]
+        assert update and update["latest"] == "0.2.0"
+
+    @pytest.mark.parametrize("bad", ["", "abc", "1", "1.2.3-beta", "0.1.0", "0.0.9"])
+    def test_prepare_refuses_unusable_or_older_versions(self, tmp_path, bad):
+        from desktop import release
+
+        root = self._tree(tmp_path)
+        with pytest.raises(ValueError):
+            release.prepare(bad, root=root)
+        assert (root / "desktop" / "VERSION").read_text().strip() == "0.1.0"

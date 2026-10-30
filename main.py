@@ -99,7 +99,7 @@ from scripts.ppt_utils import (
 )
 from scripts import seo_content
 from scripts import blog_content
-from scripts import desktop_feed
+from scripts import desktop_engine, desktop_feed
 from scripts import installer_mirror
 from scripts import event_log
 from scripts import ga4_mp
@@ -619,6 +619,11 @@ class _StaticFilesWithModuleTypes(StaticFiles):
     }
 
     async def get_response(self, path, scope):
+        if LOCAL_ONLY and path.replace("\\", "/").startswith("vendor/lo-wasm/"):
+            # The desktop installer leaves the 247 MB Office engine out; once downloaded it lives in the data folder.
+            downloaded = desktop_engine.served_path(_DATA_DIR, BASE_DIR / "static", path)
+            if downloaded is not None:
+                return FileResponse(downloaded, media_type=self._FIXED_TYPES.get(downloaded.suffix.lower(), "application/octet-stream"))
         response = await super().get_response(path, scope)
         fixed = self._FIXED_TYPES.get(os.path.splitext(path)[1].lower())
         if fixed and response.status_code == 200:
@@ -1832,6 +1837,31 @@ async def api_desktop_feed_off():
         raise HTTPException(status_code=404, detail="Not found")
     desktop_feed.disable_feed(_DATA_DIR)
     return {"enabled": False}
+
+
+@app.get("/api/desktop/engine")
+async def api_desktop_engine():
+    """State of the optional Office engine download (404 on the website)."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    return desktop_engine.status(_DATA_DIR, BASE_DIR / "static")
+
+
+@app.post("/api/desktop/engine/download")
+async def api_desktop_engine_download():
+    """The person agreed: fetch the engine in the background (404 on the website)."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    return desktop_engine.start(_DATA_DIR, BASE_DIR / "static", os.environ.get("FF_APP_VERSION", "0.0.0"))
+
+
+@app.post("/api/desktop/engine/decline")
+async def api_desktop_engine_decline():
+    """The person asked not to be asked again (404 on the website)."""
+    if not LOCAL_ONLY:
+        raise HTTPException(status_code=404, detail="Not found")
+    desktop_engine.set_choice(_DATA_DIR, "declined")
+    return desktop_engine.status(_DATA_DIR, BASE_DIR / "static")
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
