@@ -96,6 +96,64 @@ def test_horizontal_watermark_uses_exact_text_width(multi_page_pdf, tmp_path, po
         doc.close()
 
 
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_horizontal_watermark_shrinks_to_fit_instead_of_clipping(tmp_path, position):
+    """A watermark whose glyph width exceeds the page must shrink to fit rather
+    than being silently clipped by fitz.Page.insert_text() (which drops trailing
+    characters with no exception or return-value signal)."""
+    import fitz
+
+    text = "CONFIDENTIAL - DO NOT DISTRIBUTE THIS FILE"
+    narrow_pdf = tmp_path / "narrow.pdf"
+    doc = fitz.open()
+    doc.new_page(width=300, height=200)
+    doc.save(str(narrow_pdf))
+    doc.close()
+
+    out = Path(add_watermark(str(narrow_pdf), str(tmp_path), text, position=position, font_size=0))
+    doc = fitz.open(str(out))
+    try:
+        full_text = doc[0].get_text()
+    finally:
+        doc.close()
+    assert "DISTRIBUTE THIS FILE" in full_text, (
+        f"position={position}: watermark was clipped, got {full_text!r}"
+    )
+
+
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_horizontal_watermark_too_long_even_at_floor_size_raises(tmp_path, position):
+    """When the text still doesn't fit even at the minimum (8pt) font size, fail
+    loudly with a ValueError rather than letting insert_text() silently clip it."""
+    import fitz
+
+    narrow_pdf = tmp_path / "narrow.pdf"
+    doc = fitz.open()
+    doc.new_page(width=100, height=100)
+    doc.save(str(narrow_pdf))
+    doc.close()
+
+    with pytest.raises(ValueError, match="too long to fit"):
+        add_watermark(str(narrow_pdf), str(tmp_path), "A" * 500, position=position, font_size=0)
+
+
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_horizontal_watermark_on_a_page_narrower_than_the_margin_raises(tmp_path, position):
+    """A page <=20pt wide leaves no room for even the fixed left/right margin, so
+    `available_width` is nonpositive; this must still raise rather than silently
+    inserting (and clipping) the text at x=10 regardless of fit."""
+    import fitz
+
+    tiny_pdf = tmp_path / "tiny.pdf"
+    doc = fitz.open()
+    doc.new_page(width=15, height=100)
+    doc.save(str(tiny_pdf))
+    doc.close()
+
+    with pytest.raises(ValueError, match="too long to fit"):
+        add_watermark(str(tiny_pdf), str(tmp_path), "HELLO", position=position, font_size=0)
+
+
 def test_pdf_to_images_zip_one_image_per_page(multi_page_pdf, tmp_path):
     result = pdf_to_images_zip(str(multi_page_pdf), str(tmp_path), dpi=72)
     out = Path(result["output_path"])

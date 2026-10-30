@@ -827,10 +827,26 @@
                 // Exact glyph width (mirrors pdf_utils.py's fitz.get_text_length fix),
                 // not the per-character estimate the server used to use.
                 var measured = font.widthOfTextAtSize(text, fontSize);
+                // Shrink-to-fit (mirrors pdf_utils.py's _shrink_text_to_fit): a long
+                // string at a large font_size on a narrow page would otherwise draw
+                // past the page edge instead of staying centered on it.
+                var stampSize = fontSize;
+                var available = crop.width - 20;
+                if (measured > available && available > 0) {
+                    stampSize = Math.max(8, fontSize * available / measured);
+                    measured = font.widthOfTextAtSize(text, stampSize);
+                }
+                if (available <= 0 || measured > available) {
+                    // Either the page is too narrow for any margin at all, or even
+                    // the floor font size doesn't fit: drawing would still leave the
+                    // text running past the page edge, so fail loudly instead
+                    // (mirrors pdf_utils.py's matching ValueError).
+                    throw new L.Error('Watermark text is too long to fit on the page at any supported font size; use shorter text or a smaller font_size.');
+                }
                 page.drawText(text, {
                     x: crop.x + Math.max(10, (crop.width - measured) / 2),
                     y: crop.y + crop.height - fromTop,
-                    size: fontSize, font: font, color: grey, opacity: opacity,
+                    size: stampSize, font: font, color: grey, opacity: opacity,
                 });
             }
             if (layer === 'under') {

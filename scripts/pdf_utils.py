@@ -1086,6 +1086,23 @@ def _prepare_watermark_logo(data: bytes, opacity: float, rotated: bool):
     return out.getvalue(), size
 
 
+def _shrink_text_to_fit(text: str, fontname: str, size: float, available_width: float, floor: float = 8):
+    """(size, text_width) scaled down (never up) so the glyph width fits
+    ``available_width``, floored at ``floor``. ``Page.insert_text()`` silently
+    clips text past a page edge instead of raising, so callers whose text may
+    be long relative to the page must shrink first rather than discover the
+    clip after the fact."""
+    import fitz
+
+    text_width = fitz.get_text_length(text, fontname=fontname, fontsize=size)
+    if text_width > available_width > 0:
+        shrunk = max(floor, size * available_width / text_width)
+        if shrunk < size:
+            size = shrunk
+            text_width = fitz.get_text_length(text, fontname=fontname, fontsize=size)
+    return size, text_width
+
+
 def add_watermark(
     input_path: str,
     output_dir: str,
@@ -1215,14 +1232,27 @@ def add_watermark(
                         y = rect.height * 0.9
                     # Exact horizontal centering (actual glyph width, not a
                     # per-character estimate — mirrors the fix already applied
-                    # to add_page_numbers' label width).
-                    text_width = fitz.get_text_length(text, fontname="helv", fontsize=size)
+                    # to add_page_numbers' label width). Shrink-to-fit first:
+                    # insert_text() clips silently past the page edge rather
+                    # than raising, so a long string at a large font_size on a
+                    # narrow page would otherwise lose characters with no signal.
+                    available = rect.width - 20
+                    stamp_size, text_width = _shrink_text_to_fit(text, "helv", size, available)
+                    if available <= 0 or text_width > available:
+                        # Either the page is too narrow for any margin at all, or
+                        # even the floor font size doesn't fit: insert_text() would
+                        # still silently clip the text, so fail loudly instead.
+                        raise ValueError(
+                            "Watermark text is too long to fit on the page at any "
+                            "supported font size; use shorter text or a smaller "
+                            "font_size."
+                        )
                     x = max(10, (rect.width - text_width) / 2)
                     page.insert_text(
                         fitz.Point(x, y),
                         text,
                         fontname="helv",
-                        fontsize=size,
+                        fontsize=stamp_size,
                         color=rgb,
                         fill_opacity=opacity,
                         overlay=overlay,

@@ -89,3 +89,78 @@ def test_invalid_options_are_rejected(tmp_path: Path, bad: dict) -> None:
     kw = {"color": bad.get("color", "#808080"), "font_size": int(bad.get("font_size", 0)), "layer": bad.get("layer", "over")}
     with pytest.raises(ValueError):
         _server(tmp_path, pdf, **kw)
+
+
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_long_watermark_on_a_narrow_page_is_not_clipped_on_either_engine(tmp_path: Path, position: str) -> None:
+    """Both engines must shrink a too-wide watermark to fit rather than losing
+    trailing characters — the server-side bug this guards against is specific
+    to fitz.Page.insert_text()'s silent pre-rotation clip, but the two engines
+    must still agree on the visible result."""
+    text = "CONFIDENTIAL - DO NOT DISTRIBUTE THIS FILE"
+    narrow = tmp_path / "narrow.pdf"
+    doc = fitz.open()
+    doc.new_page(width=300, height=200)
+    doc.save(str(narrow))
+    doc.close()
+
+    result, out = run_local(
+        tmp_path, "/api/pdf/watermark",
+        [{"field": "file", "path": str(narrow), "name": "n.pdf", "type": "application/pdf"}],
+        {"text": text, "position": position},
+    )
+    assert result["status"] == 200, result
+    server_dir = tmp_path / "server"
+    server_dir.mkdir(exist_ok=True)
+    server = Path(add_watermark(str(narrow), str(server_dir), text, position=position))
+
+    local_text = fitz.open(str(out))[0].get_text()
+    server_text = fitz.open(str(server))[0].get_text()
+    assert "DISTRIBUTE THIS FILE" in local_text, local_text
+    assert "DISTRIBUTE THIS FILE" in server_text, server_text
+
+
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_watermark_too_long_even_at_floor_size_is_rejected_on_both_engines(tmp_path: Path, position: str) -> None:
+    """Text so long it can't fit even at the 8pt floor must be rejected with a
+    clear error on both engines, not silently drawn clipped."""
+    tiny = tmp_path / "tiny.pdf"
+    doc = fitz.open()
+    doc.new_page(width=100, height=100)
+    doc.save(str(tiny))
+    doc.close()
+
+    result, _ = run_local(
+        tmp_path, "/api/pdf/watermark",
+        [{"field": "file", "path": str(tiny), "name": "t.pdf", "type": "application/pdf"}],
+        {"text": "A" * 500, "position": position},
+    )
+    assert result["status"] == 400, result
+
+    server_dir = tmp_path / "server"
+    server_dir.mkdir(exist_ok=True)
+    with pytest.raises(ValueError, match="too long to fit"):
+        add_watermark(str(tiny), str(server_dir), "A" * 500, position=position)
+
+
+@pytest.mark.parametrize("position", ["top", "center", "bottom"])
+def test_watermark_on_a_page_narrower_than_the_margin_is_rejected_on_both_engines(tmp_path: Path, position: str) -> None:
+    """A page <=20pt wide leaves no room for even the fixed margin; both engines
+    must reject it instead of inserting/drawing text that is bound to clip."""
+    tiny = tmp_path / "tiny.pdf"
+    doc = fitz.open()
+    doc.new_page(width=15, height=100)
+    doc.save(str(tiny))
+    doc.close()
+
+    result, _ = run_local(
+        tmp_path, "/api/pdf/watermark",
+        [{"field": "file", "path": str(tiny), "name": "t.pdf", "type": "application/pdf"}],
+        {"text": "HELLO", "position": position},
+    )
+    assert result["status"] == 400, result
+
+    server_dir = tmp_path / "server"
+    server_dir.mkdir(exist_ok=True)
+    with pytest.raises(ValueError, match="too long to fit"):
+        add_watermark(str(tiny), str(server_dir), "HELLO", position=position)
