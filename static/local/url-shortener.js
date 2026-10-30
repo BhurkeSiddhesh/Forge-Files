@@ -95,7 +95,11 @@
                 return;
             }
             showResult(shortUrl);
-            setStatus(status, data.message || 'Short link created.', false);
+            var note = data.message || 'Short link created.';
+            if (String(shortUrl).length >= url.length) {
+                note = 'Short link created, but your URL was already as short as it gets.';
+            }
+            setStatus(status, note, false);
         } catch (err) {
             setStatus(status, 'Network error. Try again.', true);
         } finally {

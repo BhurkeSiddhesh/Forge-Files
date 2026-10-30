@@ -25,10 +25,15 @@ _BASE_DIR = Path(__file__).resolve().parent.parent
 _DATA_DIR = Path(os.environ.get("FF_DATA_DIR") or _BASE_DIR)
 
 MAX_URL_LENGTH = 2048
-CODE_LENGTH = 7
+CODE_LENGTH = 5
+# Links issued before the length dropped to 5 had 7 characters and must keep resolving.
+LEGACY_CODE_LENGTH = 7
 # Alphabet without ambiguous 0/O/1/l/I characters.
 _CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-_CODE_RE = re.compile(rf"^[{re.escape(_CODE_ALPHABET)}]{{{CODE_LENGTH}}}$")
+_CODE_RE = re.compile(
+    rf"^(?:[{re.escape(_CODE_ALPHABET)}]{{{CODE_LENGTH}}}"
+    rf"|[{re.escape(_CODE_ALPHABET)}]{{{LEGACY_CODE_LENGTH}}})$"
+)
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 DEFAULT_TTL_DAYS = int(os.environ.get("SHORT_URL_TTL_DAYS", "365"))
 MAX_CREATE_ATTEMPTS = 12

@@ -206,6 +206,10 @@ async def canonical_host_middleware(request: Request, call_next):
     308 preserves the request method for any API clients that use the apex.
     """
     if request.url.hostname and request.url.hostname.lower() == "forgefiles.org":
+        # Short links are published on the bare domain to stay as short as possible, so
+        # they must resolve there directly instead of costing a visitor a redirect hop.
+        if request.method in ("GET", "HEAD") and request.url.path.startswith("/s/"):
+            return await call_next(request)
         target = request.url.replace(scheme="https", hostname="www.forgefiles.org")
         return RedirectResponse(url=str(target), status_code=308)
     return await call_next(request)
@@ -4269,11 +4273,14 @@ async def api_url_shorten(request: Request):
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     short_path = f"/s/{code}"
+    # Drop the canonical "www." so the published link is as short as it can be; the
+    # apex serves /s/ paths directly (see canonical_host_middleware).
+    short_base = re.sub(r"^(https?://)www\.", r"\1", BASE_URL, flags=re.IGNORECASE)
     return {
         "code": code,
         "url": url,
         "short_path": short_path,
-        "short_url": f"{BASE_URL}{short_path}",
+        "short_url": f"{short_base}{short_path}",
         "expires_at": expires_at,
         "message": "Short link created.",
     }
